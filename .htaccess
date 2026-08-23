@@ -1,6 +1,7 @@
 # BM Capital Akademi - sunucu ayarları
 
-Options -Indexes
+Options -Indexes +FollowSymLinks
+DirectoryIndex index.html index.php
 ErrorDocument 404 /404.html
 
 <IfModule mod_rewrite.c>
