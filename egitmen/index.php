@@ -29,7 +29,7 @@ $js = str_replace('</script>', '<\/script>', $js);
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="/egitmen/assets/egitmen.css?v=20260802d">
+  <link rel="stylesheet" href="/egitmen/assets/egitmen.css?v=20260823c">
 </head>
 <body>
   <div class="shell">
@@ -78,9 +78,13 @@ $js = str_replace('</script>', '<\/script>', $js);
         <a href="#profile" class="nav-item" data-view="profile" title="Ayarlar">
           <i class="fa-solid fa-gear"></i><span>Ayarlar</span>
         </a>
+        <a href="logout.php" class="nav-item" title="Çıkış">
+          <i class="fa-solid fa-right-from-bracket"></i><span>Çıkış</span>
+        </a>
       </nav>
 
       <div class="side-foot">
+        <a href="logout.php" class="side-logout">Çıkış yap</a>
         <a href="#profile" class="side-user" id="sideUser" title="Profil">
           <div class="side-user-avatar" id="sideUserAvatar"><i class="fa-solid fa-user"></i></div>
           <div class="side-user-meta">
@@ -101,6 +105,7 @@ $js = str_replace('</script>', '<\/script>', $js);
           <button type="button" class="btn-primary sm" id="btnTopNewCourse">
             <i class="fa-solid fa-plus"></i> <span>Yeni Kurs Oluştur</span>
           </button>
+          <a href="logout.php" class="top-logout">Çıkış</a>
           <button type="button" class="top-user" id="btnTopUser" title="Profil">
             <span id="topUserName"><?= $adminUser ?></span>
             <span class="top-user-avatar" id="topUserAvatar"><i class="fa-solid fa-user"></i></span>

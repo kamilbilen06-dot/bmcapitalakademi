@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
     $password2 = (string)($_POST['password2'] ?? '');
     if (!admin_csrf_valid($_POST['csrf'] ?? '')) {
         $error = 'Oturum süresi doldu. Formu yeniden gönderin.';
-    } elseif (mb_strlen($password) < INSTRUCTOR_MIN_PASSWORD) {
+    } elseif (strlen($password) < INSTRUCTOR_MIN_PASSWORD) {
         $error = 'Şifre en az ' . INSTRUCTOR_MIN_PASSWORD . ' karakter olmalı.';
     } elseif ($password !== $password2) {
         $error = 'Şifreler birbiriyle uyuşmuyor.';
@@ -66,8 +66,10 @@ $csrf = admin_csrf_token();
     <p class="login-sub">Panele girmek için kendi şifreni yaz.</p>
     <?php if ($error): ?><div class="alert err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
     <?php if (!$tokenValid): ?>
-      <div class="alert err">Bu bağlantı geçersiz veya süresi dolmuş.</div>
+      <div class="alert err">Bu bağlantı geçersiz veya süresi dolmuş (<?= (int)INSTRUCTOR_RESET_TTL_MIN / 60 ?> saat).</div>
+      <p class="login-sub">Yeni mail isteyin. Yönetici oturumu açıksa önce çıkış yapın; aksi halde eğitmen paneli açılır, şifre belirlenmez.</p>
       <a class="btn-primary" href="sifremi-unuttum.php" style="display:block;text-align:center;text-decoration:none;margin-top:12px">Yeni bağlantı iste</a>
+      <a class="login-back" href="logout.php">Çıkış yap (yönetici oturumu)</a>
     <?php else: ?>
       <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf) ?>">
       <input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">

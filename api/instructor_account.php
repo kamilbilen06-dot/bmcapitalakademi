@@ -10,7 +10,7 @@ require_once __DIR__ . '/auth_schema.php';
 
 const INSTRUCTOR_MIN_PASSWORD = 8;
 const INSTRUCTOR_INVITE_TTL_MIN = 10080;
-const INSTRUCTOR_RESET_TTL_MIN = 60;
+const INSTRUCTOR_RESET_TTL_MIN = 1440;
 
 function instructor_tokens_ensure(PDO $pdo): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS instructor_tokens (

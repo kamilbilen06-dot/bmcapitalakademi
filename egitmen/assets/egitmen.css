@@ -287,6 +287,21 @@ a { text-decoration: none; color: inherit; }
 }
 .nav-item.active i { color: #fff; }
 .nav-item.is-disabled { opacity: 0.32; pointer-events: none; }
+.side-logout,
+.top-logout {
+  color: #c5cbe0;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.side-logout { padding: 4px 10px; }
+.side-logout:hover,
+.top-logout:hover { color: #fff; }
+.top-logout {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
 .side-foot {
   padding: 12px 12px 18px;
   display: flex;

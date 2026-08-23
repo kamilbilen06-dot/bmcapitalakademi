@@ -382,7 +382,7 @@ function mailer_send_instructor_invite(array $instructor, string $link, string $
         $inner .= mailer_button($mailLink, $ctaLabel)
             . '<p style="margin:0 0 8px;font-size:13px;"><a href="' . mailer_e($mailLink) . '" style="color:#2563eb;text-decoration:underline;">' . mailer_e($mailLink) . '</a></p>';
     }
-    $inner .= '<p style="margin:18px 0 0;font-size:13px;color:#8a93a0;">Bağlantı ' . ($isReset ? '60 dakika' : '7 gün') . ' geçerlidir. Giriş: '
+    $inner .= '<p style="margin:18px 0 0;font-size:13px;color:#8a93a0;">Bağlantı ' . ($isReset ? '24 saat' : '7 gün') . ' geçerlidir. Giriş: '
         . mailer_e(rtrim(function_exists('site_mail_public_url') ? site_mail_public_url() : 'https://www.bmcapitalakademi.com', '/') . '/egitmen/login.php')
         . '</p>';
     if ($hello !== '') {

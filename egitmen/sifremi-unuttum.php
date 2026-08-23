@@ -8,7 +8,7 @@ require_once __DIR__ . '/../api/mailer.php';
 require_once __DIR__ . '/../api/instructor_account.php';
 
 start_admin_session();
-if (is_logged_in()) {
+if (is_logged_in() && !is_site_admin()) {
     header('Location: index.php');
     exit;
 }
