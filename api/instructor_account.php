@@ -27,7 +27,8 @@ function instructor_tokens_ensure(PDO $pdo): void {
 }
 
 function instructor_normalize_email($email): string {
-    return mb_strtolower(trim((string)$email));
+    $email = trim((string) $email);
+    return function_exists('mb_strtolower') ? mb_strtolower($email) : strtolower($email);
 }
 
 function instructor_has_usable_password(?array $row): bool {
@@ -112,10 +113,13 @@ function instructor_deliver_invite(PDO $pdo, int $userId, string $purpose = 'inv
     $link = instructor_invite_link($token);
     $local = instructor_invite_local_link($token);
     $email = instructor_normalize_email($row['email'] ?: $row['username']);
-    $sent = mailer_send_instructor_invite([
-        'name' => (string)($row['name'] ?? ''),
-        'email' => $email,
-    ], $link, $purpose);
+    $sent = ['ok' => false];
+    if (mailer_is_configured()) {
+        $sent = mailer_send_instructor_invite([
+            'name' => (string)($row['name'] ?? ''),
+            'email' => $email,
+        ], $link, $purpose);
+    }
     return [
         'ok' => !empty($sent['ok']),
         'link' => $link,

@@ -36,6 +36,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st->execute([$email]);
             $userId = (int)$st->fetchColumn();
             if ($userId > 0) {
+                if (function_exists('session_write_close')) {
+                    session_write_close();
+                }
                 $invite = instructor_deliver_invite($pdo, $userId, 'reset');
                 if (instructor_invite_is_local($invite['link'])) {
                     $devLink = $invite['link'];
@@ -58,13 +61,15 @@ $csrf = admin_csrf_token();
   <link rel="stylesheet" href="assets/egitmen.css">
 </head>
 <body class="login-body">
-  <form class="login-card" method="post">
+  <form class="login-card" method="post" action="sifremi-unuttum.php" onsubmit="var b=this.querySelector('button'); if(b){b.disabled=true;b.textContent='Gönderiliyor...';}">
     <div class="login-brand"><span class="bm">BM</span> Capital · Eğitmen</div>
     <h1>Şifremi unuttum</h1>
     <p class="login-sub">E-postana şifre belirleme bağlantısı gönderilir.</p>
     <?php if ($error): ?><div class="alert err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
     <?php if ($sent): ?>
-      <div class="alert">Bu adrese kayıtlı bir eğitmen hesabı varsa bağlantı gönderildi. <?= (int)INSTRUCTOR_RESET_TTL_MIN ?> dakika geçerlidir.</div>
+      <div class="alert ok">İşlem alındı.<?= mailer_is_configured()
+          ? ' Bu adrese kayıtlı bir eğitmen varsa bağlantı gönderilir (' . (int)INSTRUCTOR_RESET_TTL_MIN . ' dk).'
+          : ' Canlıda SMTP yok; e-posta şu an gidemez. Yönetici → Eğitmenler → davet / şifre linkini açın.' ?></div>
       <?php if ($devLink !== ''): ?>
         <p class="login-sub"><a href="<?= htmlspecialchars($devLink) ?>">Yerel: şifreyi buradan belirle</a></p>
       <?php endif; ?>

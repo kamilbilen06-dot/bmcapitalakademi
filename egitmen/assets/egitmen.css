@@ -81,6 +81,7 @@ a { text-decoration: none; color: inherit; }
 .login-back { display: block; text-align: center; color: var(--muted); margin-top: 16px; font-size: 13px; }
 .alert { padding: 11px 14px; border-radius: 10px; font-size: 14px; margin: 6px 0; }
 .alert.err { background: rgba(231, 76, 60, 0.15); color: #ffb3ab; border: 1px solid rgba(231, 76, 60, 0.4); }
+.alert.ok { background: rgba(34, 197, 94, 0.15); color: #b8f0c8; border: 1px solid rgba(34, 197, 94, 0.35); }
 
 .btn-primary {
   background: linear-gradient(135deg, var(--purple), var(--purple-2));
