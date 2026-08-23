@@ -8,7 +8,7 @@ require_once __DIR__ . '/../api/instructor_account.php';
 
 start_admin_session();
 
-$token = trim((string)($_GET['token'] ?? $_POST['token'] ?? ''));
+$token = instructor_read_token();
 $error = '';
 $tokenValid = false;
 
@@ -66,8 +66,8 @@ $csrf = admin_csrf_token();
     <p class="login-sub">Panele girmek için kendi şifreni yaz.</p>
     <?php if ($error): ?><div class="alert err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
     <?php if (!$tokenValid): ?>
-      <div class="alert err">Bu bağlantı geçersiz veya süresi dolmuş (<?= (int)INSTRUCTOR_RESET_TTL_MIN / 60 ?> saat).</div>
-      <p class="login-sub">Yeni mail isteyin. Yönetici oturumu açıksa önce çıkış yapın; aksi halde eğitmen paneli açılır, şifre belirlenmez.</p>
+      <div class="alert err">Bu bağlantı geçersiz. Yeni bağlantı isteyin.</div>
+      <p class="login-sub">Yönetici oturumu açıksa önce çıkış yapın.</p>
       <a class="btn-primary" href="sifremi-unuttum.php" style="display:block;text-align:center;text-decoration:none;margin-top:12px">Yeni bağlantı iste</a>
       <a class="login-back" href="logout.php">Çıkış yap (yönetici oturumu)</a>
     <?php else: ?>

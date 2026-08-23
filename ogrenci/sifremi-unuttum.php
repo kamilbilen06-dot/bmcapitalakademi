@@ -20,6 +20,7 @@ $error = '';
 $sent = false;
 $devLink = '';
 $email = '';
+$pendingReset = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = clean($_POST['email'] ?? '');
@@ -39,9 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $token = student_issue_token($pdo, (int)$student['id'], 'reset');
                 $link = student_reset_link($token);
-                if (mailer_is_configured()) {
-                    mailer_send_reset($student, $link);
-                }
+                $pendingReset = ['student' => $student, 'link' => $link];
                 if (ogrenci_is_local_env() || !mailer_url_is_safe($link)) {
                     $devLink = 'sifre-sifirla.php?token=' . urlencode($token);
                 }
@@ -73,7 +72,7 @@ ogrenci_head('Şifremi Unuttum', 'page-auth');
         <div class="alert alert-ok">
           <i class="fa-solid fa-paper-plane"></i>
           <span><?= mailer_is_configured()
-              ? 'Bu adrese kayıtlı bir hesap varsa bağlantı gönderildi. ' . (int) (STUDENT_TOKEN_TTL_MIN / 60) . ' saat geçerlidir. Spam klasörüne de bakın.'
+              ? 'Bu adrese kayıtlı bir hesap varsa bağlantı gönderildi.'
               : 'E-posta şu an gönderilemiyor (SMTP). public_html/api/mail_config.local.php dosyasını kontrol edin.' ?></span>
         </div>
         <?php if ($devLink !== ''): ?>
@@ -105,4 +104,14 @@ ogrenci_head('Şifremi Unuttum', 'page-auth');
     <a class="auth-back" href="../index.html"><i class="fa-solid fa-arrow-left"></i> Siteye dön</a>
   </main>
 </div>
-<?php ogrenci_foot(); ?>
+<?php
+ogrenci_foot();
+if (is_array($pendingReset) && mailer_is_configured()) {
+    mailer_finish_response();
+    try {
+        mailer_send_reset($pendingReset['student'], $pendingReset['link']);
+    } catch (Throwable $e) {
+        error_log('ogrenci reset mail: ' . $e->getMessage());
+    }
+}
+?>

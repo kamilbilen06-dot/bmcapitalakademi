@@ -266,10 +266,6 @@ function student_has_password(?array $row): bool {
  */
 function student_issue_token(PDO $pdo, $studentId, $purpose = 'reset', $ttlMinutes = STUDENT_TOKEN_TTL_MIN) {
     $raw = bin2hex(random_bytes(32));
-    // Aynı amaçla bekleyen eski jetonları geçersiz kıl
-    $pdo->prepare("UPDATE student_tokens SET used_at = NOW()
-                   WHERE student_id = ? AND purpose = ? AND used_at IS NULL")
-        ->execute([(int)$studentId, $purpose]);
     $pdo->prepare(
         "INSERT INTO student_tokens (student_id, token_hash, purpose, expires_at)
          VALUES (?,?,?, DATE_ADD(NOW(), INTERVAL ? MINUTE))"
@@ -280,8 +276,21 @@ function student_issue_token(PDO $pdo, $studentId, $purpose = 'reset', $ttlMinut
 /**
  * Jetonu doğrula ve tüket. Geçerliyse student_id, değilse 0 döner.
  */
+function student_read_token(): string {
+    $t = (string) ($_GET['token'] ?? $_GET['t'] ?? $_POST['token'] ?? '');
+    $t = strtolower(preg_replace('/[^a-f0-9]/i', '', $t) ?? '');
+    if ($t !== '') {
+        return $t;
+    }
+    $uri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+    if (preg_match('/sifre-sifirla\\.php\\/([a-f0-9]{32,128})/i', $uri, $m)) {
+        return strtolower($m[1]);
+    }
+    return strtolower(preg_replace('/[^a-f0-9]/i', '', trim((string) ($_SERVER['PATH_INFO'] ?? ''), '/')) ?? '');
+}
+
 function student_consume_token(PDO $pdo, $rawToken, $purpose = 'reset') {
-    $rawToken = trim((string)$rawToken);
+    $rawToken = strtolower(preg_replace('/[^a-f0-9]/i', '', trim((string) $rawToken)) ?? '');
     if ($rawToken === '') {
         return 0;
     }
@@ -404,12 +413,13 @@ function student_verify_link(string $token): string {
 }
 
 function student_reset_link(string $token): string {
+    $token = strtolower(preg_replace('/[^a-f0-9]/i', '', $token) ?? '');
     return rtrim(site_mail_public_url(), '/') . '/ogrenci/sifre-sifirla.php?token=' . rawurlencode($token);
 }
 
 /** Jeton geçerli mi (tüketmeden kontrol) */
 function student_token_is_valid(PDO $pdo, $rawToken, $purpose = 'reset') {
-    $rawToken = trim((string)$rawToken);
+    $rawToken = strtolower(preg_replace('/[^a-f0-9]/i', '', trim((string) $rawToken)) ?? '');
     if ($rawToken === '') {
         return false;
     }

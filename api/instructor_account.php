@@ -40,18 +40,29 @@ function instructor_issue_token(PDO $pdo, int $userId, string $purpose, int $ttl
     instructor_tokens_ensure($pdo);
     $raw = bin2hex(random_bytes(32));
     $pdo->prepare(
-        'UPDATE instructor_tokens SET used_at = NOW()
-         WHERE user_id = ? AND purpose = ? AND used_at IS NULL'
-    )->execute([$userId, $purpose]);
-    $pdo->prepare(
         'INSERT INTO instructor_tokens (user_id, token_hash, purpose, expires_at)
          VALUES (?,?,?, DATE_ADD(NOW(), INTERVAL ? MINUTE))'
     )->execute([$userId, hash('sha256', $raw), $purpose, $ttlMin]);
     return $raw;
 }
 
+function instructor_read_token(): string {
+    $t = (string) ($_GET['token'] ?? $_GET['t'] ?? $_POST['token'] ?? '');
+    $t = strtolower(preg_replace('/[^a-f0-9]/i', '', $t) ?? '');
+    if ($t !== '') {
+        return $t;
+    }
+    $uri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+    if (preg_match('/sifre-belirle\\.php\\/([a-f0-9]{32,128})/i', $uri, $m)) {
+        return strtolower($m[1]);
+    }
+    $info = trim((string) ($_SERVER['PATH_INFO'] ?? ''), '/');
+    $info = strtolower(preg_replace('/[^a-f0-9]/i', '', $info) ?? '');
+    return $info;
+}
+
 function instructor_token_row(PDO $pdo, string $rawToken): ?array {
-    $rawToken = trim($rawToken);
+    $rawToken = strtolower(preg_replace('/[^a-f0-9]/i', '', trim($rawToken)) ?? '');
     if ($rawToken === '') {
         return null;
     }
@@ -78,6 +89,7 @@ function instructor_consume_token(PDO $pdo, string $rawToken): int {
 }
 
 function instructor_invite_link(string $token): string {
+    $token = strtolower(preg_replace('/[^a-f0-9]/i', '', $token) ?? '');
     return rtrim(site_mail_public_url(), '/') . '/egitmen/sifre-belirle.php?token=' . rawurlencode($token);
 }
 
@@ -95,7 +107,7 @@ function instructor_invite_is_local(string $link): bool {
  *
  * @return array{ok:bool, link:string}
  */
-function instructor_deliver_invite(PDO $pdo, int $userId, string $purpose = 'invite'): array {
+function instructor_deliver_invite(PDO $pdo, int $userId, string $purpose = 'invite', bool $sendNow = true): array {
     require_once __DIR__ . '/mailer.php';
     $ttl = $purpose === 'reset' ? INSTRUCTOR_RESET_TTL_MIN : INSTRUCTOR_INVITE_TTL_MIN;
     $st = $pdo->prepare(
@@ -114,15 +126,18 @@ function instructor_deliver_invite(PDO $pdo, int $userId, string $purpose = 'inv
     $local = instructor_invite_local_link($token);
     $email = instructor_normalize_email($row['email'] ?: $row['username']);
     $sent = ['ok' => false];
-    if (mailer_is_configured()) {
-        $sent = mailer_send_instructor_invite([
-            'name' => (string)($row['name'] ?? ''),
-            'email' => $email,
-        ], $link, $purpose);
+    $payload = [
+        'name' => (string)($row['name'] ?? ''),
+        'email' => $email,
+    ];
+    if ($sendNow && mailer_is_configured()) {
+        $sent = mailer_send_instructor_invite($payload, $link, $purpose);
     }
     return [
         'ok' => !empty($sent['ok']),
         'link' => $link,
         'local_link' => instructor_invite_is_local($local) ? $local : '',
+        'email_payload' => $payload,
+        'purpose' => $purpose,
     ];
 }

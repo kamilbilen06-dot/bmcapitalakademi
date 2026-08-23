@@ -8,7 +8,7 @@ require_once __DIR__ . '/_layout.php';
 
 start_student_session();
 
-$token = trim((string)($_GET['token'] ?? $_POST['token'] ?? ''));
+$token = student_read_token();
 $error = '';
 $tokenValid = false;
 

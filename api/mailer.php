@@ -8,6 +8,17 @@
 require_once __DIR__ . '/mail_config.php';
 require_once __DIR__ . '/site_brand.php';
 
+function mailer_finish_response(): void {
+    if (function_exists('fastcgi_finish_request')) {
+        @fastcgi_finish_request();
+        return;
+    }
+    while (ob_get_level() > 0) {
+        @ob_end_flush();
+    }
+    @flush();
+}
+
 /**
  * @return array{host:string,port:int,secure:string,user:string,pass:string,from:string,from_name:string}
  */
@@ -382,7 +393,7 @@ function mailer_send_instructor_invite(array $instructor, string $link, string $
         $inner .= mailer_button($mailLink, $ctaLabel)
             . '<p style="margin:0 0 8px;font-size:13px;"><a href="' . mailer_e($mailLink) . '" style="color:#2563eb;text-decoration:underline;">' . mailer_e($mailLink) . '</a></p>';
     }
-    $inner .= '<p style="margin:18px 0 0;font-size:13px;color:#8a93a0;">Bağlantı ' . ($isReset ? '24 saat' : '7 gün') . ' geçerlidir. Giriş: '
+    $inner .= '<p style="margin:18px 0 0;font-size:13px;color:#8a93a0;">Giriş: '
         . mailer_e(rtrim(function_exists('site_mail_public_url') ? site_mail_public_url() : 'https://www.bmcapitalakademi.com', '/') . '/egitmen/login.php')
         . '</p>';
     if ($hello !== '') {

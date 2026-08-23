@@ -17,6 +17,7 @@ $error = '';
 $sent = false;
 $devLink = '';
 $email = '';
+$pendingInvite = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = instructor_normalize_email($_POST['email'] ?? '');
@@ -39,9 +40,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (function_exists('session_write_close')) {
                     session_write_close();
                 }
-                $invite = instructor_deliver_invite($pdo, $userId, 'reset');
-                if (instructor_invite_is_local($invite['link'])) {
-                    $devLink = $invite['link'];
+                $pendingInvite = instructor_deliver_invite($pdo, $userId, 'reset', false);
+                if (instructor_invite_is_local($pendingInvite['link'] ?? '')) {
+                    $devLink = $pendingInvite['link'];
                 }
             }
             $sent = true;
@@ -68,7 +69,7 @@ $csrf = admin_csrf_token();
     <?php if ($error): ?><div class="alert err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
     <?php if ($sent): ?>
       <div class="alert ok">İşlem alındı.<?= mailer_is_configured()
-          ? ' Bu adrese kayıtlı bir eğitmen varsa bağlantı gönderilir (' . (int)INSTRUCTOR_RESET_TTL_MIN . ' dk).'
+          ? ' Bu adrese kayıtlı bir eğitmen varsa bağlantı gönderilir.'
           : ' Canlıda SMTP yok; e-posta şu an gidemez. Yönetici → Eğitmenler → davet / şifre linkini açın.' ?></div>
       <?php if ($devLink !== ''): ?>
         <p class="login-sub"><a href="<?= htmlspecialchars($devLink) ?>">Yerel: şifreyi buradan belirle</a></p>
@@ -84,3 +85,16 @@ $csrf = admin_csrf_token();
   </form>
 </body>
 </html>
+<?php
+if (is_array($pendingInvite) && mailer_is_configured() && !empty($pendingInvite['link'])) {
+    mailer_finish_response();
+    try {
+        mailer_send_instructor_invite(
+            $pendingInvite['email_payload'] ?? [],
+            $pendingInvite['link'],
+            (string) ($pendingInvite['purpose'] ?? 'reset')
+        );
+    } catch (Throwable $e) {
+        error_log('egitmen reset mail: ' . $e->getMessage());
+    }
+}
