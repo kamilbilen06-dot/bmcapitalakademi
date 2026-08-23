@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasarruf Finansmanı Hesaplama - BM Capital Akademi</title>
+  <meta name="description" content="Tasarruf finansmanı toplam maliyet ve %45 ödeme kuralına göre tahmini teslim ayını hesaplayın.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#1f2d3d">
+  <link rel="canonical" href="https://www.bmcapitalakademi.com/araclar/tasarruf-finansmani.html">
+  <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="../assets/css/style.css?v=araclar13">
+</head>
+<body class="page-tools page-cmp">
+  <div id="site-header"></div>
+  <section class="page-hero page-hero--compact">
+    <div class="container">
+      <div class="breadcrumb"><a href="../index.html">Ana Sayfa</a> / <a href="../araclar.html">Araçlar</a> / Tasarruf Finansmanı</div>
+      <h1>Tasarruf Finansmanı Hesaplama</h1>
+      <p class="tools-lead">Finansman, peşinat, aylık ödeme ve hizmet bedeli ile toplam maliyeti görün. Teslim, peşinat + ödemeler %45’e ulaşınca hesaplanır.</p>
+    </div>
+  </section>
+  <section class="section-cmp">
+    <div class="container" data-tool="tasarruf-finansmani">
+      <div class="cmp-wrap">
+        <form class="cmp-form" onsubmit="return false;">
+          <div class="cmp-head">Finansman bilgileri</div>
+          <div class="cmp-grid">
+            <label class="cmp-field cmp-field--full">
+              <span>Finansman Tutarı</span>
+              <div class="cmp-input">
+                <input type="text" id="finansman" data-money inputmode="decimal" value="2.000.000">
+                <i>TL</i>
+              </div>
+              <input type="range" id="finansman_r" min="200000" max="10000000" step="50000" value="2000000">
+            </label>
+            <label class="cmp-field">
+              <span>Peşinat <small>(%45 teslime sayılır)</small></span>
+              <div class="cmp-input">
+                <input type="text" id="pesinat" data-money inputmode="decimal" value="800.000">
+                <i>TL</i>
+              </div>
+              <input type="range" id="pesinat_r" min="0" max="5000000" step="50000" value="800000">
+            </label>
+            <label class="cmp-field">
+              <span>Aylık Ödeme</span>
+              <div class="cmp-input">
+                <input type="text" id="taksit" data-money inputmode="decimal" value="10.000">
+                <i>TL</i>
+              </div>
+              <input type="range" id="taksit_r" min="1000" max="150000" step="500" value="10000">
+            </label>
+            <label class="cmp-field">
+              <span>Vade</span>
+              <div class="cmp-input">
+                <input type="number" id="vade" min="6" max="240" step="1" value="120">
+                <i>Ay</i>
+              </div>
+              <input type="range" id="vade_r" min="6" max="240" step="1" value="120">
+            </label>
+            <label class="cmp-field cmp-field--full">
+              <span>Hizmet Bedeli <small id="hizmet_tl">≈ 160.000 TL</small></span>
+              <div class="cmp-input">
+                <input type="number" id="hizmet_pct" min="0" max="15" step="0.1" value="8">
+                <i>%</i>
+              </div>
+              <input type="range" id="hizmet_pct_r" min="0" max="15" step="0.1" value="8">
+            </label>
+          </div>
+
+          <div class="cmp-calc-row">
+            <div class="cmp-calc-pill">
+              <span>Tahmini teslim (otomatik)</span>
+              <strong id="live_teslim">—</strong>
+              <small>Peşinat + ödemeler ≥ finansmanın %45’i</small>
+            </div>
+          </div>
+
+          <button type="button" class="cmp-submit" data-calc-btn>Hesapla</button>
+          <p class="cmp-note">Teslim için peşinat + birikmiş taksitler finansman tutarının <b>%45</b>’ine ulaşmalıdır.</p>
+        </form>
+
+        <aside class="cmp-panel">
+          <div class="cmp-panel-idle" data-calc-empty>
+            <div class="cmp-idle-icon">∑</div>
+            <strong>Sonuç bekleniyor</strong>
+            <p>Değerleri ayarlayıp <b>Hesapla</b>’ya basın.</p>
+          </div>
+          <div class="cmp-panel-live" data-calc-results hidden>
+            <article class="cmp-box cmp-box--focus">
+              <h3>Toplam maliyet</h3>
+              <div class="cmp-duo cmp-duo--solo">
+                <div>
+                  <span>Ödeyeceğiniz toplam</span>
+                  <b id="out_toplam">—</b>
+                </div>
+              </div>
+            </article>
+            <article class="cmp-box">
+              <h3>Özet</h3>
+              <dl>
+                <div><dt>Hizmet bedeli</dt><dd id="out_hizmet">—</dd></div>
+                <div><dt>Tahmini teslim</dt><dd id="out_teslim">—</dd></div>
+                <div><dt>%45 eşik tutarı</dt><dd id="out_esik">—</dd></div>
+                <div><dt>Teslim sonrası kalan</dt><dd id="out_kalan">—</dd></div>
+              </dl>
+            </article>
+            <p class="cmp-tip">Konut kredisi ile NBD karşılaştırması için <a href="kk-vs-tk.html">karşılaştırma aracını</a> açın.</p>
+          </div>
+        </aside>
+      </div>
+
+      <div class="calc-footer-grid">
+        <div class="calc-explain">
+          <h2>Nasıl hesaplanır?</h2>
+          <p>Hizmet bedeli = Finansman × %. Toplam = Peşinat + (Aylık × Vade) + Hizmet.</p>
+          <p><strong>Teslim kuralı:</strong> Peşinat + birikmiş taksitler finansmanın %45’ine ulaşmadan teslim edilmez.
+            <code>Teslim = ⌈(Finansman × 0,45 − Peşinat) ÷ Aylık⌉</code> (vade ile sınırlı).</p>
+          <div class="calc-disclaimer">Bilgilendirme amaçlıdır; sözleşme şartları esas alınmalıdır. Kurumlara göre oran değişebilir.</div>
+        </div>
+        <aside class="tools-aside">
+          <h2>Diğer Araçlar</h2>
+          <div class="tools-aside-list" data-tools-aside="tasarruf-finansmani.html"></div>
+        </aside>
+      </div>
+    </div>
+  </section>
+  <div id="site-footer"></div>
+  <div id="site-floaters"></div>
+  <script src="../assets/js/feature-flags.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script src="../assets/js/catalog.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/araclar.js?v=13"></script>
+</body>
+</html>

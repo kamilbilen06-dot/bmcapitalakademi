@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bileşik Faiz Hesaplama - BM Capital Akademi</title>
+  <meta name="description" content="Bileşik getiriyi yıl yıl tablo ile görün.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#1f2d3d">
+  <link rel="canonical" href="https://www.bmcapitalakademi.com/araclar/bilesik-faiz.html">
+  <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="../assets/css/style.css?v=araclar5">
+</head>
+<body class="page-tools">
+  <div id="site-header"></div>
+  <section class="page-hero">
+    <div class="container">
+      <div class="tools-kicker">Ücretsiz Borsa Aracı</div>
+      <h1>Bileşik Faiz</h1>
+      <p class="tools-lead">Bileşik getiriyi yıl yıl tablo ile görün.</p>
+      <p class="tools-hint">Hızlıca kaydırın veya kesin rakamlar için kutucuklara yazın.</p>
+      <div class="breadcrumb"><a href="../index.html">Ana Sayfa</a> / <a href="../araclar.html">Araçlar</a> / Bileşik Faiz</div>
+    </div>
+  </section>
+  <section class="section-tight">
+    <div class="container" data-tool="bilesik">
+      <div class="calc-shell">
+        <div class="calc-shell-grid">
+          <div class="calc-inputs">
+          <div class="calc-field">
+            <label for="anapara" id="anapara_label">Anapara</label>
+            <div class="calc-control">
+              <input type="number" id="anapara" inputmode="decimal" min="1000" max="10000000" step="1000" value="100000">
+              <span class="calc-unit" id="anapara_unit">TL</span>
+            </div>
+            <input type="range" id="anapara_r" min="1000" max="10000000" step="1000" value="100000">
+          </div>          <div class="calc-field">
+            <label for="oran" id="oran_label">Yıllık Faiz</label>
+            <div class="calc-control">
+              <input type="number" id="oran" inputmode="decimal" min="0" max="100" step="0.1" value="20">
+              <span class="calc-unit" id="oran_unit">%</span>
+            </div>
+            <input type="range" id="oran_r" min="0" max="100" step="0.1" value="20">
+          </div>          <div class="calc-field">
+            <label for="yil" id="yil_label">Süre</label>
+            <div class="calc-control">
+              <input type="number" id="yil" inputmode="decimal" min="1" max="50" step="1" value="10">
+              <span class="calc-unit" id="yil_unit">Yıl</span>
+            </div>
+            <input type="range" id="yil_r" min="1" max="50" step="1" value="10">
+          </div>
+          </div>
+          <div class="calc-stats">
+          <div class="calc-stat">
+            <div class="calc-stat-label">Dönem Sonu Tutar</div>
+            <div class="calc-stat-value green" id="out_son">—</div>
+          </div>          <div class="calc-stat">
+            <div class="calc-stat-label">Toplam Kazanç</div>
+            <div class="calc-stat-value green" id="out_kazanc">—</div>
+          </div>          <div class="calc-stat">
+            <div class="calc-stat-label">Katlanma</div>
+            <div class="calc-stat-value gold" id="out_kat">—</div>
+          </div>          <div class="calc-stat">
+            <div class="calc-stat-label">Süre</div>
+            <div class="calc-stat-value navy" id="out_yil">—</div>
+          </div>
+          </div>
+        </div>
+        <div class="calc-table-wrap">
+          <table class="calc-table">
+            <thead><tr><th>Yıl</th><th>Bakiye</th><th>Kazanç</th></tr></thead>
+            <tbody id="out_tablo"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="calc-footer-grid">
+        <div class="calc-explain">
+          <h2>Nasıl hesaplanır?</h2>
+          <p>Her yıl bakiye = bakiye × (1 + yıllık oran). Tablo yıllık bakiyeyi ve birikimli kazancı gösterir.</p>
+          <div class="calc-disclaimer">Bu araç bilgilendirme amaçlıdır; yatırım tavsiyesi değildir. Enflasyon ve vergi etkileri dahil değildir.</div>
+        </div>
+            <aside class="tools-aside">
+        <h2>Diğer Araçlar</h2>
+        <div class="tools-aside-list" data-tools-aside="bilesik-faiz.html"></div>
+      </aside>
+      </div>
+    </div>
+  </section>
+  <div id="site-footer"></div>
+  <div id="site-floaters"></div>
+  <script src="../assets/js/feature-flags.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script src="../assets/js/catalog.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/araclar.js?v=5"></script>
+</body>
+</html>

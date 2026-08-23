@@ -1,0 +1,10 @@
+# uploads klasöründe PHP çalışmasın
+<FilesMatch "\.(?i:php|phtml|php3|php4|php5|phar)$">
+  Require all denied
+</FilesMatch>
+Options -Indexes
+
+# Ders / tanıtım videoları ve kaynak dosyaları yalnızca /api/media.php üzerinden
+<FilesMatch "\.(?i:mp4|webm|mov|m4v|avi|mkv|pdf|zip|rar|7z|gz|tar|doc|docx|ppt|pptx|xls|xlsx|csv|txt|json|xml)$">
+  Require all denied
+</FilesMatch>

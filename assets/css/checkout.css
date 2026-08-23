@@ -1,0 +1,298 @@
+/* Ödeme sayfası — sakin, iki kolonlu kasa (Udemy / Borfin düzeni) */
+
+body.page-checkout {
+  background: #f4f6f8;
+}
+
+.ck-page {
+  padding: 36px 0 80px;
+}
+
+.ck-crumbs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: #8a93a0;
+  margin-bottom: 10px;
+}
+.ck-crumbs a { color: #8a93a0; text-decoration: none; }
+.ck-crumbs a:hover { color: var(--gold-2); }
+.ck-crumbs b { color: var(--navy); font-weight: 700; }
+
+.ck-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: -0.6px;
+  margin: 0 0 28px;
+}
+
+.ck-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 28px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .ck-grid { grid-template-columns: 1fr; }
+}
+
+.ck-section { margin-bottom: 28px; }
+.ck-section h2 {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--navy);
+  margin: 0 0 6px;
+}
+.ck-section .lead {
+  font-size: 13.5px;
+  color: #8a93a0;
+  margin: 0 0 14px;
+}
+
+.ck-card {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(20, 30, 45, 0.06);
+  padding: 20px 22px;
+}
+
+.ck-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+.ck-account i { color: var(--gold-2); font-size: 20px; }
+.ck-account b { color: var(--navy); }
+.ck-account span { color: #8a93a0; font-size: 13px; }
+
+.ck-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .ck-methods { grid-template-columns: 1fr; }
+}
+.ck-method {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  background: #fff;
+  border: 1.5px solid #e6e9ee;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14.5px;
+  color: var(--navy);
+  box-shadow: 0 6px 18px rgba(20, 30, 45, 0.04);
+}
+.ck-method input { accent-color: var(--navy); }
+.ck-method.is-on {
+  border-color: var(--navy);
+  box-shadow: 0 0 0 2px rgba(31, 45, 61, 0.08);
+}
+
+.ck-field { margin-bottom: 14px; }
+.ck-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a93a0;
+  margin-bottom: 6px;
+}
+.ck-field input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: #f3f5f7;
+  font: inherit;
+  font-size: 15px;
+  color: var(--navy);
+}
+.ck-field input:focus {
+  outline: 2px solid rgba(31, 45, 61, 0.18);
+  background: #fff;
+}
+
+.ck-secure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 12px;
+}
+.ck-secure i { color: var(--gold-2); }
+
+.ck-note {
+  font-size: 13.5px;
+  color: #5b6572;
+  line-height: 1.55;
+  margin: 0 0 16px;
+}
+
+.ck-iban { font-size: 14px; }
+.ck-iban .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eef2f6;
+}
+.ck-iban .row:last-child { border-bottom: 0; }
+.ck-iban span { color: #8a93a0; }
+.ck-iban b { color: var(--navy); text-align: right; font-weight: 700; }
+
+.ck-side {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(20, 30, 45, 0.06);
+  padding: 22px;
+  position: sticky;
+  top: 92px;
+}
+.ck-side h3 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--navy);
+  margin: 0 0 16px;
+}
+
+.ck-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #eef2f6;
+}
+.ck-item img,
+.ck-item .ph {
+  width: 64px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #1f2d3d;
+  flex-shrink: 0;
+}
+.ck-item .ph { display: grid; place-items: center; color: #f39c12; }
+.ck-item b {
+  display: block;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--navy);
+}
+.ck-item em {
+  display: block;
+  margin-top: 6px;
+  font-style: normal;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--navy);
+}
+
+.ck-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 16px;
+}
+.ck-total span { font-weight: 700; color: var(--navy); }
+.ck-total b {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.ck-legal {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  color: #5b6572;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.ck-legal input { margin-top: 3px; accent-color: var(--navy); }
+.ck-legal a { color: var(--navy); font-weight: 700; text-decoration: none; }
+.ck-legal a:hover { color: var(--gold-2); }
+
+.ck-pay {
+  width: 100%;
+  min-height: 50px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--navy);
+  color: #fff;
+  font: inherit;
+  font-size: 15.5px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.ck-pay:hover { background: #172331; }
+.ck-pay:disabled {
+  background: #d5dbe3;
+  color: #8a93a0;
+  cursor: not-allowed;
+}
+
+.ck-guarantee {
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: #5b6572;
+  line-height: 1.55;
+}
+.ck-guarantee b { display: block; color: var(--navy); margin-bottom: 4px; font-size: 13px; }
+
+.ck-test {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: #f4f8ff;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #3b6ea8;
+  line-height: 1.5;
+}
+
+.ck-alert {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+.ck-alert.err { background: #fef2f2; color: #b91c1c; }
+.ck-alert.ok { background: #f0fdf4; color: #15803d; }
+.ck-alert.warn { background: #fff8eb; color: #9a3412; }
+.ck-alert.info { background: #f4f8ff; color: #1d4ed8; }
+
+.ck-wa {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+  border-radius: 10px;
+  background: #25d366;
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+}
+.ck-wa:hover { background: #1ebe5a; }

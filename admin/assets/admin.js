@@ -1,0 +1,1236 @@
+/* BM Capital - Yönetim Paneli */
+(function () {
+  "use strict";
+  var API = "../api/admin.php";
+
+  var el = {
+    wrap: document.getElementById("viewWrap"),
+    title: document.getElementById("viewTitle"),
+    topAction: document.getElementById("topAction"),
+    modal: document.getElementById("modal"),
+    modalTitle: document.getElementById("modalTitle"),
+    modalBody: document.getElementById("modalBody"),
+    modalClose: document.getElementById("modalClose"),
+    toast: document.getElementById("toast"),
+    sidebar: document.getElementById("sidebar"),
+    unreadBadge: document.getElementById("unreadBadge"),
+  };
+
+  var VIEWS = {
+    dashboard: "Panel",
+    egitimler: "Eğitimler",
+    egitmenler: "Eğitmenler",
+    ogrenciler: "Öğrenciler",
+    satislar: "Satışlar",
+    urunler: "Ürünler",
+    sss: "S.S.S.",
+    iletisim: "İletişim Mesajları",
+    istatistik: "Ziyaretçi İstatistikleri",
+    odeme_olaylari: "Ödeme olayları",
+    inceleme: "İnceleme siparişleri",
+    abonelikler: "Abonelikler",
+    ayarlar: "Ayarlar",
+  };
+
+  var SOCIAL_PLATFORMS = [
+    { id: "youtube", label: "YouTube" },
+    { id: "instagram", label: "Instagram" },
+    { id: "x", label: "X (Twitter)" },
+    { id: "linkedin", label: "LinkedIn" },
+    { id: "facebook", label: "Facebook" },
+    { id: "web", label: "Web sitesi" },
+    { id: "link", label: "Diğer link" },
+  ];
+
+  // ---------- API ----------
+  var CSRF = window.BM_ADMIN_CSRF || "";
+  function rememberCsrf(d) {
+    if (d && d.csrf) CSRF = d.csrf;
+    return d;
+  }
+  function req(action, method, body, query) {
+    var opt = { method: method || "GET", headers: {}, credentials: "same-origin" };
+    if (CSRF) opt.headers["X-CSRF-Token"] = CSRF;
+    if (body) {
+      opt.headers["Content-Type"] = "application/json";
+      var payload = body && typeof body === "object" ? Object.assign({}, body, { csrf: CSRF }) : body;
+      opt.body = JSON.stringify(payload);
+    }
+    var url = API + "?action=" + encodeURIComponent(action);
+    if (query) {
+      Object.keys(query).forEach(function (k) {
+        var v = query[k];
+        if (v === undefined || v === null || String(v) === "") return;
+        url += "&" + encodeURIComponent(k) + "=" + encodeURIComponent(v);
+      });
+    }
+    return fetch(url, opt).then(function (r) {
+      if (r.status === 401) { location.href = "login.php"; throw new Error("auth"); }
+      return r.json().then(function (d) {
+        rememberCsrf(d);
+        if (r.status === 403) {
+          toast((d && d.error) || "Oturum doğrulaması başarısız", "err");
+        }
+        return d;
+      });
+    });
+  }
+  function get(a, query) { return req(a, "GET", null, query); }
+  function post(a, b) { return req(a, "POST", b || {}); }
+
+  // ---------- helpers ----------
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function bioExcerpt(text, max) {
+    var t = String(text || "").replace(/\s+/g, " ").trim();
+    if (!t) return "—";
+    max = max || 90;
+    return t.length > max ? t.slice(0, max) + "…" : t;
+  }
+  function instructorProfileHref(slug) {
+    return "../egitmen-profil.html?id=" + encodeURIComponent(slug || "");
+  }
+  function toast(msg, type) {
+    el.toast.textContent = msg;
+    el.toast.className = "toast " + (type || "ok");
+    el.toast.hidden = false;
+    clearTimeout(el.toast._t);
+    el.toast._t = setTimeout(function () { el.toast.hidden = true; }, 2800);
+  }
+  function openModal(title, html) {
+    el.modalTitle.textContent = title;
+    el.modalBody.innerHTML = html;
+    el.modal.hidden = false;
+  }
+  function closeModal() { el.modal.hidden = true; el.modalBody.innerHTML = ""; }
+  el.modalClose.addEventListener("click", closeModal);
+  el.modal.addEventListener("click", function (e) { if (e.target === el.modal) closeModal(); });
+
+  function openPhotoLightbox(src) {
+    if (!src) return;
+    var old = document.getElementById("photoLightbox");
+    if (old) old.remove();
+    var box = document.createElement("div");
+    box.id = "photoLightbox";
+    box.className = "photo-lightbox";
+    box.innerHTML =
+      '<div class="photo-lightbox-card">' +
+      '<button type="button" class="photo-lightbox-close" aria-label="Kapat">✕</button>' +
+      '<img src="' +
+      esc(src) +
+      '" alt="Profil fotoğrafı">' +
+      "</div>";
+    document.body.appendChild(box);
+    function close() {
+      box.remove();
+      document.removeEventListener("keydown", onKey);
+    }
+    function onKey(e) {
+      if (e.key === "Escape") close();
+    }
+    box.addEventListener("click", function (e) {
+      if (e.target === box || e.target.classList.contains("photo-lightbox-close")) close();
+    });
+    document.addEventListener("keydown", onKey);
+  }
+
+  function fmtDate(s) {
+    if (!s) return "";
+    var d = new Date(s.replace(" ", "T"));
+    if (isNaN(d)) return s;
+    return d.toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+  function formatTryKurus(k) {
+    k = parseInt(k, 10) || 0;
+    return (k / 100).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₺";
+  }
+  function ymd(d) {
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1);
+    var day = String(d.getDate());
+    if (m.length < 2) m = "0" + m;
+    if (day.length < 2) day = "0" + day;
+    return y + "-" + m + "-" + day;
+  }
+  function lastDays(n) {
+    var to = new Date();
+    var from = new Date();
+    from.setDate(from.getDate() - n);
+    return { from: ymd(from), to: ymd(to) };
+  }
+  function selectOpts(items, valueKey, labelKey, selected) {
+    var html = '<option value="">Tümü</option>';
+    (items || []).forEach(function (it) {
+      var v = String(it[valueKey] || "");
+      html += '<option value="' + esc(v) + '"' + (String(selected) === v ? " selected" : "") + ">" + esc(it[labelKey] || ("#" + v)) + "</option>";
+    });
+    return html;
+  }
+  function payPill(st) {
+    if (st === "paid") return '<span class="pill ok">Ödendi</span>';
+    if (st === "pending") return '<span class="pill urun">Bekliyor</span>';
+    if (st === "refunded" || st === "cancelled") return '<span class="pill off">Kapalı</span>';
+    return '<span class="pill off">' + esc(st || "—") + "</span>";
+  }
+
+  // ---------- ROUTER ----------
+  var current = "dashboard";
+  function setView(name) {
+    current = name;
+    el.title.textContent = VIEWS[name] || name;
+    document.querySelectorAll(".nav-item").forEach(function (a) {
+      a.classList.toggle("active", a.getAttribute("data-view") === name);
+    });
+    el.topAction.hidden = true;
+    el.wrap.innerHTML = '<div class="loading">Yükleniyor…</div>';
+    if (window.innerWidth <= 860) el.sidebar.classList.remove("open");
+    (renderers[name] || renderers.dashboard)();
+  }
+  document.querySelectorAll(".nav-item").forEach(function (a) {
+    a.addEventListener("click", function (e) { e.preventDefault(); setView(a.getAttribute("data-view")); });
+  });
+  document.getElementById("menuToggle").addEventListener("click", function () { el.sidebar.classList.toggle("open"); });
+
+  function setTopAction(label, fn) {
+    el.topAction.hidden = false;
+    el.topAction.textContent = label;
+    el.topAction.onclick = fn;
+  }
+
+  // ---------- DASHBOARD ----------
+  var renderers = {};
+  renderers.dashboard = function () {
+    get("stats").then(function (d) {
+      if (!d.ok) return;
+      var c = d.cards;
+      updateUnread(c.unread);
+      var max = 1;
+      d.series.forEach(function (s) { if (s.views > max) max = s.views; });
+      var bars = d.series.map(function (s) {
+        var h = Math.round((s.views / max) * 100);
+        var lbl = s.date.slice(8) + "." + s.date.slice(5, 7);
+        return '<div class="bar" style="height:' + h + '%"><span class="tip">' + lbl + ": " + s.views + " görüntüleme · " + s.unique + " tekil</span></div>";
+      }).join("");
+      var first = d.series[0].date, last = d.series[d.series.length - 1].date;
+      var topRows = d.topPages.length
+        ? d.topPages.map(function (p) { return "<tr><td>" + esc(p.path || "/") + '</td><td style="text-align:right">' + p.c + "</td></tr>"; }).join("")
+        : '<tr><td colspan="2" class="empty">Henüz veri yok</td></tr>';
+
+      el.wrap.innerHTML =
+        '<div class="stat-grid">' +
+        card("Bugün", c.today, c.uniqueToday + " tekil ziyaretçi", true) +
+        card("Son 7 Gün", c.week, "sayfa görüntüleme") +
+        card("Toplam", c.total, "tüm zamanlar") +
+        card("Okunmamış Mesaj", c.unread, "iletişim talebi") +
+        card("İçerik", c.modules, c.faqs + " S.S.S.") +
+        "</div>" +
+        '<div class="panel"><div class="panel-head"><h3>Son 30 Gün · Günlük Görüntüleme</h3></div><div class="panel-body">' +
+        '<div class="chart">' + bars + "</div>" +
+        '<div class="chart-x"><span>' + first.slice(5) + "</span><span>" + last.slice(5) + "</span></div>" +
+        "</div></div>" +
+        '<div class="panel"><div class="panel-head"><h3>En Çok Görüntülenen Sayfalar</h3></div><div class="panel-body table-wrap">' +
+        '<table><thead><tr><th>Sayfa</th><th style="text-align:right">Görüntüleme</th></tr></thead><tbody>' + topRows + "</tbody></table>" +
+        "</div></div>";
+    });
+  };
+  function card(label, num, sub, gold) {
+    return '<div class="stat-card' + (gold ? " gold" : "") + '"><div class="label">' + label + '</div><div class="num">' + num + '</div><div class="sub">' + sub + "</div></div>";
+  }
+  function updateUnread(n) {
+    if (n > 0) { el.unreadBadge.hidden = false; el.unreadBadge.textContent = n; }
+    else el.unreadBadge.hidden = true;
+  }
+
+  // ---------- MODULES ----------
+  function renderModules(type) {
+    var isEgitim = type === "egitim";
+    setTopAction("+ Yeni " + (isEgitim ? "Eğitim" : "Ürün"), function () { moduleForm(null, type); });
+    get("modules_list").then(function (d) {
+      if (!d.ok) return;
+      var items = d.items.filter(function (m) { return m.type === type; });
+      var rows = items.length ? items.map(function (m) {
+        return "<tr>" +
+          "<td><div class='row-title'>" + esc(m.title) + "</div><div class='small'>" + esc(m.slug) + "</div></td>" +
+          "<td>" + (m.price ? esc(m.price) : "<span class='small'>Bilgi Al</span>") + "</td>" +
+          "<td><span class='pill " + (m.featured == 1 ? "on" : "off") + "'>" + (m.featured == 1 ? "Öne çıkan" : "Normal") + "</span></td>" +
+          "<td>" + m.sort_order + "</td>" +
+          "<td class='row-actions'>" +
+          "<button class='btn tiny' data-edit='" + m.id + "'>Düzenle</button>" +
+          "<button class='btn tiny danger' data-del='" + m.id + "'>Sil</button>" +
+          "</td></tr>";
+      }).join("") : "<tr><td colspan='5' class='empty'>Henüz kayıt yok. Sağ üstten yeni ekleyin.</td></tr>";
+
+      el.wrap.innerHTML = '<div class="panel"><div class="table-wrap"><table><thead><tr><th>Başlık</th><th>Fiyat</th><th>Durum</th><th>Sıra</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div></div>";
+
+      el.wrap.querySelectorAll("[data-edit]").forEach(function (b) {
+        b.onclick = function () { moduleForm(b.getAttribute("data-edit"), type); };
+      });
+      el.wrap.querySelectorAll("[data-del]").forEach(function (b) {
+        b.onclick = function () {
+          if (!confirm("Bu kaydı silmek istediğinize emin misiniz?")) return;
+          post("module_delete", { id: +b.getAttribute("data-del") }).then(function (r) {
+            if (r.ok) { toast("Silindi"); renderModules(type); } else toast(r.error || "Hata", "err");
+          });
+        };
+      });
+    });
+  }
+  renderers.egitimler = function () { renderModules("egitim"); };
+  renderers.urunler = function () { renderModules("urun"); };
+
+  // ---------- EĞİTMENLER ----------
+  renderers.egitmenler = function () {
+    setTopAction("+ Yeni Eğitmen", function () { instructorForm(null); });
+    get("instructors_list").then(function (d) {
+      if (!d.ok) { el.wrap.innerHTML = '<p class="empty">Yüklenemedi</p>'; return; }
+      var sharePct = d.share_pct != null ? d.share_pct : 60;
+      var rows = d.items.length
+        ? d.items
+            .map(function (ins) {
+              var thumb = ins.photo_path
+                ? '<img class="ins-thumb" src="../' + esc(ins.photo_path) + '" alt="">'
+                : '<span class="ins-thumb placeholder">' + esc((ins.name || "?").charAt(0)) + "</span>";
+              var acc = ins.has_password
+                ? '<span class="pill ok">' + esc(ins.email || ins.panel_username || "hesap") + "</span>"
+                : ins.has_account
+                  ? '<span class="pill">Davet bekliyor</span>'
+                  : '<span class="pill off">Yok</span>';
+              return (
+                "<tr>" +
+                "<td>" +
+                thumb +
+                "</td>" +
+                "<td><div class='row-title'>" +
+                esc(ins.name) +
+                "</div><div class='small'>" +
+                esc(ins.email || ins.title || "") +
+                "</div></td>" +
+                "<td>" +
+                acc +
+                "</td>" +
+                "<td class='num'> %" +
+                esc(String(ins.share_pct != null ? ins.share_pct : sharePct)) +
+                "</td>" +
+                "<td class='num'>" +
+                esc(String(ins.published_count || 0)) +
+                " / " +
+                esc(String(ins.course_count || 0)) +
+                "</td>" +
+                "<td class='num'>" +
+                esc(String(ins.student_count || 0)) +
+                "</td>" +
+                "<td class='num'>" +
+                esc(formatTryKurus(ins.sales_kurus)) +
+                "</td>" +
+                "<td class='num'>" +
+                esc(formatTryKurus(ins.earn_kurus)) +
+                "</td>" +
+                "<td class='small'>" +
+                (ins.last_login_at ? esc(fmtDate(ins.last_login_at)) : "—") +
+                "</td>" +
+                "<td>" +
+                (ins.is_active == 1 ? '<span class="pill ok">Aktif</span>' : '<span class="pill">Pasif</span>') +
+                "</td>" +
+                "<td class='row-actions'>" +
+                "<button class='btn tiny primary' data-watch='" +
+                ins.id +
+                "'>İzle</button>" +
+                "<button class='btn tiny' data-bio='" +
+                ins.id +
+                "'>Açıklama</button>" +
+                "<button class='btn tiny' data-edit='" +
+                ins.id +
+                "'>Düzenle</button>" +
+                "<a class='btn tiny' href='" +
+                instructorProfileHref(ins.slug) +
+                "' target='_blank' rel='noopener'>Profil</a>" +
+                "<button class='btn tiny danger' data-del='" +
+                ins.id +
+                "'>Sil</button>" +
+                "</td></tr>"
+              );
+            })
+            .join("")
+        : "<tr><td colspan='11' class='empty'>Henüz eğitmen yok.</td></tr>";
+      el.wrap.innerHTML =
+        '<p class="page-hint">Öğrenci ve satış yalnızca <strong>ödenmiş</strong> kayıtlardır. Kazanç her eğitmenin kendi payıyla hesaplanır (Düzenle). Varsayılan %' +
+        esc(String(sharePct)) +
+        " Ayarlar’dadır. Silinen eğitmenin e-postası ile yeniden davet atılabilir.</p>" +
+        '<div class="panel"><div class="table-wrap"><table><thead><tr><th></th><th>Eğitmen</th><th>Panel</th><th>Pay</th><th>Kurs</th><th>Öğrenci</th><th>Satış</th><th>Kazanç</th><th>Son giriş</th><th>Durum</th><th></th></tr></thead><tbody>' +
+        rows +
+        "</tbody></table></div></div>";
+      el.wrap.querySelectorAll("[data-watch]").forEach(function (b) {
+        b.onclick = function () {
+          instructorWatch(+b.getAttribute("data-watch"));
+        };
+      });
+      el.wrap.querySelectorAll("[data-bio]").forEach(function (b) {
+        b.onclick = function () {
+          instructorBioForm(+b.getAttribute("data-bio"));
+        };
+      });
+      el.wrap.querySelectorAll("[data-edit]").forEach(function (b) {
+        b.onclick = function () {
+          instructorForm(+b.getAttribute("data-edit"));
+        };
+      });
+      el.wrap.querySelectorAll("[data-del]").forEach(function (b) {
+        b.onclick = function () {
+          if (!confirm("Eğitmen silinsin mi? Panel hesabı kapanır. Aynı e-posta ile sonra yeniden ekleyebilirsiniz. Kurslar sahipsiz kalır.")) return;
+          post("instructor_delete", { id: +b.getAttribute("data-del") }).then(function (r) {
+            if (r.ok) {
+              toast("Silindi");
+              renderers.egitmenler();
+            } else toast(r.error || "Hata", "err");
+          });
+        };
+      });
+    });
+  };
+
+  function instructorWatch(id) {
+    get("instructor_watch&id=" + id).then(function (d) {
+      if (!d.ok) {
+        toast(d.error || "Yüklenemedi", "err");
+        return;
+      }
+      var ins = d.instructor || {};
+      var courses = d.courses || [];
+      var courseRows = courses.length
+        ? courses
+            .map(function (c) {
+              return (
+                "<tr><td>" +
+                esc(c.title) +
+                "</td><td>" +
+                (c.status === "published" ? '<span class="pill ok">Yayında</span>' : '<span class="pill">Taslak</span>') +
+                "</td><td class='num'>" +
+                esc(String(c.student_count || 0)) +
+                "</td><td class='num'>" +
+                esc(formatTryKurus(c.sales_kurus)) +
+                "</td><td class='num'>" +
+                esc(formatTryKurus(c.earn_kurus)) +
+                "</td></tr>"
+              );
+            })
+            .join("")
+        : "<tr><td colspan='5' class='empty'>Kurs yok.</td></tr>";
+      openModal(
+        ins.name || "Eğitmen",
+        '<div class="detail-line"><strong>Panel</strong><span>' +
+          esc(ins.panel_username || "hesap yok") +
+          "</span></div>" +
+          '<div class="detail-line"><strong>Son giriş</strong><span>' +
+          (ins.last_login_at ? esc(fmtDate(ins.last_login_at)) : "—") +
+          "</span></div>" +
+          '<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Kurs</th><th>Durum</th><th>Öğrenci</th><th>Satış</th><th>Kazanç</th></tr></thead><tbody>' +
+          courseRows +
+          "</tbody></table></div>"
+      );
+    });
+  }
+
+  function instructorBioForm(id) {
+    fetch(API + "?action=instructor_get&id=" + id, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok || !d.item) {
+          toast(d.error || "Yüklenemedi", "err");
+          return;
+        }
+        var m = d.item;
+        var profileUrl = instructorProfileHref(m.slug);
+        openModal(
+          "Açıklama · " + (m.name || "Eğitmen"),
+          '<form id="bioForm">' +
+            '<p class="hint">Bu metin sitede <strong>Açıklama</strong> bölümünde görünür.</p>' +
+            '<p class="hint"><a href="' +
+            profileUrl +
+            '" target="_blank" rel="noopener">Profili önizle →</a></p>' +
+            '<div class="field full"><label>Biyografi / açıklama</label>' +
+            '<textarea name="bio" rows="10" placeholder="Eğitmenin deneyimi, uzmanlık alanları, sertifikalar…">' +
+            esc(m.bio || "") +
+            "</textarea></div>" +
+            '<div class="form-actions"><button type="button" class="btn-ghost" id="cancelBio">İptal</button>' +
+            '<button type="submit" class="btn-primary sm">Kaydet</button></div></form>'
+        );
+        document.getElementById("cancelBio").onclick = closeModal;
+        document.getElementById("bioForm").onsubmit = function (e) {
+          e.preventDefault();
+          post("instructor_save_bio", {
+            id: id,
+            bio: e.target.bio.value,
+          }).then(function (r) {
+            if (r.ok) {
+              toast("Açıklama kaydedildi");
+              closeModal();
+              renderers.egitmenler();
+            } else toast(r.error || "Hata", "err");
+          });
+        };
+      });
+  }
+
+  function showInstructorInvite(r) {
+    var mailOk = !!r.mail_sent;
+    var html =
+      "<p>" +
+      (mailOk
+        ? "Davet e-postası gönderildi. Eğitmen kendi şifresini belirleyecek."
+        : "Kayıt oluştu; e-posta gönderilemedi. Aşağıdaki bağlantıyı iletebilirsiniz.") +
+      "</p>" +
+      '<p class="hint">Panel girişi: <code>/egitmen/login.php</code></p>';
+    if (r.invite_link) {
+      html +=
+        '<p><a href="' +
+        esc(r.invite_link) +
+        '" target="_blank" rel="noopener">Şifre belirleme bağlantısı (yerel)</a></p>';
+    }
+    html +=
+      '<div class="form-actions"><button type="button" class="btn-primary sm" id="inviteDone">Tamam</button></div>';
+    openModal("Eğitmen eklendi", html);
+    var done = document.getElementById("inviteDone");
+    if (done) done.onclick = closeModal;
+  }
+
+  function instructorForm(id) {
+    if (!id) {
+      openModal(
+        "Yeni Eğitmen",
+        '<form id="insForm"><div class="form-grid">' +
+          '<div class="field full"><label>Ad Soyad *</label><input name="name" required autofocus></div>' +
+          '<div class="field full"><label>E-posta *</label><input type="email" name="email" required autocomplete="off" placeholder="ornek@email.com"></div>' +
+          '<p class="hint" style="margin:0">Şifreyi sen yazmazsın. Eğitmen mailindeki bağlantıdan kendi belirler. Silip aynı e-posta ile sonra yeniden ekleyebilirsin.</p>' +
+          '</div><div class="form-actions"><button type="button" class="btn-ghost" id="cancelBtn">İptal</button>' +
+          '<button type="submit" class="btn-primary sm">Davet gönder</button></div></form>'
+      );
+      document.getElementById("cancelBtn").onclick = closeModal;
+      document.getElementById("insForm").onsubmit = function (e) {
+        e.preventDefault();
+        var f = e.target;
+        post("instructor_save", { name: f.name.value, email: f.email.value }).then(function (r) {
+          if (!r.ok) {
+            toast(r.error || "Hata", "err");
+            return;
+          }
+          toast(r.mail_sent ? "Davet gönderildi" : "Eğitmen eklendi");
+          renderers.egitmenler();
+          showInstructorInvite(r);
+        });
+      };
+      return;
+    }
+
+    fetch(API + "?action=instructor_get&id=" + id, { credentials: "same-origin" })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (d) {
+        if (!d.ok || !d.item) {
+          toast(d.error || "Yüklenemedi", "err");
+          return;
+        }
+        var m = d.item;
+        var defShare = m.default_share_pct != null ? m.default_share_pct : 60;
+        var shareVal = m.share_pct != null && m.share_pct !== "" ? String(m.share_pct) : "";
+        openModal(
+          "Düzenle · Eğitmen",
+          '<form id="insForm"><div class="form-grid">' +
+            '<div class="field full"><label>Ad Soyad *</label><input name="name" value="' +
+            esc(m.name || "") +
+            '" required></div>' +
+            '<div class="field full"><label>E-posta *</label><input type="email" name="email" value="' +
+            esc(m.email || m.panel_username || "") +
+            '" required autocomplete="off"></div>' +
+            '<div class="field"><label>Eğitmen payı (%)</label><input type="number" name="share_pct" min="0" max="100" step="1" value="' +
+            esc(shareVal) +
+            '" placeholder="Varsayılan ' +
+            esc(String(defShare)) +
+            '"></div>' +
+            '<div class="field check"><input type="checkbox" name="is_active" id="insActive" ' +
+            (m.is_active == 0 ? "" : "checked") +
+            '><label for="insActive">Aktif (sitede görünsün)</label></div>' +
+            '<div class="field full"><label>Slug <span class="hint">(profil URL)</span></label><input name="slug" value="' +
+            esc(m.slug || "") +
+            '"></div>' +
+            '<p class="hint" style="margin:0">Pay boşsa site varsayılanı (%' +
+            esc(String(defShare)) +
+            ') kullanılır. Fotoğraf ve kursları eğitmen kendi panelinden doldurur.</p>' +
+            "</div>" +
+            '<div class="form-actions">' +
+            '<button type="button" class="btn-ghost" id="cancelBtn">İptal</button>' +
+            '<button type="button" class="btn tiny" id="resendInvite">Davet mailini tekrar gönder</button>' +
+            '<button type="submit" class="btn-primary sm">Kaydet</button></div></form>'
+        );
+        document.getElementById("cancelBtn").onclick = closeModal;
+        document.getElementById("resendInvite").onclick = function () {
+          post("instructor_invite", { id: id }).then(function (r) {
+            if (!r.ok) {
+              toast(r.error || "Hata", "err");
+              return;
+            }
+            toast(r.mail_sent ? "Davet gönderildi" : "Mail gitmedi");
+            if (r.invite_link) showInstructorInvite(r);
+          });
+        };
+        document.getElementById("insForm").onsubmit = function (e) {
+          e.preventDefault();
+          var f = e.target;
+          post("instructor_save", {
+            id: id,
+            name: f.name.value,
+            email: f.email.value,
+            share_pct: f.share_pct.value,
+            slug: f.slug.value,
+            is_active: f.is_active.checked ? 1 : 0,
+          }).then(function (r) {
+            if (r.ok) {
+              toast("Kaydedildi");
+              closeModal();
+              renderers.egitmenler();
+            } else toast(r.error || "Hata", "err");
+          });
+        };
+      });
+  }
+
+  function moduleForm(id, type) {
+    var load = id ? get("module_get&id=" + id) : Promise.resolve({ ok: true, item: null });
+    load.then(function (d) {
+      var m = d.item;
+      var isEgitim = type === "egitim";
+      var data = (m && m.data) || {};
+      var mufredatText = mufredatToText(data.mufredat || []);
+      function v(x) { return m && m[x] != null ? esc(m[x]) : ""; }
+      function arr(x) { return (data[x] || []).map(esc).join("\n"); }
+
+      var egitimFields = isEgitim ?
+        '<div class="field"><label>Süre</label><input name="duration" value="' + v("duration") + '" placeholder="20 saat"></div>' +
+        '<div class="field"><label>Eğitim Türü</label><input name="egitim_turu" value="' + v("egitim_turu") + '" placeholder="Canlı Online Eğitim"></div>' +
+        '<div class="field full"><label>Eğitmenler</label><input name="instructors" value="' + v("instructors") + '" placeholder="Dr. Mete AKYOL, Dr. Kamil BİLEN"></div>' +
+        '<div class="field full"><label>Katılım Notu</label><input name="katilim_not" value="' + v("katilim_not") + '"></div>' +
+        '<div class="field full"><label>Tarih Notu</label><input name="tarih_not" value="' + v("tarih_not") + '" placeholder="Eğitim 5 gün sürecektir."></div>' +
+        '<div class="field full"><label>Tarihler <span class="hint">(her satıra bir tarih)</span></label><textarea name="tarihler" rows="3">' + arr("tarihler") + '</textarea></div>' +
+        '<div class="field full"><label>Hediyeler <span class="hint">(her satıra bir madde)</span></label><textarea name="hediye" rows="2">' + arr("hediye") + '</textarea></div>' +
+        '<div class="field full"><label>Hediye Görsel URL</label><input name="hediyeGorsel" value="' + esc(data.hediyeGorsel || "") + '"></div>'
+        :
+        '<div class="field"><label>Etiket</label><input name="etiket" value="' + v("etiket") + '" placeholder="Algoritmik Trade"></div>' +
+        '<div class="field"><label>Video URL <span class="hint">(opsiyonel)</span></label><input name="video" value="' + v("video") + '" placeholder="assets/video/...mp4"></div>' +
+        '<div class="field full"><label>Video Poster URL</label><input name="video_poster" value="' + v("video_poster") + '"></div>';
+
+      var mufHint = isEgitim
+        ? '<span class="hint"># Gün başlığı · ## Bölüm başlığı · - madde</span>'
+        : '<span class="hint">Ürünler için genelde boş bırakılır</span>';
+
+      openModal((id ? "Düzenle" : "Yeni") + " · " + (isEgitim ? "Eğitim" : "Ürün"),
+        '<form id="modForm"><div class="form-grid">' +
+        '<div class="field full"><label>Başlık *</label><input name="title" value="' + v("title") + '" required></div>' +
+        '<div class="field"><label>Kısa URL (slug) <span class="hint">(boşsa otomatik)</span></label><input name="slug" value="' + v("slug") + '"></div>' +
+        '<div class="field"><label>Görsel URL</label><input name="image" value="' + v("image") + '" placeholder="assets/img/...svg"></div>' +
+        '<div class="field full"><label>Kısa Açıklama</label><textarea name="short_desc" rows="2">' + v("short_desc") + '</textarea></div>' +
+        '<div class="field"><label>Fiyat <span class="hint">(boşsa "Bilgi Al")</span></label><input name="price" value="' + v("price") + '" placeholder="10.000 TL"></div>' +
+        '<div class="field"><label>Fiyat Notu</label><input name="price_note" value="' + v("price_note") + '" placeholder="(KDV dahil)"></div>' +
+        egitimFields +
+        '<div class="field full"><label>Özellikler <span class="hint">(her satıra bir madde)</span></label><textarea name="ozellikler" rows="4">' + arr("ozellikler") + '</textarea></div>' +
+        '<div class="field full"><label>Açıklama Paragrafları <span class="hint">(her satıra bir paragraf)</span></label><textarea name="aciklama" rows="4">' + arr("aciklama") + '</textarea></div>' +
+        '<div class="field full"><label>Müfredat ' + mufHint + '</label><textarea name="mufredat" rows="8" style="font-family:monospace;font-size:13px">' + esc(mufredatText) + '</textarea></div>' +
+        '<div class="field"><label>Sıra No</label><input type="number" name="sort_order" value="' + (m ? m.sort_order : 0) + '"></div>' +
+        '<div class="field check"><input type="checkbox" name="featured" id="feat" ' + (m && m.featured == 1 ? "checked" : "") + '><label for="feat">Öne çıkan / ana sayfada göster</label></div>' +
+        '</div><div class="form-actions"><button type="button" class="btn-ghost" id="cancelBtn">İptal</button><button type="submit" class="btn-primary sm">Kaydet</button></div></form>');
+
+      document.getElementById("cancelBtn").onclick = closeModal;
+      document.getElementById("modForm").onsubmit = function (e) {
+        e.preventDefault();
+        var f = e.target, out = { id: id ? +id : 0, type: type, featured: f.featured.checked ? 1 : 0 };
+        ["title", "slug", "image", "short_desc", "price", "price_note", "duration", "egitim_turu",
+          "instructors", "etiket", "video", "video_poster", "katilim_not", "tarih_not",
+          "ozellikler", "aciklama", "hediye", "hediyeGorsel", "tarihler", "mufredat", "sort_order"].forEach(function (k) {
+          if (f[k]) out[k] = f[k].value;
+        });
+        post("module_save", out).then(function (r) {
+          if (r.ok) { toast("Kaydedildi"); closeModal(); renderModules(type); }
+          else toast(r.error || "Hata", "err");
+        });
+      };
+    });
+  }
+
+  function mufredatToText(muf) {
+    if (!muf || !muf.length) return "";
+    var out = [];
+    muf.forEach(function (g) {
+      out.push("# " + (g.baslik || ""));
+      (g.bolumler || []).forEach(function (b) {
+        out.push("## " + (b.baslik || ""));
+        (b.maddeler || []).forEach(function (mad) { out.push("- " + mad); });
+      });
+    });
+    return out.join("\n");
+  }
+
+  // ---------- SSS ----------
+  renderers.sss = function () {
+    setTopAction("+ Yeni Soru", function () { faqForm(null); });
+    get("faqs_list").then(function (d) {
+      if (!d.ok) return;
+      var rows = d.items.length ? d.items.map(function (f) {
+        return "<tr><td><div class='row-title'>" + esc(f.question) + "</div><div class='small'>" + esc(f.answer.slice(0, 120)) + (f.answer.length > 120 ? "…" : "") + "</div></td>" +
+          "<td>" + f.sort_order + "</td>" +
+          "<td class='row-actions'><button class='btn tiny' data-edit='" + f.id + "'>Düzenle</button><button class='btn tiny danger' data-del='" + f.id + "'>Sil</button></td></tr>";
+      }).join("") : "<tr><td colspan='3' class='empty'>Henüz soru yok.</td></tr>";
+      el.wrap.innerHTML = '<div class="panel"><div class="table-wrap"><table><thead><tr><th>Soru</th><th>Sıra</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div></div>";
+      el.wrap.querySelectorAll("[data-edit]").forEach(function (b) { b.onclick = function () { faqForm(b.getAttribute("data-edit"), d.items); }; });
+      el.wrap.querySelectorAll("[data-del]").forEach(function (b) {
+        b.onclick = function () {
+          if (!confirm("Bu soruyu silmek istiyor musunuz?")) return;
+          post("faq_delete", { id: +b.getAttribute("data-del") }).then(function (r) { if (r.ok) { toast("Silindi"); renderers.sss(); } });
+        };
+      });
+    });
+  };
+  function faqForm(id, items) {
+    var f = id && items ? items.filter(function (x) { return x.id == id; })[0] : null;
+    openModal((id ? "Düzenle" : "Yeni") + " · Soru",
+      '<form id="faqForm"><div class="form-grid">' +
+      '<div class="field full"><label>Soru *</label><input name="question" value="' + (f ? esc(f.question) : "") + '" required></div>' +
+      '<div class="field full"><label>Cevap *</label><textarea name="answer" rows="5" required>' + (f ? esc(f.answer) : "") + '</textarea></div>' +
+      '<div class="field"><label>Sıra No</label><input type="number" name="sort_order" value="' + (f ? f.sort_order : 0) + '"></div>' +
+      '</div><div class="form-actions"><button type="button" class="btn-ghost" id="cancelBtn">İptal</button><button type="submit" class="btn-primary sm">Kaydet</button></div></form>');
+    document.getElementById("cancelBtn").onclick = closeModal;
+    document.getElementById("faqForm").onsubmit = function (e) {
+      e.preventDefault();
+      var fm = e.target;
+      post("faq_save", { id: id ? +id : 0, question: fm.question.value, answer: fm.answer.value, sort_order: +fm.sort_order.value })
+        .then(function (r) { if (r.ok) { toast("Kaydedildi"); closeModal(); renderers.sss(); } else toast(r.error || "Hata", "err"); });
+    };
+  }
+
+  // ---------- CONTACTS ----------
+  renderers.iletisim = function () {
+    get("contacts_list").then(function (d) {
+      if (!d.ok) return;
+      var rows = d.items.length ? d.items.map(function (c) {
+        return "<tr>" +
+          "<td>" + (c.is_read == 0 ? "<span class='dot-unread'></span>" : "") + "<span class='small'>" + fmtDate(c.created_at) + "</span></td>" +
+          "<td><div class='row-title'>" + esc(c.name || "-") + "</div><div class='small'>" + esc(c.email || "") + " · " + esc(c.phone || "") + "</div></td>" +
+          "<td>" + esc(c.subject || "-") + "</td>" +
+          "<td class='row-actions'><button class='btn tiny' data-view='" + c.id + "'>Gör</button><button class='btn tiny danger' data-del='" + c.id + "'>Sil</button></td>" +
+          "</tr>";
+      }).join("") : "<tr><td colspan='4' class='empty'>Henüz mesaj yok.</td></tr>";
+      el.wrap.innerHTML = '<div class="panel"><div class="table-wrap"><table><thead><tr><th>Tarih</th><th>Kişi</th><th>Konu</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div></div>";
+
+      el.wrap.querySelectorAll("[data-view]").forEach(function (b) {
+        b.onclick = function () {
+          var c = d.items.filter(function (x) { return x.id == b.getAttribute("data-view"); })[0];
+          openModal("Mesaj Detayı",
+            '<div class="detail-line"><strong>Tarih</strong><span>' + fmtDate(c.created_at) + "</span></div>" +
+            '<div class="detail-line"><strong>Ad Soyad</strong><span>' + esc(c.name || "-") + "</span></div>" +
+            '<div class="detail-line"><strong>E-posta</strong><span>' + esc(c.email || "-") + "</span></div>" +
+            '<div class="detail-line"><strong>Telefon</strong><span>' + esc(c.phone || "-") + "</span></div>" +
+            '<div class="detail-line"><strong>Konu</strong><span>' + esc(c.subject || "-") + "</span></div>" +
+            '<div class="detail-line"><strong>Mesaj</strong><span style="white-space:pre-wrap">' + esc(c.message || "-") + "</span></div>" +
+            '<div class="form-actions">' +
+            (c.email ? '<a class="btn" href="mailto:' + esc(c.email) + '">E-posta Gönder</a>' : "") +
+            (c.phone ? '<a class="btn gold" href="https://wa.me/' + esc(String(c.phone).replace(/\D/g, "")) + '" target="_blank">WhatsApp</a>' : "") +
+            "</div>");
+          if (c.is_read == 0) post("contact_read", { id: c.id }).then(function () { updateBadge(); });
+        };
+      });
+      el.wrap.querySelectorAll("[data-del]").forEach(function (b) {
+        b.onclick = function () {
+          if (!confirm("Bu mesajı silmek istiyor musunuz?")) return;
+          post("contact_delete", { id: +b.getAttribute("data-del") }).then(function (r) { if (r.ok) { toast("Silindi"); renderers.iletisim(); } });
+        };
+      });
+    });
+  };
+
+  // ---------- STATS ----------
+  renderers.istatistik = function () {
+    get("stats").then(function (d) {
+      if (!d.ok) return;
+      var max = 1; d.series.forEach(function (s) { if (s.views > max) max = s.views; });
+      var bars = d.series.map(function (s) {
+        var h = Math.round((s.views / max) * 100);
+        var lbl = s.date.slice(8) + "." + s.date.slice(5, 7);
+        return '<div class="bar" style="height:' + h + '%"><span class="tip">' + lbl + ": " + s.views + " · " + s.unique + " tekil</span></div>";
+      }).join("");
+      var tableRows = d.series.slice().reverse().filter(function (s) { return s.views > 0; }).map(function (s) {
+        return "<tr><td>" + s.date + "</td><td style='text-align:right'>" + s.views + "</td><td style='text-align:right'>" + s.unique + "</td></tr>";
+      }).join("") || "<tr><td colspan='3' class='empty'>Henüz ziyaret kaydı yok.</td></tr>";
+      el.wrap.innerHTML =
+        '<div class="stat-grid">' +
+        card("Bugün", d.cards.today, d.cards.uniqueToday + " tekil", true) +
+        card("Son 7 Gün", d.cards.week, "görüntüleme") +
+        card("Toplam", d.cards.total, "tüm zamanlar") +
+        "</div>" +
+        '<div class="panel"><div class="panel-head"><h3>Günlük Görüntüleme (30 gün)</h3></div><div class="panel-body"><div class="chart">' + bars + "</div></div></div>" +
+        '<div class="panel"><div class="panel-head"><h3>Gün Gün Detay</h3></div><div class="table-wrap"><table><thead><tr><th>Tarih</th><th style="text-align:right">Görüntüleme</th><th style="text-align:right">Tekil</th></tr></thead><tbody>' + tableRows + "</tbody></table></div></div>";
+    });
+  };
+
+  // ---------- PAYMENT LOGS ----------
+  renderers.inceleme = function () {
+    get("review_orders_list").then(function (d) {
+      if (!d.ok) { el.wrap.innerHTML = '<p class="empty">Yüklenemedi</p>'; return; }
+      var items = d.items || [];
+      var rows = items.length
+        ? items.map(function (r) {
+            return (
+              "<tr>" +
+              "<td class='small'>" + esc(fmtDate(r.created_at)) + "</td>" +
+              "<td>" + esc(r.merchant_oid || "#" + r.id) + "</td>" +
+              "<td>" + esc(r.student_name || r.student_email || "—") + "<div class='small'>" + esc(r.student_email || "") + "</div></td>" +
+              "<td>" + esc(r.course_title || "—") + "</td>" +
+              "<td>" + formatTryKurus(r.amount_kurus) + "</td>" +
+              "<td class='small'>" + esc(r.error_message || "—") + "</td>" +
+              "</tr>"
+            );
+          }).join("")
+        : "<tr><td colspan='6' class='empty'>İnceleme bekleyen sipariş yok.</td></tr>";
+      el.wrap.innerHTML =
+        '<p class="page-hint">Para çekilmiş olabilir ama erişim açılmamış siparişler. iyzico panelinden doğrulayıp Öğrenciler sekmesinden elle erişim verebilirsiniz.</p>' +
+        '<div class="panel"><div class="table-wrap"><table><thead><tr>' +
+        "<th>Tarih</th><th>Sipariş</th><th>Öğrenci</th><th>Kurs</th><th>Tutar</th><th>Not</th>" +
+        "</tr></thead><tbody>" + rows + "</tbody></table></div></div>";
+    });
+  };
+
+  renderers.odeme_olaylari = function () {
+    get("payment_logs_list").then(function (d) {
+      if (!d.ok) { el.wrap.innerHTML = '<p class="empty">Yüklenemedi</p>'; return; }
+      var dirLabel = { request: "İstek", response: "Yanıt", inbound: "Gelen" };
+      var rows = (d.items || []).length
+        ? d.items
+            .map(function (log) {
+              var preview = String(log.payload || "").replace(/\s+/g, " ");
+              if (preview.length > 80) preview = preview.slice(0, 80) + "…";
+              return (
+                "<tr>" +
+                "<td class='small'>" +
+                esc(fmtDate(log.created_at)) +
+                "</td>" +
+                "<td>" +
+                esc(dirLabel[log.direction] || log.direction || "") +
+                "</td>" +
+                "<td><code>" +
+                esc(log.path || "") +
+                "</code></td>" +
+                "<td>" +
+                (log.merchant_oid
+                  ? "<code>" + esc(log.merchant_oid) + "</code>"
+                  : log.order_id
+                    ? "#" + esc(String(log.order_id))
+                    : "—") +
+                "</td>" +
+                "<td class='log-payload'>" +
+                esc(preview) +
+                "</td>" +
+                "<td class='row-actions'><button class='btn tiny' data-log='" +
+                log.id +
+                "'>Gör</button></td>" +
+                "</tr>"
+              );
+            })
+            .join("")
+        : "<tr><td colspan='6' class='empty'>Henüz ödeme olayı yok. İlk iyzico işleminden sonra burada görünür.</td></tr>";
+      el.wrap.innerHTML =
+        '<p class="page-hint">iyzico istek/yanıt ve bildirim kayıtları. Kart numarası ve anahtar yazılmaz. İade yalnızca iyzico panelinden yapılır.</p>' +
+        '<div class="panel"><div class="table-wrap"><table><thead><tr><th>Tarih</th><th>Yön</th><th>Yol</th><th>Sipariş</th><th>Özet</th><th></th></tr></thead><tbody>' +
+        rows +
+        "</tbody></table></div></div>";
+      el.wrap.querySelectorAll("[data-log]").forEach(function (b) {
+        b.onclick = function () {
+          var id = +b.getAttribute("data-log");
+          var log = (d.items || []).filter(function (x) { return +x.id === id; })[0];
+          if (!log) return;
+          var pretty = log.payload || "";
+          try {
+            pretty = JSON.stringify(JSON.parse(log.payload), null, 2);
+          } catch (e) {}
+          openModal(
+            "Ödeme olayı #" + log.id,
+            '<div class="detail-line"><strong>Tarih</strong><span>' +
+              esc(fmtDate(log.created_at)) +
+              "</span></div>" +
+              '<div class="detail-line"><strong>Yön</strong><span>' +
+              esc(dirLabel[log.direction] || log.direction || "") +
+              "</span></div>" +
+              '<div class="detail-line"><strong>Yol</strong><span>' +
+              esc(log.path || "") +
+              "</span></div>" +
+              '<div class="detail-line"><strong>Sipariş</strong><span>' +
+              esc(log.merchant_oid || (log.order_id ? "#" + log.order_id : "—")) +
+              "</span></div>" +
+              '<pre class="pre-block">' +
+              esc(pretty) +
+              "</pre>"
+          );
+        };
+      });
+    });
+  };
+
+  // ---------- STUDENTS ----------
+  renderers.ogrenciler = function () {
+    drawOgrenciler({});
+  };
+  function drawOgrenciler(filters) {
+    get("admin_students_list", filters).then(function (d) {
+      if (!d.ok) { el.wrap.innerHTML = '<p class="empty">Yüklenemedi</p>'; return; }
+      var items = d.items || [];
+      var rows = items.length
+        ? items.map(function (r) {
+            var acc = r.account_status === "active" ? "Kayıtlı" : (r.account_status ? r.account_status : "Misafir");
+            return (
+              "<tr>" +
+              "<td>" + esc(r.instructor_name || "Atanmamış") + "</td>" +
+              "<td><strong>" + esc(r.student_name || "—") + "</strong><div class='small'>" +
+              esc(r.student_email || "") + (r.student_phone ? " · " + esc(r.student_phone) : "") +
+              "</div></td>" +
+              "<td>" + esc(r.course_title || "—") + "</td>" +
+              "<td>" + payPill(r.payment_status) + "</td>" +
+              "<td class='small'>" + esc(acc) + "</td>" +
+              "<td>%" + esc(String(parseInt(r.progress_pct, 10) || 0)) + "</td>" +
+              "<td class='small'>" + esc(fmtDate(r.enrolled_at)) + "</td>" +
+              "<td>" + (r.student_account_id
+                ? "<button class='btn tiny' data-st='" + esc(String(r.student_account_id)) + "' data-to='" +
+                  (r.account_status === "suspended" ? "active" : "suspended") + "'>" +
+                  (r.account_status === "suspended" ? "Aktif et" : "Pasife al") + "</button>"
+                : "—") +
+              "</td>" +
+              "</tr>"
+            );
+          }).join("")
+        : "<tr><td colspan='8' class='empty'>Kayıt yok.</td></tr>";
+      el.wrap.innerHTML =
+        '<p class="page-hint">Hangi eğitmenin hangi öğrencisi var, ödeme ve hesap durumu. Yalnızca kurs kayıtları (abonelik ayrı sekmede).</p>' +
+        '<div class="panel"><div class="panel-head"><h3>Elle kurs erişimi (havale)</h3></div><div class="panel-body">' +
+        '<p class="hint">Para havale ile geldiğinde kursu buradan açın. Kart iadesi yoktur.</p>' +
+        '<div class="filters">' +
+        '<div class="field"><label>E-posta</label><input id="grEmail" placeholder="ogrenci@email.com"></div>' +
+        '<div class="field"><label>Ad soyad</label><input id="grName" placeholder="isteğe bağlı"></div>' +
+        '<div class="field"><label>Kurs</label><select id="grCourse">' + selectOpts(d.courses, "id", "title", "") + "</select></div>" +
+        '<button type="button" class="btn-primary sm" id="grGo">Erişim aç</button>' +
+        "</div></div></div>" +
+        '<div class="panel"><div class="panel-body">' +
+        '<div class="filters">' +
+        '<div class="field"><label>Eğitmen</label><select id="ogIns">' + selectOpts(d.instructors, "id", "name", filters.instructor_id) + "</select></div>" +
+        '<div class="field"><label>Kurs</label><select id="ogCourse">' + selectOpts(d.courses, "id", "title", filters.course_id) + "</select></div>" +
+        '<div class="field"><label>Ara</label><input id="ogQ" placeholder="ad, e-posta, telefon" value="' + esc(filters.q || "") + '"></div>' +
+        '<button type="button" class="btn-primary sm" id="ogGo">Uygula</button>' +
+        "</div></div>" +
+        '<div class="table-wrap"><table><thead><tr>' +
+        "<th>Eğitmen</th><th>Öğrenci</th><th>Kurs</th><th>Ödeme</th><th>Hesap</th><th>İlerleme</th><th>Kayıt</th><th></th>" +
+        "</tr></thead><tbody>" + rows + "</tbody></table></div></div>";
+      document.getElementById("ogGo").onclick = function () {
+        drawOgrenciler({
+          instructor_id: document.getElementById("ogIns").value,
+          course_id: document.getElementById("ogCourse").value,
+          q: document.getElementById("ogQ").value,
+        });
+      };
+      var grGo = document.getElementById("grGo");
+      if (grGo) {
+        grGo.onclick = function () {
+          post("admin_grant_access", {
+            email: document.getElementById("grEmail").value,
+            name: document.getElementById("grName").value,
+            course_id: Number(document.getElementById("grCourse").value || 0),
+          }).then(function (r) {
+            if (r.ok) {
+              toast("Erişim açıldı");
+              drawOgrenciler(filters);
+            } else toast(r.error || "Hata", "err");
+          });
+        };
+      }
+      el.wrap.querySelectorAll("[data-st]").forEach(function (btn) {
+        btn.onclick = function () {
+          post("admin_student_status", {
+            id: Number(btn.getAttribute("data-st")),
+            status: btn.getAttribute("data-to"),
+          }).then(function (r) {
+            if (r.ok) drawOgrenciler(filters);
+            else toast(r.error || "Hata", "err");
+          });
+        };
+      });
+    });
+  }
+
+  // ---------- SALES ----------
+  renderers.satislar = function () {
+    drawSatislar(lastDays(30));
+  };
+  function drawSatislar(filters) {
+    get("admin_sales_report", filters).then(function (d) {
+      if (!d.ok) { el.wrap.innerHTML = '<p class="empty">Yüklenemedi</p>'; return; }
+      var items = d.items || [];
+      var insRows = (d.by_instructor || []).map(function (r) {
+        return "<tr><td>" + esc(r.name) + "</td><td>" + r.count + "</td><td>" + formatTryKurus(r.sales_kurus) + "</td><td>" + formatTryKurus(r.earn_kurus) + "</td></tr>";
+      }).join("") || "<tr><td colspan='4' class='empty'>Bu aralıkta satış yok.</td></tr>";
+      var courseRows = (d.by_course || []).map(function (r) {
+        return "<tr><td>" + esc(r.title) + "</td><td class='small'>" + esc(r.instructor_name) + "</td><td>" + r.count + "</td><td>" + formatTryKurus(r.sales_kurus) + "</td></tr>";
+      }).join("") || "<tr><td colspan='4' class='empty'>Bu aralıkta satış yok.</td></tr>";
+      var saleRows = items.length
+        ? items.map(function (r) {
+            return (
+              "<tr>" +
+              "<td class='small'>" + esc(fmtDate(r.paid_at || r.created_at)) + "</td>" +
+              "<td>" + esc(r.instructor_name || "Atanmamış") + "</td>" +
+              "<td>" + esc(r.course_title || "—") + "</td>" +
+              "<td>" + esc(r.student_name || r.student_email || "—") + "<div class='small'>" + esc(r.student_email || "") + "</div></td>" +
+              "<td>" + formatTryKurus(r.amount_kurus) + "</td>" +
+              "<td class='small'>" + formatTryKurus(r.earn_kurus) + "</td>" +
+              "</tr>"
+            );
+          }).join("")
+        : "<tr><td colspan='6' class='empty'>Bu filtrede satış yok.</td></tr>";
+      el.wrap.innerHTML =
+        '<p class="page-hint">Ödenmiş kurs satışları. Tarih, eğitmen ve kurs seçerek toplamı görün. Abonelikler bu rapora dahil değil.</p>' +
+        '<div class="panel"><div class="panel-body"><div class="filters">' +
+        '<div class="field"><label>Başlangıç</label><input type="date" id="saFrom" value="' + esc(filters.from || "") + '"></div>' +
+        '<div class="field"><label>Bitiş</label><input type="date" id="saTo" value="' + esc(filters.to || "") + '"></div>' +
+        '<div class="field"><label>Eğitmen</label><select id="saIns">' + selectOpts(d.instructors, "id", "name", filters.instructor_id) + "</select></div>" +
+        '<div class="field"><label>Kurs</label><select id="saCourse">' + selectOpts(d.courses, "id", "title", filters.course_id) + "</select></div>" +
+        '<button type="button" class="btn-primary sm" id="saGo">Uygula</button>' +
+        '<button type="button" class="btn-ghost sm" id="saAll">Tüm zamanlar</button>' +
+        "</div></div></div>" +
+        '<div class="stat-grid">' +
+        '<div class="stat-card"><div class="label">Satış adedi</div><div class="num">' + (d.count || 0) + "</div></div>" +
+        '<div class="stat-card gold"><div class="label">Toplam tutar</div><div class="num">' + formatTryKurus(d.sales_kurus) + "</div></div>" +
+        '<div class="stat-card"><div class="label">Eğitmen payı</div><div class="num">' + formatTryKurus(d.earn_kurus) + "</div></div>" +
+        "</div>" +
+        '<div class="panel"><div class="panel-head"><h3>Eğitmene göre</h3></div><div class="table-wrap"><table><thead><tr><th>Eğitmen</th><th>Adet</th><th>Satış</th><th>Pay</th></tr></thead><tbody>' +
+        insRows + "</tbody></table></div></div>" +
+        '<div class="panel"><div class="panel-head"><h3>Kursa göre</h3></div><div class="table-wrap"><table><thead><tr><th>Kurs</th><th>Eğitmen</th><th>Adet</th><th>Satış</th></tr></thead><tbody>' +
+        courseRows + "</tbody></table></div></div>" +
+        '<div class="panel"><div class="panel-head"><h3>Satış listesi</h3></div><div class="table-wrap"><table><thead><tr><th>Tarih</th><th>Eğitmen</th><th>Kurs</th><th>Öğrenci</th><th>Tutar</th><th>Pay</th></tr></thead><tbody>' +
+        saleRows + "</tbody></table></div></div>";
+      document.getElementById("saGo").onclick = function () {
+        drawSatislar({
+          from: document.getElementById("saFrom").value,
+          to: document.getElementById("saTo").value,
+          instructor_id: document.getElementById("saIns").value,
+          course_id: document.getElementById("saCourse").value,
+        });
+      };
+      document.getElementById("saAll").onclick = function () {
+        drawSatislar({
+          instructor_id: document.getElementById("saIns").value,
+          course_id: document.getElementById("saCourse").value,
+        });
+      };
+    });
+  }
+
+  // ---------- SUBSCRIPTIONS (WhatsApp grubu) ----------
+  renderers.abonelikler = function () {
+    get("subscriptions_list").then(function (d) {
+      if (!d.ok) { el.wrap.innerHTML = '<p class="empty">Yüklenemedi</p>'; return; }
+      var items = d.items || [];
+      var rows = items.length
+        ? items.map(function (r) {
+            var digits = String(r.wa_digits || "").replace(/\D/g, "");
+            if (digits.length === 10) digits = "90" + digits;
+            if (digits.length === 11 && digits.charAt(0) === "0") digits = "90" + digits.slice(1);
+            var waHref = digits ? "https://wa.me/" + digits : "";
+            var pill = r.status === "active" ? "ok" : (r.status === "past_due" ? "urun" : "off");
+            var waBtn = r.wa_added
+              ? "<button class='btn tiny' data-wa='0' data-id='" + r.id + "'>WP çıkarıldı</button>"
+              : "<button class='btn tiny primary' data-wa='1' data-id='" + r.id + "'>WP eklendi</button>";
+            var need = "";
+            if (r.entitled && !r.wa_added) need = " <span class='pill urun'>gruba ekle</span>";
+            if (!r.entitled && r.wa_added) need = " <span class='pill'>gruptan çıkar</span>";
+            return (
+              "<tr>" +
+              "<td>" + esc(r.student_name || "—") + "<div class='small'>" + esc(r.student_email || "") + "</div></td>" +
+              "<td>" + (waHref ? "<a href='" + esc(waHref) + "' target='_blank' rel='noopener'>" + esc(r.student_phone || digits) + "</a>" : esc(r.student_phone || "—")) + "</td>" +
+              "<td><span class='pill " + pill + "'>" + esc(r.status_label || r.status) + "</span>" + need + "</td>" +
+              "<td class='small'>" + esc(fmtDate(r.current_period_end)) + "</td>" +
+              "<td class='small'>" + esc(fmtDate(r.last_paid_at)) + "</td>" +
+              "<td class='row-actions'>" + waBtn + "</td>" +
+              "</tr>"
+            );
+          }).join("")
+        : "<tr><td colspan='6' class='empty'>Henüz abone yok.</td></tr>";
+      el.wrap.innerHTML =
+        '<div class="panel"><div class="panel-head"><h3>WhatsApp grubu aboneleri</h3></div>' +
+        '<div class="panel-body"><p class="hint">Grup ekleme/çıkarma siteden yapılmaz. WhatsApp’tan elle ekleyip buradan işaretleyin. Kart çekimi iyzico aboneliğidir.</p></div>' +
+        '<div class="table-wrap"><table><thead><tr>' +
+        "<th>Öğrenci</th><th>Telefon</th><th>Durum</th><th>Dönem sonu</th><th>Son ödeme</th><th></th>" +
+        "</tr></thead><tbody>" + rows + "</tbody></table></div></div>";
+      el.wrap.querySelectorAll("[data-wa]").forEach(function (btn) {
+        btn.onclick = function () {
+          post("subscription_wa_set", { id: Number(btn.getAttribute("data-id")), wa_added: Number(btn.getAttribute("data-wa")) })
+            .then(function (r) {
+              if (r.ok) renderers.abonelikler();
+              else toast(r.error || "Hata", "err");
+            });
+        };
+      });
+    });
+  };
+
+  // ---------- SETTINGS ----------
+  renderers.ayarlar = function () {
+    get("settings_get").then(function (d) {
+      var s = d.settings || {};
+      function fld(name, label, val) { return '<div class="field"><label>' + label + '</label><input name="' + name + '" value="' + esc(s[name] || "") + '"></div>'; }
+      el.wrap.innerHTML =
+        '<div class="panel"><div class="panel-head"><h3>İletişim Bilgileri</h3></div><div class="panel-body">' +
+        '<form id="setForm"><div class="form-grid">' +
+        fld("marka", "Marka adı") + fld("sehir", "Şehir") +
+        fld("telefon", "Telefon") + fld("whatsapp", "WhatsApp (90...)") +
+        fld("instagram", "Instagram URL") + fld("twitter", "X / Twitter URL") +
+        fld("banka", "Banka") + fld("hesap_adi", "Hesap Adı") +
+        '<div class="field full"><label>IBAN</label><input name="iban" value="' + esc(s.iban || "") + '"></div>' +
+        "</div>" +
+        '<h3 style="margin:22px 0 4px;font-size:15px">Satıcı kimliği (yasal metinler)</h3>' +
+        '<p class="hint" style="margin:0 0 12px">Mesafeli satış ve ön bilgilendirme sayfalarında görünür. MERSİS / vergi boş bırakılabilir.</p>' +
+        '<div class="form-grid">' +
+        fld("satici_unvan", "Ticari unvan") +
+        '<div class="field full"><label>Adres</label><input name="satici_adres" value="' + esc(s.satici_adres || "") + '"></div>' +
+        fld("satici_vergi", "Vergi no") + fld("satici_mersis", "MERSİS") +
+        "</div>" +
+        '<h3 style="margin:22px 0 4px;font-size:15px">Üst menü (başlık)</h3>' +
+        '<p class="hint" style="margin:0 0 12px">Kapalı olanlar sitede görünmez. Sayfalar durur; yalnız menüden kalkar. Abonelik başlıkta yoktur.</p>' +
+        '<div class="form-grid">' +
+        '<div class="field"><label>Hakkımızda</label><select name="nav_hakkimizda">' +
+          '<option value="0"' + ((s.nav_hakkimizda || "0") !== "1" ? " selected" : "") + ">Kapalı</option>" +
+          '<option value="1"' + ((s.nav_hakkimizda || "0") === "1" ? " selected" : "") + ">Açık</option>" +
+        "</select></div>" +
+        '<div class="field"><label>S.S.S.</label><select name="nav_sss">' +
+          '<option value="0"' + ((s.nav_sss || "0") !== "1" ? " selected" : "") + ">Kapalı</option>" +
+          '<option value="1"' + ((s.nav_sss || "0") === "1" ? " selected" : "") + ">Açık</option>" +
+        "</select></div>" +
+        '<div class="field"><label>İletişim</label><select name="nav_iletisim">' +
+          '<option value="0"' + ((s.nav_iletisim || "0") !== "1" ? " selected" : "") + ">Kapalı</option>" +
+          '<option value="1"' + ((s.nav_iletisim || "0") === "1" ? " selected" : "") + ">Açık</option>" +
+        "</select></div>" +
+        '<div class="field"><label>Araçlar</label><select name="nav_araclar">' +
+          '<option value="0"' + ((s.nav_araclar || "0") !== "1" ? " selected" : "") + ">Kapalı</option>" +
+          '<option value="1"' + ((s.nav_araclar || "0") === "1" ? " selected" : "") + ">Açık</option>" +
+        "</select></div>" +
+        "</div>" +
+        '<h3 style="margin:22px 0 4px;font-size:15px">WhatsApp grubu aboneliği</h3>' +
+        '<p class="hint" style="margin:0 0 12px">iyzico Subscription ile karttan periyodik çekim. Sandbox’ta günlük, canlıda aylık. Grup linki sitede yayınlanmaz; üyeleri Abonelikler sekmesinden görürsünüz.</p>' +
+        '<div class="form-grid">' +
+        '<div class="field"><label>Satış açık</label><select name="sub_enabled">' +
+          '<option value="1"' + ((s.sub_enabled || "1") !== "0" ? " selected" : "") + ">Açık</option>" +
+          '<option value="0"' + ((s.sub_enabled || "1") === "0" ? " selected" : "") + ">Kapalı</option>" +
+        "</select></div>" +
+        fld("sub_title", "Başlık") +
+        '<div class="field"><label>Fiyat (TL)</label><input name="sub_price" value="' + esc(s.sub_price || "199") + '"></div>' +
+        '<div class="field"><label>Dönem</label><input value="' + esc(s.sub_interval_label || "") + '" disabled></div>' +
+        '<div class="field full"><label>Kısa açıklama</label><input name="sub_blurb" value="' + esc(s.sub_blurb || "") + '"></div>' +
+        '<div class="field full"><label>Bağlı eğitmen</label><select name="sub_instructor_id">' +
+        selectOpts(d.instructors || [], "id", "name", s.sub_instructor_id) +
+        "</select></div>" +
+        "</div>" +
+        '<h3 style="margin:22px 0 4px;font-size:15px">Eğitmen kazancı</h3>' +
+        '<p class="hint" style="margin:0 0 12px">Yeni eğitmenlerde varsayılan pay. Kişiye özel yüzdeyi Eğitmenler → Düzenle’den verirsiniz (ör. biri %60, diğeri %70). Para iyzico’da kalır; burası yalnızca gösterimdir.</p>' +
+        '<div class="form-grid">' +
+        '<div class="field"><label>Eğitmen payı (%)</label><input type="number" name="instructor_share_pct" min="0" max="100" step="1" value="' +
+        esc(s.instructor_share_pct || "60") +
+        '"></div>' +
+        "</div>" +
+        '<h3 style="margin:22px 0 4px;font-size:15px">Öğrenci e-postaları (SMTP)</h3>' +
+        '<p class="hint" style="margin:0 0 12px">Kayıt doğrulama, şifre sıfırlama ve ödeme bildirimi bu ayarlarla gider. Boş şifre alanı kayıtlı şifreyi değiştirmez.</p>' +
+        '<div class="form-grid">' +
+        fld("smtp_host", "SMTP sunucu") + fld("smtp_port", "Port (587 / 465)") +
+        '<div class="field"><label>Şifreleme</label><select name="smtp_secure">' +
+          '<option value="tls"' + ((s.smtp_secure || "tls") === "tls" ? " selected" : "") + ">STARTTLS (587)</option>" +
+          '<option value="ssl"' + (s.smtp_secure === "ssl" ? " selected" : "") + ">SSL (465)</option>" +
+          '<option value="none"' + (s.smtp_secure === "none" ? " selected" : "") + ">Yok</option>" +
+        "</select></div>" +
+        fld("smtp_user", "Kullanıcı (e-posta)") +
+        '<div class="field"><label>Şifre</label><input type="password" name="smtp_pass" value="" autocomplete="new-password" placeholder="' + (s.smtp_pass_set ? "Kayıtlı (değiştirmek için yazın)" : "") + '"></div>' +
+        fld("smtp_from", "Gönderen e-posta") + fld("smtp_from_name", "Gönderen adı") +
+        "</div>" +
+        '<h3 style="margin:22px 0 4px;font-size:15px">İletişim formu (EmailJS)</h3>' +
+        '<div class="form-grid">' +
+        fld("emailjs_public", "Public Key") + fld("emailjs_service", "Service ID") +
+        fld("emailjs_template", "Template ID") + fld("emailjs_to", "Alıcı E-posta") +
+        "</div>" +
+        '<div class="form-actions"><button type="submit" class="btn-primary sm">Ayarları Kaydet</button></div></form>' +
+        "</div></div>" +
+        '<div class="panel"><div class="panel-head"><h3>Canlı Yayın (Domain → PayTR)</h3></div><div class="panel-body" id="launchBox"><p class="empty">Kontrol yükleniyor…</p></div></div>' +
+        '<div class="panel"><div class="panel-head"><h3>Şifre Değiştir</h3></div><div class="panel-body">' +
+        '<form id="pwForm"><div class="form-grid">' +
+        '<div class="field"><label>Mevcut Şifre</label><input type="password" name="current" required></div>' +
+        '<div class="field"><label>Yeni Şifre (min 6)</label><input type="password" name="new" required></div>' +
+        '</div><div class="form-actions"><button type="submit" class="btn-ghost">Şifreyi Güncelle</button></div></form>' +
+        "</div></div>";
+
+      fetch("../api/launch_status.php", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (ls) {
+          var box = document.getElementById("launchBox");
+          if (!box || !ls || !ls.ok) return;
+          var pct = (ls.progress && ls.progress.pct) || 0;
+          var rows = (ls.steps || []).map(function (st) {
+            return (
+              "<tr><td>" +
+              (st.done ? "✅" : "⬜") +
+              "</td><td><strong>" +
+              esc(st.title) +
+              "</strong><div style='font-size:12px;color:#64748b;margin-top:4px'>" +
+              esc(st.detail || "") +
+              "</div></td></tr>"
+            );
+          }).join("");
+          var cb = (ls.paytr && ls.paytr.callback_url) || "";
+          box.innerHTML =
+            "<p><strong>İlerleme:</strong> %" +
+            pct +
+            " · Marka: " +
+            esc((ls.brand && ls.brand.marka) || "") +
+            " · URL: " +
+            esc((ls.brand && ls.brand.publicUrl) || "") +
+            "</p>" +
+            '<div class="table-wrap"><table><tbody>' +
+            rows +
+            "</tbody></table></div>" +
+            (cb
+              ? '<p style="margin-top:12px;font-size:13px"><strong>PayTR Bildirim URL:</strong><br><code id="paytrCb">' +
+                esc(cb) +
+                '</code> <button type="button" class="btn-ghost sm" id="copyCb">Kopyala</button></p>'
+              : "") +
+            '<p style="font-size:12px;color:#64748b;margin-top:8px">Marka/domain: <code>api/site_brand.local.php</code> · Anahtarlar: <code>api/paytr_config.local.php</code> · Detay: <a href="../CANLI-YAYIN.md" target="_blank">CANLI-YAYIN.md</a></p>';
+          var btn = document.getElementById("copyCb");
+          if (btn) {
+            btn.onclick = function () {
+              var t = document.getElementById("paytrCb");
+              if (!t) return;
+              navigator.clipboard.writeText(t.textContent || "").then(function () {
+                toast("Bildirim URL kopyalandı", "ok");
+              });
+            };
+          }
+        })
+        .catch(function () {});
+
+      document.getElementById("setForm").onsubmit = function (e) {
+        e.preventDefault();
+        var f = e.target, out = {};
+        ["marka", "sehir", "telefon", "whatsapp", "instagram", "twitter", "banka", "hesap_adi", "iban", "instructor_share_pct", "emailjs_public", "emailjs_service", "emailjs_template", "emailjs_to", "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from", "smtp_from_name", "sub_enabled", "sub_title", "sub_price", "sub_blurb", "sub_instructor_id", "satici_unvan", "satici_adres", "satici_vergi", "satici_mersis", "nav_hakkimizda", "nav_sss", "nav_iletisim", "nav_araclar"].forEach(function (k) { if (f[k]) out[k] = f[k].value; });
+        post("settings_save", out).then(function (r) { toast(r.ok ? "Ayarlar kaydedildi" : (r.error || "Hata"), r.ok ? "ok" : "err"); });
+      };
+      document.getElementById("pwForm").onsubmit = function (e) {
+        e.preventDefault();
+        var f = e.target;
+        post("change_password", { current: f.current.value, new: f.new.value }).then(function (r) {
+          if (r.ok) { toast("Şifre güncellendi"); f.reset(); } else toast(r.error || "Hata", "err");
+        });
+      };
+    });
+  };
+
+  function updateBadge() {
+    get("stats").then(function (d) { if (d.ok) updateUnread(d.cards.unread); });
+  }
+
+  // start
+  setView("dashboard");
+})();

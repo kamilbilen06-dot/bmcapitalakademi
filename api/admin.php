@@ -1,0 +1,905 @@
+<?php
+/**
+ * Admin API - yönetim paneli tüm CRUD işlemlerini buradan yapar. Oturum korumalı.
+ */
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/instructors_schema.php';
+require_once __DIR__ . '/egitmen_schema.php';
+require_once __DIR__ . '/auth_schema.php';
+require_once __DIR__ . '/image_upload.php';
+require_once __DIR__ . '/payments_schema.php';
+require_once __DIR__ . '/instructor_account.php';
+require_once __DIR__ . '/subscriptions.php';
+require_once __DIR__ . '/students_schema.php';
+require_once __DIR__ . '/student_account.php';
+
+require_site_admin();
+$sessionAdminId = (int)($_SESSION['admin_id'] ?? 0);
+$csrfToken = admin_csrf_token();
+admin_csrf_protect();
+session_write_close();
+
+$action = $_GET['action'] ?? '';
+$pdo = db();
+egitmen_ensure_schema($pdo);
+instructors_ensure_schema($pdo);
+auth_ensure_schema($pdo);
+payments_ensure_schema($pdo);
+subscriptions_ensure_schema($pdo);
+students_ensure_schema($pdo);
+
+try {
+    switch ($action) {
+
+        // ---------- DASHBOARD ----------
+        case 'stats': {
+            $today = (int)$pdo->query("SELECT COUNT(*) FROM page_views WHERE DATE(created_at) = CURDATE()")->fetchColumn();
+            $uniqToday = (int)$pdo->query("SELECT COUNT(DISTINCT ip) FROM page_views WHERE DATE(created_at) = CURDATE()")->fetchColumn();
+            $week = (int)$pdo->query("SELECT COUNT(*) FROM page_views WHERE created_at > (NOW() - INTERVAL 7 DAY)")->fetchColumn();
+            $total = (int)$pdo->query("SELECT COUNT(*) FROM page_views")->fetchColumn();
+            $unread = (int)$pdo->query("SELECT COUNT(*) FROM contacts WHERE is_read = 0")->fetchColumn();
+            $modCount = (int)$pdo->query("SELECT COUNT(*) FROM modules")->fetchColumn();
+            $faqCount = (int)$pdo->query("SELECT COUNT(*) FROM faqs")->fetchColumn();
+
+            // Son 30 gün günlük görüntüleme
+            $daily = [];
+            $rows = $pdo->query("SELECT DATE(created_at) d, COUNT(*) c, COUNT(DISTINCT ip) u
+                FROM page_views WHERE created_at > (NOW() - INTERVAL 30 DAY)
+                GROUP BY DATE(created_at) ORDER BY d ASC")->fetchAll();
+            foreach ($rows as $r) { $daily[$r['d']] = ['views' => (int)$r['c'], 'unique' => (int)$r['u']]; }
+
+            $series = [];
+            for ($i = 29; $i >= 0; $i--) {
+                $d = date('Y-m-d', strtotime("-$i day"));
+                $series[] = [
+                    'date' => $d,
+                    'views' => $daily[$d]['views'] ?? 0,
+                    'unique' => $daily[$d]['unique'] ?? 0,
+                ];
+            }
+
+            // En çok görüntülenen sayfalar (son 30 gün)
+            $topPages = $pdo->query("SELECT path, COUNT(*) c FROM page_views
+                WHERE created_at > (NOW() - INTERVAL 30 DAY) AND path <> ''
+                GROUP BY path ORDER BY c DESC LIMIT 8")->fetchAll();
+
+            json_out(['ok' => true, 'csrf' => $csrfToken, 'cards' => [
+                'today' => $today, 'uniqueToday' => $uniqToday, 'week' => $week,
+                'total' => $total, 'unread' => $unread, 'modules' => $modCount, 'faqs' => $faqCount,
+            ], 'series' => $series, 'topPages' => $topPages]);
+        }
+
+        case 'csrf': {
+            json_out(['ok' => true, 'csrf' => $csrfToken]);
+        }
+
+        // ---------- MODULES (eğitim / ürün) ----------
+        case 'modules_list': {
+            $rows = $pdo->query("SELECT id, type, slug, title, price, featured, sort_order, image FROM modules ORDER BY type, sort_order, id")->fetchAll();
+            json_out(['ok' => true, 'items' => $rows]);
+        }
+
+        case 'module_get': {
+            $id = (int)($_GET['id'] ?? 0);
+            $stmt = $pdo->prepare("SELECT * FROM modules WHERE id = ?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch();
+            if (!$row) json_out(['ok' => false, 'error' => 'Bulunamadı'], 404);
+            $row['data'] = json_decode($row['data'] ?? '{}', true) ?: [];
+            json_out(['ok' => true, 'item' => $row]);
+        }
+
+        case 'module_save': {
+            $in = body_json();
+            $id = (int)($in['id'] ?? 0);
+
+            $data = [
+                'ozellikler' => lines_to_array($in['ozellikler'] ?? ''),
+                'aciklama' => lines_to_array($in['aciklama'] ?? ''),
+                'hediye' => lines_to_array($in['hediye'] ?? ''),
+                'hediyeGorsel' => clean($in['hediyeGorsel'] ?? ''),
+                'tarihler' => lines_to_array($in['tarihler'] ?? ''),
+                'mufredat' => parse_mufredat($in['mufredat'] ?? ''),
+            ];
+
+            $slug = clean($in['slug'] ?? '');
+            if ($slug === '') $slug = slugify($in['title'] ?? 'kayit');
+
+            $fields = [
+                'type' => in_array(($in['type'] ?? ''), ['egitim','urun']) ? $in['type'] : 'egitim',
+                'slug' => $slug,
+                'title' => clean($in['title'] ?? ''),
+                'short_desc' => clean($in['short_desc'] ?? ''),
+                'image' => clean($in['image'] ?? ''),
+                'video' => clean($in['video'] ?? ''),
+                'video_poster' => clean($in['video_poster'] ?? ''),
+                'price' => clean($in['price'] ?? ''),
+                'price_note' => clean($in['price_note'] ?? ''),
+                'duration' => clean($in['duration'] ?? ''),
+                'egitim_turu' => clean($in['egitim_turu'] ?? ''),
+                'instructors' => clean($in['instructors'] ?? ''),
+                'etiket' => clean($in['etiket'] ?? ''),
+                'katilim_not' => clean($in['katilim_not'] ?? ''),
+                'tarih_not' => clean($in['tarih_not'] ?? ''),
+                'featured' => !empty($in['featured']) ? 1 : 0,
+                'sort_order' => (int)($in['sort_order'] ?? 0),
+                'data' => json_encode($data, JSON_UNESCAPED_UNICODE),
+            ];
+
+            if ($fields['title'] === '') json_out(['ok' => false, 'error' => 'Başlık gerekli'], 422);
+
+            if ($id > 0) {
+                $set = implode(', ', array_map(function ($k) { return "$k = :$k"; }, array_keys($fields)));
+                $stmt = $pdo->prepare("UPDATE modules SET $set WHERE id = :id");
+                $fields['id'] = $id;
+                $stmt->execute($fields);
+                json_out(['ok' => true, 'id' => $id]);
+            } else {
+                $cols = implode(', ', array_keys($fields));
+                $ph = implode(', ', array_map(function ($k) { return ":$k"; }, array_keys($fields)));
+                $stmt = $pdo->prepare("INSERT INTO modules ($cols) VALUES ($ph)");
+                $stmt->execute($fields);
+                json_out(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+            }
+        }
+
+        case 'module_delete': {
+            $in = body_json();
+            $id = (int)($in['id'] ?? 0);
+            $pdo->prepare("DELETE FROM modules WHERE id = ?")->execute([$id]);
+            json_out(['ok' => true]);
+        }
+
+        // ---------- INSTRUCTORS ----------
+        case 'instructors_list': {
+            $defaultShare = instructor_share_pct($pdo);
+            $rows = $pdo->query(
+                "SELECT i.id, i.slug, i.name, i.email, i.title, i.photo_path, i.bio, i.socials, i.sort_order, i.is_active, i.share_pct, i.updated_at,
+                        u.id AS user_id, u.username AS panel_username, u.password_hash, u.last_login_at,
+                        (SELECT COUNT(*) FROM courses c WHERE c.instructor_id = i.id) AS course_count,
+                        (SELECT COUNT(*) FROM courses c WHERE c.instructor_id = i.id AND c.status = 'published') AS published_count,
+                        (SELECT COUNT(DISTINCT COALESCE(NULLIF(e.student_id, 0), e.student_email))
+                           FROM course_enrollments e
+                           INNER JOIN courses c ON c.id = e.course_id
+                          WHERE c.instructor_id = i.id AND e.payment_status = 'paid') AS student_count,
+                        (SELECT COALESCE(SUM(o.amount_kurus), 0)
+                           FROM payment_orders o
+                           INNER JOIN courses c ON c.id = o.course_id
+                          WHERE c.instructor_id = i.id AND o.status = 'paid') AS sales_kurus
+                 FROM instructors i
+                 LEFT JOIN admin_users u ON u.instructor_id = i.id AND u.role = 'egitmen'
+                 ORDER BY i.sort_order ASC, i.id ASC"
+            )->fetchAll();
+            foreach ($rows as &$r) {
+                $r['socials'] = instructor_decode_socials($r['socials'] ?? '[]');
+                $r['has_account'] = !empty($r['user_id']);
+                $r['has_password'] = instructor_has_usable_password($r);
+                unset($r['password_hash']);
+                $r['course_count'] = (int)$r['course_count'];
+                $r['published_count'] = (int)$r['published_count'];
+                $r['student_count'] = (int)$r['student_count'];
+                $r['sales_kurus'] = (int)$r['sales_kurus'];
+                $r['share_pct'] = instructor_share_pct_for($pdo, (int)$r['id']);
+                $r['earn_kurus'] = instructor_earn_kurus($r['sales_kurus'], (float)$r['share_pct']);
+            }
+            unset($r);
+            json_out(['ok' => true, 'items' => $rows, 'share_pct' => $defaultShare]);
+        }
+
+        case 'instructor_watch': {
+            $id = (int)($_GET['id'] ?? 0);
+            $st = $pdo->prepare(
+                "SELECT i.id, i.slug, i.name, i.title, i.photo_path, i.is_active,
+                        u.username AS panel_username, u.last_login_at
+                 FROM instructors i
+                 LEFT JOIN admin_users u ON u.instructor_id = i.id AND u.role = 'egitmen'
+                 WHERE i.id = ? LIMIT 1"
+            );
+            $st->execute([$id]);
+            $ins = $st->fetch();
+            if (!$ins) {
+                json_out(['ok' => false, 'error' => 'Eğitmen bulunamadı'], 404);
+            }
+            $cst = $pdo->prepare(
+                "SELECT c.id, c.title, c.status, c.price,
+                        (SELECT COUNT(*) FROM course_enrollments e WHERE e.course_id = c.id AND e.payment_status = 'paid') AS student_count,
+                        (SELECT COALESCE(SUM(o.amount_kurus), 0) FROM payment_orders o WHERE o.course_id = c.id AND o.status = 'paid') AS sales_kurus
+                 FROM courses c
+                 WHERE c.instructor_id = ?
+                 ORDER BY c.id DESC"
+            );
+            $cst->execute([$id]);
+            $courses = $cst->fetchAll();
+            $sharePct = instructor_share_pct_for($pdo, $id);
+            foreach ($courses as &$c) {
+                $c['student_count'] = (int)$c['student_count'];
+                $c['sales_kurus'] = (int)$c['sales_kurus'];
+                $c['earn_kurus'] = instructor_earn_kurus($c['sales_kurus'], $sharePct);
+            }
+            unset($c);
+            json_out(['ok' => true, 'instructor' => $ins, 'courses' => $courses, 'share_pct' => $sharePct]);
+        }
+
+        case 'instructor_get': {
+            $id = (int)($_GET['id'] ?? 0);
+            $stmt = $pdo->prepare("SELECT * FROM instructors WHERE id = ?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch();
+            if (!$row) json_out(['ok' => false, 'error' => 'Eğitmen bulunamadı'], 404);
+            $row['socials'] = instructor_decode_socials($row['socials'] ?? '[]');
+            $u = $pdo->prepare("SELECT id, username, password_hash FROM admin_users WHERE instructor_id = ? AND role = 'egitmen' LIMIT 1");
+            $u->execute([$id]);
+            $acc = $u->fetch();
+            $row['panel_username'] = $acc ? $acc['username'] : '';
+            $row['user_id'] = $acc ? (int)$acc['id'] : 0;
+            $row['has_account'] = !!$acc;
+            $row['has_password'] = $acc ? instructor_has_usable_password($acc) : false;
+            $row['default_share_pct'] = instructor_share_pct($pdo);
+            json_out(['ok' => true, 'item' => $row]);
+        }
+
+        case 'instructor_save': {
+            $in = body_json();
+            $id = (int)($in['id'] ?? 0);
+            $name = clean($in['name'] ?? '');
+            if ($name === '') json_out(['ok' => false, 'error' => 'Ad soyad gerekli'], 422);
+
+            $email = instructor_normalize_email($in['email'] ?? '');
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                json_out(['ok' => false, 'error' => 'Geçerli bir e-posta girin'], 422);
+            }
+
+            $shareIn = array_key_exists('share_pct', $in) ? $in['share_pct'] : '';
+            $sharePct = null;
+            if (trim((string)$shareIn) !== '') {
+                $sharePct = instructor_share_pct_parse($shareIn);
+                if ($sharePct === null) {
+                    json_out(['ok' => false, 'error' => 'Eğitmen payı 0–100 arasında olmalı'], 422);
+                }
+            }
+
+            $emailTaken = $pdo->prepare(
+                "SELECT id FROM instructors WHERE email = ? AND email <> '' AND id <> ? LIMIT 1"
+            );
+            $emailTaken->execute([$email, $id]);
+            if ($emailTaken->fetch()) {
+                json_out(['ok' => false, 'error' => 'Bu e-posta başka bir eğitmende kayıtlı'], 422);
+            }
+            $userTaken = $pdo->prepare(
+                "SELECT id, role, instructor_id FROM admin_users WHERE username = ? LIMIT 1"
+            );
+            $userTaken->execute([$email]);
+            $userRow = $userTaken->fetch();
+            if ($userRow) {
+                $linked = (int)($userRow['instructor_id'] ?? 0);
+                if ($userRow['role'] === 'admin' || ($linked > 0 && $linked !== $id)) {
+                    json_out(['ok' => false, 'error' => 'Bu e-posta başka bir hesapta kullanılıyor'], 422);
+                }
+            }
+
+            $slug = clean($in['slug'] ?? '');
+            if ($slug === '') $slug = slugify($name);
+            $slug = preg_replace('/[^a-z0-9\-]+/', '-', strtolower($slug));
+            $slug = trim($slug, '-') ?: ('egitmen-' . time());
+            $baseSlug = $slug;
+            $n = 2;
+            while (true) {
+                $chk = $pdo->prepare("SELECT id FROM instructors WHERE slug = ? AND id <> ?");
+                $chk->execute([$slug, $id]);
+                if (!$chk->fetch()) {
+                    break;
+                }
+                $slug = $baseSlug . '-' . $n;
+                $n++;
+            }
+
+            $active = array_key_exists('is_active', $in) ? (!empty($in['is_active']) ? 1 : 0) : 1;
+
+            if ($id > 0) {
+                $st = $pdo->prepare("SELECT id FROM instructors WHERE id = ?");
+                $st->execute([$id]);
+                if (!$st->fetch()) {
+                    json_out(['ok' => false, 'error' => 'Eğitmen bulunamadı'], 404);
+                }
+                $pdo->prepare(
+                    "UPDATE instructors SET slug=?, name=?, email=?, share_pct=?, is_active=? WHERE id=?"
+                )->execute([$slug, $name, $email, $sharePct, $active, $id]);
+
+                $linked = $pdo->prepare(
+                    "SELECT id FROM admin_users WHERE instructor_id = ? AND role = 'egitmen' LIMIT 1"
+                );
+                $linked->execute([$id]);
+                $accId = (int)$linked->fetchColumn();
+                if ($accId > 0) {
+                    $pdo->prepare("UPDATE admin_users SET username = ? WHERE id = ?")->execute([$email, $accId]);
+                } else {
+                    $pdo->prepare(
+                        "INSERT INTO admin_users (username, password_hash, role, instructor_id) VALUES (?, '*', 'egitmen', ?)"
+                    )->execute([$email, $id]);
+                    $accId = (int)$pdo->lastInsertId();
+                    $invite = instructor_deliver_invite($pdo, $accId, 'invite');
+                    json_out([
+                        'ok' => true,
+                        'id' => $id,
+                        'slug' => $slug,
+                        'mail_sent' => !empty($invite['ok']),
+                        'invite_link' => $invite['local_link'] ?? '',
+                    ]);
+                }
+                json_out(['ok' => true, 'id' => $id, 'slug' => $slug]);
+            }
+
+            $pdo->prepare(
+                "INSERT INTO instructors (slug, name, email, title, photo_path, bio, socials, sort_order, is_active, share_pct)
+                 VALUES (?,?,?, '', '', '', '[]', 0, 1, ?)"
+            )->execute([$slug, $name, $email, $sharePct]);
+            $id = (int)$pdo->lastInsertId();
+
+            $pdo->prepare(
+                "INSERT INTO admin_users (username, password_hash, role, instructor_id) VALUES (?, '*', 'egitmen', ?)"
+            )->execute([$email, $id]);
+            $userId = (int)$pdo->lastInsertId();
+            $invite = instructor_deliver_invite($pdo, $userId, 'invite');
+            json_out([
+                'ok' => true,
+                'id' => $id,
+                'slug' => $slug,
+                'created' => true,
+                'mail_sent' => !empty($invite['ok']),
+                        'invite_link' => $invite['local_link'] ?? '',
+            ]);
+        }
+
+        case 'instructor_invite': {
+            $in = body_json();
+            $id = (int)($in['id'] ?? 0);
+            $st = $pdo->prepare(
+                "SELECT u.id FROM admin_users u WHERE u.instructor_id = ? AND u.role = 'egitmen' LIMIT 1"
+            );
+            $st->execute([$id]);
+            $userId = (int)$st->fetchColumn();
+            if ($userId <= 0) {
+                json_out(['ok' => false, 'error' => 'Bu eğitmenin panel hesabı yok'], 404);
+            }
+            $invite = instructor_deliver_invite($pdo, $userId, 'invite');
+            json_out([
+                'ok' => true,
+                'mail_sent' => !empty($invite['ok']),
+                        'invite_link' => $invite['local_link'] ?? '',
+            ]);
+        }
+
+        case 'instructor_save_bio': {
+            $in = body_json();
+            $id = (int)($in['id'] ?? 0);
+            if ($id <= 0) json_out(['ok' => false, 'error' => 'Eğitmen id gerekli'], 422);
+            $bio = (string)($in['bio'] ?? '');
+            $st = $pdo->prepare("SELECT id, slug, name FROM instructors WHERE id = ?");
+            $st->execute([$id]);
+            $row = $st->fetch();
+            if (!$row) json_out(['ok' => false, 'error' => 'Eğitmen bulunamadı'], 404);
+            $pdo->prepare("UPDATE instructors SET bio = ? WHERE id = ?")->execute([$bio, $id]);
+            json_out([
+                'ok' => true,
+                'id' => $id,
+                'slug' => $row['slug'],
+                'profile_url' => '/egitmen-profil.html?id=' . rawurlencode($row['slug']),
+            ]);
+        }
+
+        case 'instructor_delete': {
+            $in = body_json();
+            $id = (int)($in['id'] ?? 0);
+            if ($id <= 0) {
+                json_out(['ok' => false, 'error' => 'Eğitmen id gerekli'], 422);
+            }
+            instructor_tokens_ensure($pdo);
+            $uids = $pdo->prepare("SELECT id FROM admin_users WHERE instructor_id = ? AND role = 'egitmen'");
+            $uids->execute([$id]);
+            foreach ($uids->fetchAll() as $u) {
+                $pdo->prepare("DELETE FROM instructor_tokens WHERE user_id = ?")->execute([(int)$u['id']]);
+            }
+            $pdo->prepare("DELETE FROM admin_users WHERE instructor_id = ? AND role = 'egitmen'")->execute([$id]);
+            $pdo->prepare("UPDATE courses SET instructor_id = 0 WHERE instructor_id = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM instructors WHERE id = ?")->execute([$id]);
+            json_out(['ok' => true]);
+        }
+
+        case 'instructor_upload': {
+            $res = save_instructor_photo($_FILES['file'] ?? []);
+            if (empty($res['ok'])) {
+                json_out(['ok' => false, 'error' => $res['error'] ?? 'Yükleme hatası'], (int)($res['code'] ?? 400));
+            }
+            json_out(['ok' => true, 'path' => $res['path']]);
+        }
+
+        // ---------- FAQ ----------
+        case 'faqs_list': {
+            $rows = $pdo->query("SELECT * FROM faqs ORDER BY sort_order, id")->fetchAll();
+            json_out(['ok' => true, 'items' => $rows]);
+        }
+
+        case 'faq_save': {
+            $in = body_json();
+            $id = (int)($in['id'] ?? 0);
+            $q = clean($in['question'] ?? '');
+            $a = clean($in['answer'] ?? '');
+            $so = (int)($in['sort_order'] ?? 0);
+            if ($q === '' || $a === '') json_out(['ok' => false, 'error' => 'Soru ve cevap gerekli'], 422);
+            if ($id > 0) {
+                $pdo->prepare("UPDATE faqs SET question=?, answer=?, sort_order=? WHERE id=?")->execute([$q, $a, $so, $id]);
+                json_out(['ok' => true, 'id' => $id]);
+            } else {
+                $pdo->prepare("INSERT INTO faqs (question, answer, sort_order) VALUES (?, ?, ?)")->execute([$q, $a, $so]);
+                json_out(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+            }
+        }
+
+        case 'faq_delete': {
+            $in = body_json();
+            $pdo->prepare("DELETE FROM faqs WHERE id = ?")->execute([(int)($in['id'] ?? 0)]);
+            json_out(['ok' => true]);
+        }
+
+        // ---------- CONTACTS ----------
+        case 'contacts_list': {
+            $rows = $pdo->query("SELECT * FROM contacts ORDER BY created_at DESC LIMIT 500")->fetchAll();
+            json_out(['ok' => true, 'items' => $rows]);
+        }
+
+        case 'contact_read': {
+            $in = body_json();
+            $pdo->prepare("UPDATE contacts SET is_read = 1 WHERE id = ?")->execute([(int)($in['id'] ?? 0)]);
+            json_out(['ok' => true]);
+        }
+
+        case 'contact_delete': {
+            $in = body_json();
+            $pdo->prepare("DELETE FROM contacts WHERE id = ?")->execute([(int)($in['id'] ?? 0)]);
+            json_out(['ok' => true]);
+        }
+
+        // ---------- SETTINGS ----------
+        case 'settings_get': {
+            $s = [];
+            foreach ($pdo->query("SELECT k, v FROM settings") as $r) { $s[$r['k']] = $r['v']; }
+            $s['smtp_pass_set'] = !empty($s['smtp_pass']);
+            $s['smtp_pass'] = '';
+            if (!isset($s['instructor_share_pct']) || trim((string)$s['instructor_share_pct']) === '') {
+                $s['instructor_share_pct'] = '60';
+            }
+            if (!isset($s['sub_enabled']) || trim((string)$s['sub_enabled']) === '') {
+                $s['sub_enabled'] = '1';
+            }
+            if (!isset($s['sub_title']) || trim((string)$s['sub_title']) === '') {
+                $s['sub_title'] = 'WhatsApp analiz grubu';
+            }
+            if (!isset($s['sub_price']) || trim((string)$s['sub_price']) === '') {
+                $s['sub_price'] = '199';
+            }
+            if (!isset($s['sub_blurb'])) {
+                $s['sub_blurb'] = 'Aylık WhatsApp analiz grubu üyeliği.';
+            }
+            $s['sub_interval'] = subscription_interval();
+            $s['sub_interval_label'] = subscription_interval_label();
+            if (!isset($s['sub_instructor_id'])) {
+                $s['sub_instructor_id'] = '0';
+            }
+            foreach (['nav_hakkimizda', 'nav_sss', 'nav_iletisim', 'nav_araclar'] as $nk) {
+                if (!isset($s[$nk]) || trim((string)$s[$nk]) === '') {
+                    $s[$nk] = '0';
+                }
+            }
+            json_out(['ok' => true, 'settings' => $s, 'instructors' => admin_filter_instructors($pdo)]);
+        }
+
+        case 'settings_save': {
+            $in = body_json();
+            $allowed = ['marka','sehir','telefon','whatsapp','instagram','twitter','iban','banka','hesap_adi','emailjs_public','emailjs_service','emailjs_template','emailjs_to','smtp_host','smtp_port','smtp_secure','smtp_user','smtp_pass','smtp_from','smtp_from_name','instructor_share_pct','sub_enabled','sub_title','sub_price','sub_blurb','sub_instructor_id','satici_unvan','satici_adres','satici_vergi','satici_mersis','nav_hakkimizda','nav_sss','nav_iletisim','nav_araclar'];
+            $stmt = $pdo->prepare("INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)");
+            foreach ($allowed as $k) {
+                if (!array_key_exists($k, $in)) {
+                    continue;
+                }
+                if ($k === 'smtp_pass' && trim((string)$in[$k]) === '') {
+                    continue;
+                }
+                if ($k === 'instructor_share_pct') {
+                    $raw = str_replace(',', '.', trim((string)$in[$k]));
+                    if ($raw === '') {
+                        $raw = '60';
+                    }
+                    if (!is_numeric($raw)) {
+                        json_out(['ok' => false, 'error' => 'Eğitmen payı sayı olmalı'], 422);
+                    }
+                    $n = (float)$raw;
+                    if ($n < 0 || $n > 100) {
+                        json_out(['ok' => false, 'error' => 'Eğitmen payı 0–100 arasında olmalı'], 422);
+                    }
+                    $store = abs($n - round($n)) < 0.001 ? (string)(int)round($n) : (string)round($n, 2);
+                    $stmt->execute([$k, $store]);
+                    continue;
+                }
+                if ($k === 'sub_enabled' || str_starts_with($k, 'nav_')) {
+                    $stmt->execute([$k, trim((string)$in[$k]) === '1' ? '1' : '0']);
+                    continue;
+                }
+                if ($k === 'sub_price') {
+                    $kurus = payments_amount_kurus($in[$k]);
+                    if ($kurus < 100) {
+                        json_out(['ok' => false, 'error' => 'Abonelik fiyatı en az 1 TL olmalı'], 422);
+                    }
+                    $tl = $kurus / 100;
+                    $store = abs($tl - round($tl)) < 0.001 ? (string)(int)round($tl) : number_format($tl, 2, '.', '');
+                    $stmt->execute([$k, $store]);
+                    continue;
+                }
+                if ($k === 'sub_instructor_id') {
+                    $stmt->execute([$k, (string)max(0, (int)$in[$k])]);
+                    continue;
+                }
+                $stmt->execute([$k, clean($in[$k])]);
+            }
+            json_out(['ok' => true]);
+        }
+
+        case 'review_orders_list': {
+            $items = $pdo->query(
+                "SELECT o.id, o.merchant_oid, o.student_name, o.student_email, o.student_phone,
+                        o.amount_kurus, o.paid_price, o.error_message, o.created_at,
+                        o.provider_payment_id, c.title AS course_title
+                 FROM payment_orders o
+                 LEFT JOIN courses c ON c.id = o.course_id
+                 WHERE o.status = 'review'
+                 ORDER BY o.id DESC
+                 LIMIT 200"
+            )->fetchAll();
+            json_out(['ok' => true, 'items' => $items]);
+        }
+
+        case 'admin_grant_access': {
+            $in = body_json();
+            $courseId = (int)($in['course_id'] ?? 0);
+            $email = student_normalize_email($in['email'] ?? '');
+            $name = mb_substr(trim(clean($in['name'] ?? '')), 0, 160);
+            $phone = mb_substr(trim(clean($in['phone'] ?? '')), 0, 40);
+            if ($courseId <= 0 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                json_out(['ok' => false, 'error' => 'Kurs ve geçerli e-posta gerekli'], 422);
+            }
+            $cst = $pdo->prepare("SELECT id, title FROM courses WHERE id = ?");
+            $cst->execute([$courseId]);
+            $course = $cst->fetch();
+            if (!$course) {
+                json_out(['ok' => false, 'error' => 'Kurs bulunamadı'], 404);
+            }
+            $student = null;
+            try {
+                require_once __DIR__ . '/student_account.php';
+                $student = student_find_by_email($pdo, $email);
+            } catch (Throwable $e) {
+                $student = null;
+            }
+            $studentId = $student ? (int)$student['id'] : null;
+            if ($name === '' && $student) {
+                $name = (string)$student['name'];
+            }
+            if ($phone === '' && $student) {
+                $phone = (string)($student['phone'] ?? '');
+            }
+            if ($name === '') {
+                $name = 'Öğrenci';
+            }
+            $order = [
+                'id' => 0,
+                'course_id' => $courseId,
+                'student_id' => $studentId,
+                'student_email' => $email,
+                'student_name' => $name,
+                'student_phone' => $phone,
+                'merchant_oid' => 'MANUAL-' . date('YmdHis') . '-' . bin2hex(random_bytes(2)),
+            ];
+            $enrollId = payments_grant_enrollment($pdo, $order, 'manual');
+            try {
+                require_once __DIR__ . '/mailer.php';
+                mailer_notify_manual_access($email, $name, (string)$course['title']);
+            } catch (Throwable $e) {
+                error_log('elle erisim maili: ' . $e->getMessage());
+            }
+            json_out(['ok' => true, 'enrollment_id' => $enrollId]);
+        }
+
+        case 'admin_student_status': {
+            $in = body_json();
+            $id = (int)($in['id'] ?? 0);
+            $status = trim((string)($in['status'] ?? ''));
+            if ($id <= 0 || !in_array($status, ['active', 'suspended'], true)) {
+                json_out(['ok' => false, 'error' => 'Geçersiz istek'], 422);
+            }
+            $pdo->prepare("UPDATE students SET status = ? WHERE id = ?")->execute([$status, $id]);
+            json_out(['ok' => true]);
+        }
+
+        case 'payment_logs_list': {
+            $limit = (int)($_GET['limit'] ?? 150);
+            if ($limit < 1) {
+                $limit = 150;
+            }
+            if ($limit > 300) {
+                $limit = 300;
+            }
+            $orderId = (int)($_GET['order_id'] ?? 0);
+            if ($orderId > 0) {
+                $st = $pdo->prepare(
+                    "SELECT l.id, l.order_id, l.provider, l.direction, l.path, l.payload, l.created_at,
+                            o.merchant_oid, o.status AS order_status
+                     FROM payment_logs l
+                     LEFT JOIN payment_orders o ON o.id = l.order_id
+                     WHERE l.order_id = ?
+                     ORDER BY l.id DESC
+                     LIMIT $limit"
+                );
+                $st->execute([$orderId]);
+            } else {
+                $st = $pdo->query(
+                    "SELECT l.id, l.order_id, l.provider, l.direction, l.path, l.payload, l.created_at,
+                            o.merchant_oid, o.status AS order_status
+                     FROM payment_logs l
+                     LEFT JOIN payment_orders o ON o.id = l.order_id
+                     ORDER BY l.id DESC
+                     LIMIT $limit"
+                );
+            }
+            $items = $st->fetchAll();
+            json_out(['ok' => true, 'items' => $items]);
+        }
+
+        case 'subscriptions_list': {
+            json_out(['ok' => true, 'items' => subscription_admin_list($pdo)]);
+        }
+
+        case 'subscription_wa_set': {
+            $in = body_json();
+            $id = (int)($in['id'] ?? 0);
+            $on = !empty($in['wa_added']) ? 1 : 0;
+            if ($id <= 0) {
+                json_out(['ok' => false, 'error' => 'Kayıt yok'], 422);
+            }
+            $pdo->prepare("UPDATE subscriptions SET wa_added = ?, updated_at = NOW() WHERE id = ?")
+                ->execute([$on, $id]);
+            json_out(['ok' => true]);
+        }
+
+        case 'admin_students_list': {
+            $instructorId = (int)($_GET['instructor_id'] ?? 0);
+            $courseId = (int)($_GET['course_id'] ?? 0);
+            $q = trim((string)($_GET['q'] ?? ''));
+
+            $sql = "SELECT e.id, e.course_id, e.progress_pct, e.payment_status, e.enrolled_at, e.last_visit_at,
+                           COALESCE(NULLIF(s.name, ''), e.student_name) AS student_name,
+                           COALESCE(NULLIF(s.email, ''), e.student_email) AS student_email,
+                           COALESCE(NULLIF(s.phone, ''), e.student_phone) AS student_phone,
+                           s.status AS account_status,
+                           s.id AS student_account_id,
+                           c.title AS course_title,
+                           c.instructor_id,
+                           COALESCE(i.name, '') AS instructor_name
+                    FROM course_enrollments e
+                    LEFT JOIN students s ON s.email = e.student_email
+                    LEFT JOIN courses c ON c.id = e.course_id
+                    LEFT JOIN instructors i ON i.id = c.instructor_id
+                    WHERE 1=1";
+            $params = [];
+            if ($instructorId > 0) {
+                $sql .= " AND c.instructor_id = ?";
+                $params[] = $instructorId;
+            }
+            if ($courseId > 0) {
+                $sql .= " AND e.course_id = ?";
+                $params[] = $courseId;
+            }
+            if ($q !== '') {
+                $sql .= " AND (e.student_name LIKE ? OR e.student_email LIKE ? OR e.student_phone LIKE ? OR s.name LIKE ? OR s.email LIKE ?)";
+                $like = '%' . $q . '%';
+                array_push($params, $like, $like, $like, $like, $like);
+            }
+            $sql .= " ORDER BY e.enrolled_at DESC, e.id DESC LIMIT 500";
+            $st = $pdo->prepare($sql);
+            $st->execute($params);
+            json_out([
+                'ok' => true,
+                'items' => $st->fetchAll(),
+                'instructors' => admin_filter_instructors($pdo),
+                'courses' => admin_filter_courses($pdo),
+            ]);
+        }
+
+        case 'admin_sales_report': {
+            $from = admin_parse_ymd($_GET['from'] ?? '');
+            $to = admin_parse_ymd($_GET['to'] ?? '');
+            if ($from !== '' && $to !== '' && $from > $to) {
+                $tmp = $from;
+                $from = $to;
+                $to = $tmp;
+            }
+            $instructorId = (int)($_GET['instructor_id'] ?? 0);
+            $courseId = (int)($_GET['course_id'] ?? 0);
+
+            $where = "o.status = 'paid'";
+            $params = [];
+            if ($from !== '') {
+                $where .= " AND DATE(COALESCE(o.paid_at, o.created_at)) >= ?";
+                $params[] = $from;
+            }
+            if ($to !== '') {
+                $where .= " AND DATE(COALESCE(o.paid_at, o.created_at)) <= ?";
+                $params[] = $to;
+            }
+            if ($instructorId > 0) {
+                $where .= " AND c.instructor_id = ?";
+                $params[] = $instructorId;
+            }
+            if ($courseId > 0) {
+                $where .= " AND o.course_id = ?";
+                $params[] = $courseId;
+            }
+
+            $st = $pdo->prepare(
+                "SELECT o.id, o.course_id, o.student_name, o.student_email, o.student_phone,
+                        o.amount_kurus, o.paid_at, o.created_at,
+                        c.title AS course_title, c.instructor_id,
+                        COALESCE(i.name, '') AS instructor_name
+                 FROM payment_orders o
+                 LEFT JOIN courses c ON c.id = o.course_id
+                 LEFT JOIN instructors i ON i.id = c.instructor_id
+                 WHERE $where
+                 ORDER BY COALESCE(o.paid_at, o.created_at) DESC, o.id DESC
+                 LIMIT 800"
+            );
+            $st->execute($params);
+            $items = $st->fetchAll();
+
+            $totalKurus = 0;
+            $earnKurus = 0;
+            $byInstructor = [];
+            $byCourse = [];
+            $pctCache = [];
+            foreach ($items as &$r) {
+                $kurus = (int)$r['amount_kurus'];
+                $insId = (int)($r['instructor_id'] ?? 0);
+                if (!isset($pctCache[$insId])) {
+                    $pctCache[$insId] = instructor_share_pct_for($pdo, $insId);
+                }
+                $pct = $pctCache[$insId];
+                $earn = instructor_earn_kurus($kurus, $pct);
+                $r['amount_kurus'] = $kurus;
+                $r['earn_kurus'] = $earn;
+                $r['share_pct'] = $pct;
+                $totalKurus += $kurus;
+                $earnKurus += $earn;
+
+                $ikey = $insId > 0 ? (string)$insId : '0';
+                if (!isset($byInstructor[$ikey])) {
+                    $byInstructor[$ikey] = [
+                        'instructor_id' => $insId,
+                        'name' => (string)($r['instructor_name'] ?: 'Atanmamış'),
+                        'count' => 0,
+                        'sales_kurus' => 0,
+                        'earn_kurus' => 0,
+                    ];
+                }
+                $byInstructor[$ikey]['count']++;
+                $byInstructor[$ikey]['sales_kurus'] += $kurus;
+                $byInstructor[$ikey]['earn_kurus'] += $earn;
+
+                $ckey = (string)((int)$r['course_id']);
+                if (!isset($byCourse[$ckey])) {
+                    $byCourse[$ckey] = [
+                        'course_id' => (int)$r['course_id'],
+                        'title' => (string)($r['course_title'] ?: 'Kurs #' . $r['course_id']),
+                        'instructor_name' => (string)($r['instructor_name'] ?: 'Atanmamış'),
+                        'count' => 0,
+                        'sales_kurus' => 0,
+                    ];
+                }
+                $byCourse[$ckey]['count']++;
+                $byCourse[$ckey]['sales_kurus'] += $kurus;
+            }
+            unset($r);
+
+            json_out([
+                'ok' => true,
+                'from' => $from,
+                'to' => $to,
+                'count' => count($items),
+                'sales_kurus' => $totalKurus,
+                'earn_kurus' => $earnKurus,
+                'items' => $items,
+                'by_instructor' => array_values($byInstructor),
+                'by_course' => array_values($byCourse),
+                'instructors' => admin_filter_instructors($pdo),
+                'courses' => admin_filter_courses($pdo),
+            ]);
+        }
+
+        case 'change_password': {
+            $in = body_json();
+            $cur = (string)($in['current'] ?? '');
+            $new = (string)($in['new'] ?? '');
+            if (strlen($new) < 6) json_out(['ok' => false, 'error' => 'Yeni şifre en az 6 karakter olmalı'], 422);
+            $stmt = $pdo->prepare("SELECT * FROM admin_users WHERE id = ?");
+            $stmt->execute([$sessionAdminId]);
+            $u = $stmt->fetch();
+            if (!$u || !password_verify($cur, $u['password_hash'])) json_out(['ok' => false, 'error' => 'Mevcut şifre hatalı'], 422);
+            $pdo->prepare("UPDATE admin_users SET password_hash = ? WHERE id = ?")->execute([password_hash($new, PASSWORD_DEFAULT), $sessionAdminId]);
+            json_out(['ok' => true]);
+        }
+
+        default:
+            json_out(['ok' => false, 'error' => 'Geçersiz işlem'], 400);
+    }
+} catch (Throwable $e) {
+    error_log('admin.php: ' . $e->getMessage());
+    json_out(['ok' => false, 'error' => 'Sunucu hatası'], 500);
+}
+
+function slugify($t) {
+    $t = mb_strtolower(trim($t), 'UTF-8');
+    $tr = ['ç'=>'c','ğ'=>'g','ı'=>'i','ö'=>'o','ş'=>'s','ü'=>'u','İ'=>'i'];
+    $t = strtr($t, $tr);
+    $t = preg_replace('/[^a-z0-9]+/', '-', $t);
+    $t = trim($t, '-');
+    return $t !== '' ? $t : 'kayit-' . time();
+}
+
+function admin_parse_ymd($raw): string {
+    $s = trim((string)$raw);
+    return preg_match('/^\d{4}-\d{2}-\d{2}$/', $s) ? $s : '';
+}
+
+function admin_filter_instructors(PDO $pdo): array {
+    try {
+        return $pdo->query("SELECT id, name FROM instructors ORDER BY name, id")->fetchAll() ?: [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function admin_filter_courses(PDO $pdo): array {
+    try {
+        return $pdo->query("SELECT id, title, instructor_id FROM courses ORDER BY title, id")->fetchAll() ?: [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * Müfredat metnini yapıya çevirir.
+ * Biçim:
+ *   # Gün / Bölüm başlığı
+ *   ## Alt başlık
+ *   - madde
+ */
+function parse_mufredat($text) {
+    if (!is_string($text) || trim($text) === '') return [];
+    $lines = preg_split('/\r\n|\r|\n/', $text);
+    $gunler = [];
+    $gunIdx = -1;
+    foreach ($lines as $line) {
+        $t = trim($line);
+        if ($t === '') continue;
+        if (strpos($t, '##') === 0) {
+            if ($gunIdx < 0) { $gunler[] = ['baslik' => '', 'bolumler' => []]; $gunIdx = 0; }
+            $gunler[$gunIdx]['bolumler'][] = ['baslik' => trim(substr($t, 2)), 'maddeler' => []];
+        } elseif (strpos($t, '#') === 0) {
+            $gunler[] = ['baslik' => trim(substr($t, 1)), 'bolumler' => []];
+            $gunIdx = count($gunler) - 1;
+        } elseif (strpos($t, '-') === 0) {
+            if ($gunIdx >= 0 && !empty($gunler[$gunIdx]['bolumler'])) {
+                $bIdx = count($gunler[$gunIdx]['bolumler']) - 1;
+                $gunler[$gunIdx]['bolumler'][$bIdx]['maddeler'][] = trim(substr($t, 1));
+            }
+        }
+    }
+    return $gunler;
+}

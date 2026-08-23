@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 225" role="img" aria-label="BIST algoritmik trade robotu">
+  <defs>
+    <linearGradient id="bgR" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16212e"/><stop offset="1" stop-color="#2c3e50"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7b733"/><stop offset="1" stop-color="#e67e22"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="225" fill="url(#bgR)"/>
+  <g stroke="#ffffff" stroke-opacity="0.05" stroke-width="1">
+    <line x1="0" y1="70" x2="400" y2="70"/><line x1="0" y1="150" x2="400" y2="150"/>
+  </g>
+  <!-- subtle chart behind -->
+  <polyline points="30,160 90,140 150,150 210,110 270,125 340,80"
+            fill="none" stroke="#f39c12" stroke-opacity="0.25" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- robot -->
+  <g transform="translate(200,112)">
+    <rect x="-8" y="-70" width="16" height="16" rx="4" fill="#f39c12"/>
+    <circle cx="0" cy="-74" r="6" fill="#2ecc71"/>
+    <rect x="-52" y="-54" width="104" height="82" rx="20" fill="url(#body)"/>
+    <rect x="-38" y="-40" width="76" height="46" rx="12" fill="#16212e"/>
+    <circle cx="-16" cy="-17" r="9" fill="#2ecc71"/><circle cx="16" cy="-17" r="9" fill="#2ecc71"/>
+    <rect x="-14" y="-2" width="28" height="5" rx="2.5" fill="#2ecc71" opacity="0.7"/>
+    <rect x="-64" y="-40" width="12" height="44" rx="6" fill="url(#body)"/>
+    <rect x="52" y="-40" width="12" height="44" rx="6" fill="url(#body)"/>
+    <rect x="-40" y="30" width="80" height="12" rx="6" fill="#ffffff" opacity="0.16"/>
+  </g>
+</svg>

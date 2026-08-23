@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ödeme Başarılı | BM Capital Akademi</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <section class="section bg-surface">
+    <div class="container" style="max-width:640px;margin:0 auto;text-align:center;padding:48px 20px;">
+      <div style="font-size:48px;color:#15711f;margin-bottom:12px;"><i class="fa-solid fa-circle-check"></i></div>
+      <h1 style="margin:0 0 12px;">Ödeme alındı</h1>
+      <p id="okMsg" style="color:#5b6572;">Kaydınız işleniyor…</p>
+      <p id="okDetail" style="font-size:14px;color:#94a3b8;"></p>
+      <a href="ogrenci/index.php" class="btn btn-primary" style="margin-top:20px;">Kurslarıma git</a>
+    </div>
+  </section>
+  <div id="site-footer"></div>
+  <script src="assets/js/main.js"></script>
+  <script src="assets/js/cart.js"></script>
+  <script>
+  (function () {
+    if (window.BM_CART) {
+      fetch("api/student_auth.php?action=me", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok && d.ownedCourseIds) BM_CART.pruneOwned(d.ownedCourseIds);
+        })
+        .catch(function () {});
+    }
+    var m = location.search.match(/[?&]oid=([^&]*)/);
+    var oid = m ? decodeURIComponent(m[1]) : "";
+    var msg = document.getElementById("okMsg");
+    var det = document.getElementById("okDetail");
+    if (!oid) {
+      msg.textContent = "Ödeme tamamlandı. Bildirim birkaç saniye içinde işlenebilir.";
+      return;
+    }
+    function tick(n) {
+      fetch("api/paytr_order_status.php?oid=" + encodeURIComponent(oid))
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.ok || !d.item) {
+            msg.textContent = "Sipariş doğrulanıyor…";
+            if (n < 8) setTimeout(function () { tick(n + 1); }, 1500);
+            return;
+          }
+          var it = d.item;
+          if (it.status === "paid") {
+            msg.textContent = "Teşekkürler" + (it.student_name ? ", " + it.student_name : "") + ". Ödemeniz onaylandı.";
+            det.textContent = (it.course_title || "") + (it.amount_label ? " · " + it.amount_label : "") + " · No: " + it.merchant_oid;
+            if (window.BM_CART && it.course_id) BM_CART.pruneOwned([it.course_id]);
+          } else if (it.status === "pending") {
+            msg.textContent = "Ödeme onayı bekleniyor…";
+            if (n < 10) setTimeout(function () { tick(n + 1); }, 1500);
+            else det.textContent = "Sipariş: " + oid;
+          } else {
+            msg.textContent = "Sipariş durumu: " + it.status;
+            det.textContent = "Sipariş: " + oid;
+          }
+        })
+        .catch(function () {
+          if (n < 8) setTimeout(function () { tick(n + 1); }, 1500);
+        });
+    }
+    tick(0);
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Konut Kredisi Hesaplama - BM Capital Akademi</title>
+  <meta name="description" content="Konut kredisi aylık taksit, toplam geri ödeme ve yıllık maliyet oranını hesaplayın. Peşinat gerekmez.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#1f2d3d">
+  <link rel="canonical" href="https://www.bmcapitalakademi.com/araclar/konut-kredisi.html">
+  <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="../assets/css/style.css?v=araclar13">
+</head>
+<body class="page-tools page-cmp">
+  <div id="site-header"></div>
+  <section class="page-hero page-hero--compact">
+    <div class="container">
+      <div class="breadcrumb"><a href="../index.html">Ana Sayfa</a> / <a href="../araclar.html">Araçlar</a> / Konut Kredisi</div>
+      <h1>Konut Kredisi Hesaplama</h1>
+      <p class="tools-lead">Kredi tutarı, aylık faiz ve vadeye göre aylık taksiti görün. Peşinat girmenize gerek yok.</p>
+    </div>
+  </section>
+  <section class="section-cmp">
+    <div class="container" data-tool="konut-kredisi">
+      <div class="cmp-wrap">
+        <form class="cmp-form" onsubmit="return false;">
+          <div class="cmp-head">Kredi bilgileri</div>
+          <div class="cmp-grid">
+            <label class="cmp-field cmp-field--full">
+              <span>Kredi Tutarı <small>(peşinat gerekmez)</small></span>
+              <div class="cmp-input">
+                <input type="text" id="kredi" data-money inputmode="decimal" value="2.000.000">
+                <i>TL</i>
+              </div>
+              <input type="range" id="kredi_r" min="100000" max="20000000" step="50000" value="2000000">
+            </label>
+            <label class="cmp-field">
+              <span>Vade</span>
+              <div class="cmp-input">
+                <input type="number" id="vade" inputmode="numeric" min="6" max="240" step="1" value="120">
+                <i>Ay</i>
+              </div>
+              <input type="range" id="vade_r" min="6" max="240" step="1" value="120">
+            </label>
+            <label class="cmp-field">
+              <span>Aylık Faiz</span>
+              <div class="cmp-input">
+                <input type="number" id="faiz" inputmode="decimal" min="0.1" max="10" step="0.01" value="2.89">
+                <i>%/ay</i>
+              </div>
+              <input type="range" id="faiz_r" min="0.1" max="10" step="0.01" value="2.89">
+            </label>
+            <label class="cmp-field cmp-field--full">
+              <span>Kredi Masrafları <small>(dosya, ekspertiz vb.)</small></span>
+              <div class="cmp-input">
+                <input type="text" id="masraf" data-money inputmode="decimal" value="15.000">
+                <i>TL</i>
+              </div>
+              <input type="range" id="masraf_r" min="0" max="200000" step="1000" value="15000">
+            </label>
+          </div>
+          <button type="button" class="cmp-submit" data-calc-btn>Hesapla</button>
+          <p class="cmp-note">Peşinat bu araçta yok: bankadan çekeceğiniz kredi tutarını yazmanız yeterli.</p>
+        </form>
+
+        <aside class="cmp-panel">
+          <div class="cmp-panel-idle" data-calc-empty>
+            <div class="cmp-idle-icon">∑</div>
+            <strong>Sonuç bekleniyor</strong>
+            <p>Değerleri ayarlayıp <b>Hesapla</b>’ya basın.</p>
+          </div>
+          <div class="cmp-panel-live" data-calc-results hidden>
+            <article class="cmp-box cmp-box--focus">
+              <h3>Aylık taksit</h3>
+              <div class="cmp-duo cmp-duo--solo">
+                <div>
+                  <span>Taksit tutarı</span>
+                  <b id="out_taksit">—</b>
+                </div>
+              </div>
+            </article>
+            <article class="cmp-box">
+              <h3>Özet</h3>
+              <dl>
+                <div><dt>Kredi tutarı</dt><dd id="out_kredi">—</dd></div>
+                <div><dt>Aylık faiz</dt><dd id="out_aylik_faiz">—</dd></div>
+                <div><dt>Yıllık maliyet oranı</dt><dd id="out_ymo">—</dd></div>
+                <div><dt>Toplam faiz</dt><dd id="out_faiz">—</dd></div>
+                <div><dt>Toplam geri ödeme + masraf</dt><dd id="out_toplam">—</dd></div>
+              </dl>
+            </article>
+            <p class="cmp-tip">Tasarruf finansmanı ile karşılaştırmak için <a href="kk-vs-tk.html">NBD karşılaştırma</a> aracını kullanın.</p>
+          </div>
+        </aside>
+      </div>
+
+      <div class="calc-footer-grid">
+        <div class="calc-explain">
+          <h2>Nasıl hesaplanır?</h2>
+          <p>Peşinat ayrı tutulur; buraya yalnızca <strong>kredi tutarını</strong> girersiniz.</p>
+          <p>Aylık taksit, girdiğiniz <strong>aylık faiz</strong> ile annüite formülünden bulunur. Yıllık maliyet oranı = <code>(1 + aylık faiz)<sup>12</sup> − 1</code> (masraflar ayrıca eklenir).</p>
+          <div class="calc-disclaimer">Bilgilendirme amaçlıdır; banka teklifi esas alınmalıdır.</div>
+        </div>
+        <aside class="tools-aside">
+          <h2>Diğer Araçlar</h2>
+          <div class="tools-aside-list" data-tools-aside="konut-kredisi.html"></div>
+        </aside>
+      </div>
+    </div>
+  </section>
+  <div id="site-footer"></div>
+  <div id="site-floaters"></div>
+  <script src="../assets/js/feature-flags.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script src="../assets/js/catalog.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/araclar.js?v=13"></script>
+</body>
+</html>

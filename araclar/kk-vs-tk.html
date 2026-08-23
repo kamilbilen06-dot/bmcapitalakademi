@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Konut Kredisi vs Tasarruf Finansmanı - BM Capital Akademi</title>
+  <meta name="description" content="Konut kredisi ile tasarruf finansmanını nominal maliyet üzerinden karşılaştırın.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#1f2d3d">
+  <link rel="canonical" href="https://www.bmcapitalakademi.com/araclar/kk-vs-tk.html">
+  <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="../assets/css/style.css?v=araclar18">
+</head>
+<body class="page-tools page-cmp">
+  <div id="site-header"></div>
+  <section class="page-hero page-hero--compact">
+    <div class="container">
+      <div class="breadcrumb"><a href="../index.html">Ana Sayfa</a> / <a href="../araclar.html">Araçlar</a> / Karşılaştırma</div>
+      <h1>Konut Kredisi vs Tasarruf Finansmanı</h1>
+      <p class="tools-lead">İki yöntemin toplam nominal maliyetini yan yana karşılaştırın.</p>
+    </div>
+  </section>
+  <section class="section-cmp">
+    <div class="container" data-tool="kk-vs-tk">
+      <div class="cmp-wrap cmp-wrap--wide">
+        <form class="cmp-form" onsubmit="return false;">
+          <div class="cmp-head">Girdiler</div>
+          <div class="cmp-grid">
+            <label class="cmp-field">
+              <span>Bugünkü Konut Bedeli</span>
+              <div class="cmp-input">
+                <input type="text" id="konut_bugun" data-money inputmode="decimal" value="2.800.000">
+                <i>TL</i>
+              </div>
+              <input type="range" id="konut_bugun_r" min="500000" max="20000000" step="50000" value="2800000">
+            </label>
+            <label class="cmp-field">
+              <span>Başlangıç Peşinatı <small>(nakit)</small></span>
+              <div class="cmp-input">
+                <input type="text" id="pesinat" data-money inputmode="decimal" value="800.000">
+                <i>TL</i>
+              </div>
+              <input type="range" id="pesinat_r" min="0" max="8000000" step="50000" value="800000">
+            </label>
+            <label class="cmp-field">
+              <span>Vade</span>
+              <div class="cmp-input">
+                <input type="number" id="vade" min="6" max="240" step="1" value="120">
+                <i>Ay</i>
+              </div>
+              <input type="range" id="vade_r" min="6" max="240" step="1" value="120">
+            </label>
+            <label class="cmp-field">
+              <span>Teslim Süresi</span>
+              <div class="cmp-input">
+                <input type="number" id="teslim" min="1" max="120" step="1" value="54">
+                <i>Ay</i>
+              </div>
+              <input type="range" id="teslim_r" min="1" max="120" step="1" value="54">
+            </label>
+            <label class="cmp-field">
+              <span>Hizmet Bedeli</span>
+              <div class="cmp-input">
+                <input type="number" id="hizmet_pct" min="0" max="15" step="0.1" value="8">
+                <i>%</i>
+              </div>
+              <input type="range" id="hizmet_pct_r" min="0" max="15" step="0.1" value="8">
+            </label>
+            <label class="cmp-field">
+              <span>Konut Değer Artışı <small>(yıllık)</small></span>
+              <div class="cmp-input">
+                <input type="number" id="konut_artis" min="0" max="50" step="1" value="20">
+                <i>%/yıl</i>
+              </div>
+              <input type="range" id="konut_artis_r" min="0" max="50" step="1" value="20">
+            </label>
+            <label class="cmp-field">
+              <span>Başlangıç Kira</span>
+              <div class="cmp-input">
+                <input type="text" id="kira" data-money inputmode="decimal" value="30.000">
+                <i>TL</i>
+              </div>
+              <input type="range" id="kira_r" min="0" max="100000" step="500" value="30000">
+            </label>
+            <label class="cmp-field">
+              <span>Yıllık Kira Artışı</span>
+              <div class="cmp-input">
+                <input type="number" id="kira_artis" min="0" max="60" step="1" value="25">
+                <i>%</i>
+              </div>
+              <input type="range" id="kira_artis_r" min="0" max="60" step="1" value="25">
+            </label>
+            <label class="cmp-field cmp-field--full">
+              <span>Konut Kredisi Aylık Faiz</span>
+              <div class="cmp-input">
+                <input type="number" id="faiz_aylik" min="0.1" max="10" step="0.01" value="2.89">
+                <i>%/ay</i>
+              </div>
+              <input type="range" id="faiz_aylik_r" min="0.1" max="10" step="0.01" value="2.89">
+            </label>
+          </div>
+
+          <button type="button" class="cmp-submit" data-calc-btn>Hesapla ve Karşılaştır</button>
+        </form>
+
+        <aside class="cmp-panel">
+          <div class="cmp-panel-idle" data-calc-empty>
+            <div class="cmp-idle-icon">∑</div>
+            <strong>Sonuç bekleniyor</strong>
+            <p>Değerleri ayarlayıp <b>Hesapla</b>’ya basın.</p>
+          </div>
+          <div class="cmp-panel-live" data-calc-results hidden>
+            <article class="cmp-box cmp-box--focus">
+              <h3>Toplam nominal maliyet</h3>
+              <div class="cmp-duo">
+                <div>
+                  <span>Tasarruf Finansmanı</span>
+                  <b id="out_nom_tf">—</b>
+                  <em class="cmp-tag" id="badge_tf" hidden>Daha az ödersiniz</em>
+                </div>
+                <div>
+                  <span>Konut Kredisi</span>
+                  <b id="out_nom_kk">—</b>
+                  <em class="cmp-tag" id="badge_kk" hidden>Daha az ödersiniz</em>
+                </div>
+              </div>
+              <footer class="cmp-footer-line">
+                Avantajlı: <b id="out_kazanan">—</b>
+                <span>Fark <b id="out_fark">—</b></span>
+              </footer>
+            </article>
+          </div>
+        </aside>
+      </div>
+
+      <div class="cmp-table-wrap cmp-table-wrap--hero" data-calc-table hidden>
+        <table class="cmp-table cmp-table--big">
+          <thead>
+            <tr>
+              <th>Kalem</th>
+              <th>Tasarruf Finansmanı</th>
+              <th>Konut Kredisi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Bugünkü Ev Değeri</td><td id="c_bugun_tf">—</td><td id="c_bugun_kk">—</td></tr>
+            <tr><td>Teslimde Ev Değeri</td><td id="c_teslim_tf">—</td><td id="c_teslim_kk">—</td></tr>
+            <tr><td>Başlangıç Nakit Peşinat</td><td id="c_nakit_tf">—</td><td id="c_nakit_kk">—</td></tr>
+            <tr><td>Hizmet Bedeli</td><td id="c_hizmet_tf">—</td><td id="c_hizmet_kk">—</td></tr>
+            <tr><td>Eve Kalan Gerçek Peşinat</td><td id="c_gercek_tf">—</td><td id="c_gercek_kk">—</td></tr>
+            <tr><td>Finansman Tutarı</td><td id="c_fin_tf">—</td><td id="c_fin_kk">—</td></tr>
+            <tr><td>Aylık Ödeme</td><td id="c_aylik_tf">—</td><td id="c_aylik_kk">—</td></tr>
+            <tr><td>Toplam Geri Ödeme</td><td id="c_geri_tf">—</td><td id="c_geri_kk">—</td></tr>
+            <tr><td>Toplam Faiz</td><td id="c_faiz_tf">—</td><td id="c_faiz_kk">—</td></tr>
+            <tr><td>Bekleme Kirası</td><td id="c_kira_tf">—</td><td id="c_kira_kk">—</td></tr>
+            <tr class="is-total"><td>Toplam Nominal Maliyet</td><td id="c_nom_tf">—</td><td id="c_nom_kk">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="calc-footer-grid">
+        <div class="calc-explain">
+          <h2>Nasıl hesaplanır?</h2>
+          <ol>
+            <li>Teslimdeki konut değeri = bugünkü bedel × (1 + yıllık artış)<sup>teslim ayı / 12</sup></li>
+            <li>Hizmet bedeli = (teslimdeki değer − nakit peşinat) × hizmet oranı</li>
+            <li>Eve kalan gerçek peşinat = nakit peşinat − hizmet bedeli</li>
+            <li>Tasarruf finansmanı tutarı = teslimdeki değer − gerçek peşinat; aylık ödeme = finansman ÷ vade</li>
+            <li>Konut kredisi tutarı = bugünkü bedel − nakit peşinat; taksit aylık faiz ile hesaplanır</li>
+            <li>Tasarruf finansmanı toplamı = nakit peşinat + finansman + bekleme kirası</li>
+            <li>Konut kredisi toplamı = (aylık taksit × vade) + nakit peşinat</li>
+          </ol>
+          <div class="calc-disclaimer">Varsayımsaldır; banka ve tasarruf finansmanı teklifleri esas alınmalıdır. Yatırım tavsiyesi değildir.</div>
+        </div>
+        <aside class="tools-aside">
+          <h2>Diğer Araçlar</h2>
+          <div class="tools-aside-list" data-tools-aside="kk-vs-tk.html"></div>
+        </aside>
+      </div>
+    </div>
+  </section>
+  <div id="site-footer"></div>
+  <div id="site-floaters"></div>
+  <script src="../assets/js/feature-flags.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script src="../assets/js/catalog.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/araclar.js?v=18"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# Gizli / yerel
+api/paytr_config.local.php
+api/site_brand.local.php
+api/oauth_config.local.php
+api/iyzico_config.local.php
+api/mail_config.local.php
+deploy/
+backups/
+data/login_guard/
+.tools/
+.cursor/
+
+# Büyük paketler / ders dosyaları (sunucuda kalır)
+*.zip
+*.rar
+uploads/courses/*
+!uploads/courses/.gitkeep

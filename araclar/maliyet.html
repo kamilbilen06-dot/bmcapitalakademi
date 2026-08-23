@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maliyet Düşürme (Ortalama) - BM Capital Akademi</title>
+  <meta name="description" content="Ek alım sonrası ağırlıklı ortalama hisse maliyetini hesaplayın.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#1f2d3d">
+  <link rel="canonical" href="https://www.bmcapitalakademi.com/araclar/maliyet.html">
+  <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="../assets/css/style.css?v=araclar5">
+</head>
+<body class="page-tools">
+  <div id="site-header"></div>
+  <section class="page-hero">
+    <div class="container">
+      <div class="tools-kicker">Ücretsiz Borsa Aracı</div>
+      <h1>Maliyet Düşürme (Ortalama)</h1>
+      <p class="tools-lead">Yeni alım sonrası ağırlıklı ortalama maliyetinizi hesaplayın.</p>
+      <p class="tools-hint">Hızlıca kaydırın veya kesin rakamlar için kutucuklara yazın.</p>
+      <div class="breadcrumb"><a href="../index.html">Ana Sayfa</a> / <a href="../araclar.html">Araçlar</a> / Maliyet</div>
+    </div>
+  </section>
+  <section class="section-tight">
+    <div class="container" data-tool="maliyet">
+      <div class="calc-shell">
+        <div class="calc-shell-grid">
+          <div class="calc-inputs">
+          <div class="calc-field">
+            <label for="lot1" id="lot1_label">Mevcut Lot</label>
+            <div class="calc-control">
+              <input type="number" id="lot1" inputmode="decimal" min="0" max="100000" step="1" value="1000">
+              <span class="calc-unit" id="lot1_unit">Lot</span>
+            </div>
+            <input type="range" id="lot1_r" min="0" max="100000" step="1" value="1000">
+          </div>          <div class="calc-field">
+            <label for="fiyat1" id="fiyat1_label">Mevcut Ortalama Maliyet</label>
+            <div class="calc-control">
+              <input type="number" id="fiyat1" inputmode="decimal" min="0.01" max="1000" step="0.01" value="40">
+              <span class="calc-unit" id="fiyat1_unit">TL</span>
+            </div>
+            <input type="range" id="fiyat1_r" min="0.01" max="1000" step="0.01" value="40">
+          </div>          <div class="calc-field">
+            <label for="lot2" id="lot2_label">Yeni Alım Lot</label>
+            <div class="calc-control">
+              <input type="number" id="lot2" inputmode="decimal" min="0" max="100000" step="1" value="500">
+              <span class="calc-unit" id="lot2_unit">Lot</span>
+            </div>
+            <input type="range" id="lot2_r" min="0" max="100000" step="1" value="500">
+          </div>          <div class="calc-field">
+            <label for="fiyat2" id="fiyat2_label">Yeni Alış Fiyatı</label>
+            <div class="calc-control">
+              <input type="number" id="fiyat2" inputmode="decimal" min="0.01" max="1000" step="0.01" value="30">
+              <span class="calc-unit" id="fiyat2_unit">TL</span>
+            </div>
+            <input type="range" id="fiyat2_r" min="0.01" max="1000" step="0.01" value="30">
+          </div>
+          </div>
+          <div class="calc-stats">
+          <div class="calc-stat">
+            <div class="calc-stat-label">Toplam Lot</div>
+            <div class="calc-stat-value navy" id="out_lot">—</div>
+          </div>          <div class="calc-stat">
+            <div class="calc-stat-label">Toplam Maliyet</div>
+            <div class="calc-stat-value gold" id="out_maliyet">—</div>
+          </div>          <div class="calc-stat">
+            <div class="calc-stat-label">Yeni Ortalama Maliyet</div>
+            <div class="calc-stat-value green" id="out_ortalama">—</div>
+          </div>          <div class="calc-stat">
+            <div class="calc-stat-label">Maliyet Değişimi</div>
+            <div class="calc-stat-value green" id="out_dusus">—</div>
+          </div>
+          </div>
+        </div>
+      </div>
+      <div class="calc-footer-grid">
+        <div class="calc-explain">
+          <h2>Nasıl hesaplanır?</h2>
+          <p>Yeni ortalama = (Lot1 × Fiyat1 + Lot2 × Fiyat2) / (Lot1 + Lot2). Maliyet değişimi, eski ortalamaya göre yüzdesel farktır.</p>
+          <div class="calc-disclaimer">Bu araç bilgilendirme amaçlıdır; yatırım tavsiyesi değildir.</div>
+        </div>
+            <aside class="tools-aside">
+        <h2>Diğer Araçlar</h2>
+        <div class="tools-aside-list" data-tools-aside="maliyet.html"></div>
+      </aside>
+      </div>
+    </div>
+  </section>
+  <div id="site-footer"></div>
+  <div id="site-floaters"></div>
+  <script src="../assets/js/feature-flags.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script src="../assets/js/catalog.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/araclar.js?v=5"></script>
+</body>
+</html>
