@@ -3,6 +3,7 @@
  * PDO veritabanı bağlantısı (tekil).
  */
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/core_schema.php';
 
 function db() {
     static $pdo = null;
@@ -17,6 +18,7 @@ function db() {
             PDO::ATTR_TIMEOUT            => 5,
         ];
         $pdo = new PDO($dsn, DB_USER, DB_PASS, $opt);
+        site_bootstrap($pdo);
     }
     return $pdo;
 }

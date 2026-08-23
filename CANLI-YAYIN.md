@@ -26,7 +26,7 @@ Admin → Ayarlar → “Canlı Yayın” kutusu. iyzico: `/api/iyzico_status.ph
 
 ### 3) Kod + DB
 1. `git pull` (önerilen) veya `scripts/package-deploy.ps1` zip’i.
-2. `api/config.php` → canlı DB + `INSTALL_LOCKED=true` + `CRON_KEY`.
+2. `api/config.local.php` → canlı DB + `INSTALL_LOCKED=true` + `CRON_KEY` (`config.php` şablonu ezilse bile bu kalır).
 3. `api/install.php` canlıda 403 verir. İlk kurulum yerelde veya kilit açıkken bir kez.
 4. Eğitmen hesabı açın.
 

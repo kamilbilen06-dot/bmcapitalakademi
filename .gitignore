@@ -1,4 +1,5 @@
 # Gizli / yerel
+api/config.local.php
 api/paytr_config.local.php
 api/site_brand.local.php
 api/oauth_config.local.php

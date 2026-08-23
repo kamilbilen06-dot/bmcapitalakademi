@@ -18,14 +18,21 @@ kök dizinine (genelde `public_html`) yükleyin.
 4. Kullanıcıyı veritabanına ekleyin ve **TÜM YETKİLER**'i verin.
 
 ## 3. Bağlantı bilgilerini girin
-`api/config.php` dosyasını açın (cPanel Dosya Yöneticisi > Düzenle) ve doldurun:
+`api/config.local.example.php` dosyasını `api/config.local.php` olarak kopyalayın
+(cPanel Dosya Yöneticisi). Canlı MySQL bilgilerini **yalnız bu dosyaya** yazın.
+`config.php` GitHub'dan gelse bile `config.local.php` ezilmez.
 
 ```php
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'kullanici_bmcapital'); // oluşturduğunuz DB adı
 define('DB_USER', 'kullanici_bmadmin');   // DB kullanıcısı
 define('DB_PASS', 'GÜÇLÜ_ŞİFRE');         // DB şifresi
+
+define('BOOTSTRAP_ADMIN_USER', 'admin');
+define('BOOTSTRAP_ADMIN_PASS', 'en_az_6_karakter');
 ```
+
+Site ilk açılışta tabloları ve yönetici hesabını kendisi oluşturur. `install.php` canlıda kapalıdır.
 
 ## 4. Kurulumu çalıştırın
 Tarayıcıda şu adrese gidin:
