@@ -10,7 +10,7 @@ require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/students_schema.php';
 
 const STUDENT_MIN_PASSWORD = 8;
-const STUDENT_TOKEN_TTL_MIN = 60;
+const STUDENT_TOKEN_TTL_MIN = 1440;
 const STUDENT_VERIFY_TTL_MIN = 30;
 const STUDENT_VERIFY_RESEND_SEC = 45;
 
@@ -404,7 +404,7 @@ function student_verify_link(string $token): string {
 }
 
 function student_reset_link(string $token): string {
-    return rtrim(site_public_url(), '/') . '/ogrenci/sifre-sifirla.php?token=' . rawurlencode($token);
+    return rtrim(site_mail_public_url(), '/') . '/ogrenci/sifre-sifirla.php?token=' . rawurlencode($token);
 }
 
 /** Jeton geçerli mi (tüketmeden kontrol) */

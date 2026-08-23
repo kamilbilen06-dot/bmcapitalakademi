@@ -396,16 +396,23 @@ function mailer_send_instructor_invite(array $instructor, string $link, string $
 
 function mailer_send_reset(array $student, string $link): array {
     $brand = defined('BRAND_NAME') ? BRAND_NAME : 'BM Capital Akademi';
-    $cta = mailer_cta($link, 'Şifreyi Sıfırla');
+    $mailLink = $link;
+    if (!mailer_url_is_safe($mailLink) && function_exists('site_mail_public_url')) {
+        $path = (string) (parse_url($link, PHP_URL_PATH) ?: '/ogrenci/sifre-sifirla.php');
+        $query = (string) (parse_url($link, PHP_URL_QUERY) ?? '');
+        $mailLink = rtrim(site_mail_public_url(), '/') . $path . ($query !== '' ? '?' . $query : '');
+    }
+    $cta = mailer_cta($mailLink, 'Şifreyi Sıfırla');
     $inner = '<h1 style="margin:0 0 16px;font-size:26px;line-height:1.25;color:#111;">Şifreni Sıfırla</h1>'
         . '<p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#5b6572;">Hesabın için bir şifre sıfırlama talebi aldık. Bu isteği sen yapmadıysan e-postayı yok sayabilirsin.</p>';
     if ($cta !== '') {
         $inner .= $cta;
     } else {
-        $inner .= '<p style="margin:0;font-size:15px;line-height:1.7;color:#5b6572;">Sitedeki şifre sıfırlama ekranından işleme devam edebilirsin.</p>';
+        $inner .= mailer_button($mailLink, 'Şifreyi Sıfırla')
+            . '<p style="margin:0 0 8px;font-size:13px;"><a href="' . mailer_e($mailLink) . '" style="color:#2563eb;text-decoration:underline;">' . mailer_e($mailLink) . '</a></p>';
     }
     $html = mailer_layout('Şifre sıfırlama', $inner);
-    $text = mailer_url_is_safe($link) ? ("Şifre sıfırlama bağlantısı:\n" . $link) : 'Sitedeki şifre sıfırlama ekranını kullanın.';
+    $text = "Şifre sıfırlama bağlantısı:\n" . $mailLink;
     return mailer_send((string)$student['email'], $brand . ' şifre sıfırlama', $html, $text);
 }
 

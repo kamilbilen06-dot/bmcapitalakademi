@@ -34,9 +34,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             students_ensure_schema($pdo);
             $student = student_find_by_email($pdo, $email);
             if ($student) {
+                if (function_exists('session_write_close')) {
+                    session_write_close();
+                }
                 $token = student_issue_token($pdo, (int)$student['id'], 'reset');
                 $link = student_reset_link($token);
-                mailer_send_reset($student, $link);
+                if (mailer_is_configured()) {
+                    mailer_send_reset($student, $link);
+                }
                 if (ogrenci_is_local_env() || !mailer_url_is_safe($link)) {
                     $devLink = 'sifre-sifirla.php?token=' . urlencode($token);
                 }
@@ -67,7 +72,9 @@ ogrenci_head('Şifremi Unuttum', 'page-auth');
       <?php if ($sent): ?>
         <div class="alert alert-ok">
           <i class="fa-solid fa-paper-plane"></i>
-          <span>Bu adrese kayıtlı bir hesap varsa şifre sıfırlama bağlantısı gönderildi. Bağlantı <?= (int)STUDENT_TOKEN_TTL_MIN ?> dakika geçerlidir.</span>
+          <span><?= mailer_is_configured()
+              ? 'Bu adrese kayıtlı bir hesap varsa bağlantı gönderildi. ' . (int) (STUDENT_TOKEN_TTL_MIN / 60) . ' saat geçerlidir. Spam klasörüne de bakın.'
+              : 'E-posta şu an gönderilemiyor (SMTP). public_html/api/mail_config.local.php dosyasını kontrol edin.' ?></span>
         </div>
         <?php if ($devLink !== ''): ?>
           <div class="alert alert-info">
