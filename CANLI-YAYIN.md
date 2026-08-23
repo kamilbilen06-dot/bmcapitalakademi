@@ -25,10 +25,9 @@ Admin → Ayarlar → “Canlı Yayın” kutusu. iyzico: `/api/iyzico_status.ph
 - Apache ise `uploads/.htaccess` video/pdf/zip doğrudan URL’yi kapatır. Nginx ise aynı kuralları sunucu bloğuna taşıyın.
 
 ### 3) Kod + DB
-1. `git pull` (önerilen) veya `scripts/package-deploy.ps1` zip’i.
-2. `api/config.local.php` → canlı DB + `INSTALL_LOCKED=true` + `CRON_KEY` (`config.php` şablonu ezilse bile bu kalır).
-3. `api/install.php` canlıda 403 verir. İlk kurulum yerelde veya kilit açıkken bir kez.
-4. Eğitmen hesabı açın.
+1. cPanel **Git™ Version Control** → Update from Remote → **Deploy HEAD Commit** (`.cpanel.yml` `public_html`’e kopyalar; `*.local.php` ve `uploads/courses` dokunulmaz).
+2. `api/config.local.php` → canlı DB + `BOOTSTRAP_ADMIN_*` (bir kez). MySQL içeriği (kurs, öğrenci) Git’te yoktur; phpMyAdmin import **bir kez**.
+3. `api/install.php` canlıda 403 verir.
 
 **Yüklemeyin (gizli):** `api/*.local.php`, `.tools/`, `backups/`, yerel DB dump.
 
