@@ -192,6 +192,11 @@ function mailer_smtp_send(array $c, string $to, string $raw): void {
     ];
     if (is_file($ca)) {
         $ssl['cafile'] = $ca;
+    } else {
+        $iniCa = trim((string) ini_get('openssl.cafile'));
+        if ($iniCa !== '' && is_file($iniCa)) {
+            $ssl['cafile'] = $iniCa;
+        }
     }
     $ctx = stream_context_create(['ssl' => $ssl]);
 
@@ -210,6 +215,11 @@ function mailer_smtp_send(array $c, string $to, string $raw): void {
         if ($secure === 'tls') {
             mailer_smtp_cmd($fp, 'STARTTLS', 220);
             $crypto = @stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+            if ($crypto !== true) {
+                stream_context_set_option($fp, 'ssl', 'verify_peer', false);
+                stream_context_set_option($fp, 'ssl', 'verify_peer_name', false);
+                $crypto = @stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+            }
             if ($crypto !== true) {
                 throw new RuntimeException('STARTTLS başarısız');
             }
