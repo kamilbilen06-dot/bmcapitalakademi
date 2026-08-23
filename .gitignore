@@ -11,12 +11,6 @@ data/login_guard/
 .tools/
 .cursor/
 
-# Büyük paketler / ders dosyaları (sunucuda kalır)
+# Büyük paketler
 *.zip
 *.rar
-# Ders videoları büyük; kapak/resim GitHub'da (PC bağımsız)
-uploads/courses/**/*.mp4
-uploads/courses/**/*.mov
-uploads/courses/**/*.webm
-uploads/courses/**/*.avi
-!uploads/courses/.gitkeep
