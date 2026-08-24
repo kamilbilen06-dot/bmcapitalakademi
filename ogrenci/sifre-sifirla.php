@@ -11,16 +11,19 @@ start_student_session();
 $token = student_read_token();
 $error = '';
 $tokenValid = false;
+$tokenState = 'empty';
 
 try {
     $pdo = db();
     students_ensure_schema($pdo);
-    $tokenValid = student_token_is_valid($pdo, $token, 'reset');
+    $status = student_token_status($pdo, $token, 'reset');
+    $tokenState = (string) $status['state'];
+    $tokenValid = $tokenState === 'ok';
 } catch (Throwable $e) {
     $error = 'Veritabanına ulaşılamadı. Bağlantı ayarlarını kontrol edin.';
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '' && $tokenValid) {
     $password = (string)($_POST['password'] ?? '');
     $password2 = (string)($_POST['password2'] ?? '');
 
@@ -34,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
         $studentId = student_consume_token($pdo, $token, 'reset');
         if ($studentId <= 0) {
             $tokenValid = false;
+            $tokenState = 'used';
         } else {
             student_set_password($pdo, $studentId, $password);
             student_logout();
@@ -62,7 +66,7 @@ ogrenci_head('Yeni Şifre', 'page-auth');
       <?php if (!$tokenValid): ?>
         <div class="alert alert-err">
           <i class="fa-solid fa-link-slash"></i>
-          <span>Bu sıfırlama bağlantısı geçersiz veya süresi dolmuş. Lütfen yeni bir bağlantı isteyin.</span>
+          <span><?= ogrenci_e(student_token_state_message($tokenState)) ?></span>
         </div>
         <a href="sifremi-unuttum.php" class="btn btn-primary btn-block btn-lg">Yeni bağlantı gönder</a>
       <?php else: ?>

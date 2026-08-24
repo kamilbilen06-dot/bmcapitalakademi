@@ -50,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $devLink = $link;
                 }
                 if (!mailer_is_configured() || $link === '') {
-                    $error = 'E-posta gönderilemiyor. Yönetici → Eğitmenler → davet / şifre linkini açın.';
+                    $error = 'E-posta gönderimi kapalı. Yönetici → Eğitmenler → davet / şifre linkini açın.';
                 } else {
                     $res = mailer_send_instructor_invite(
                         $invite['email_payload'] ?? [],

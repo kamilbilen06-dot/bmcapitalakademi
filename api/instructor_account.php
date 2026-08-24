@@ -99,6 +99,48 @@ function instructor_token_row(PDO $pdo, string $rawToken): ?array {
     return $row ?: null;
 }
 
+/**
+ * Jetonun neden çalışmadığını ayırt eder: empty | missing | used | expired | ok
+ *
+ * @return array{state:string, user_id:int}
+ */
+function instructor_token_status(PDO $pdo, string $rawToken): array {
+    $rawToken = strtolower(preg_replace('/[^a-f0-9]/i', '', trim($rawToken)) ?? '');
+    if ($rawToken === '') {
+        return ['state' => 'empty', 'user_id' => 0];
+    }
+    instructor_tokens_ensure($pdo);
+    $st = $pdo->prepare(
+        "SELECT user_id, used_at, (expires_at <= NOW()) AS expired
+         FROM instructor_tokens WHERE token_hash = ? ORDER BY id DESC LIMIT 1"
+    );
+    $st->execute([hash('sha256', $rawToken)]);
+    $row = $st->fetch();
+    if (!$row) {
+        return ['state' => 'missing', 'user_id' => 0];
+    }
+    if (!empty($row['used_at'])) {
+        return ['state' => 'used', 'user_id' => (int) $row['user_id']];
+    }
+    if ((int) $row['expired'] === 1) {
+        return ['state' => 'expired', 'user_id' => (int) $row['user_id']];
+    }
+    return ['state' => 'ok', 'user_id' => (int) $row['user_id']];
+}
+
+function instructor_token_state_message(string $state): string {
+    switch ($state) {
+        case 'empty':
+            return 'Bağlantıda jeton yok. E-postadaki “Şifreyi Belirle” düğmesine tekrar tıklayın.';
+        case 'used':
+            return 'Bu bağlantı daha önce kullanıldı. Yeni bağlantı isteyin.';
+        case 'expired':
+            return 'Bu bağlantının süresi doldu. Yeni bağlantı isteyin.';
+        default:
+            return 'Bu bağlantı bulunamadı. E-postadaki en son bağlantıyı kullanın veya yeni bağlantı isteyin.';
+    }
+}
+
 function instructor_consume_token(PDO $pdo, string $rawToken): int {
     $row = instructor_token_row($pdo, $rawToken);
     if (!$row) {

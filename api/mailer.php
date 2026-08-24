@@ -8,170 +8,8 @@
 require_once __DIR__ . '/mail_config.php';
 require_once __DIR__ . '/site_brand.php';
 
-function mailer_finish_response(): void {
-    if (function_exists('fastcgi_finish_request')) {
-        @fastcgi_finish_request();
-        return;
-    }
-    if (function_exists('litespeed_finish_request')) {
-        @litespeed_finish_request();
-        return;
-    }
-    while (ob_get_level() > 0) {
-        @ob_end_flush();
-    }
-    @flush();
-}
-
-function mailer_queue_dir(): string {
-    $d = dirname(__DIR__) . '/uploads/mail-outbox';
-    if (!is_dir($d)) {
-        @mkdir($d, 0750, true);
-    }
-    $ht = $d . '/.htaccess';
-    if (!is_file($ht)) {
-        @file_put_contents($ht, "Require all denied\nDeny from all\n");
-    }
-    return $d;
-}
-
-function mailer_worker_key(): string {
-    $c = mailer_config();
-    $seed = ($c['pass'] !== '' ? $c['pass'] : $c['from']) . '|bmcap-mail';
-    return substr(hash('sha256', $seed), 0, 32);
-}
-
-function mailer_queue_put(string $to, string $subject, string $html, string $text = ''): string {
-    $id = bin2hex(random_bytes(12));
-    $path = mailer_queue_dir() . '/' . $id . '.json';
-    $ok = @file_put_contents($path, json_encode([
-        'id' => $id,
-        'to' => $to,
-        'subject' => $subject,
-        'html' => $html,
-        'text' => $text,
-        'created' => time(),
-        'tries' => 0,
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-    return $ok ? $id : '';
-}
-
 function mailer_disabled_functions(): array {
     return array_filter(array_map('trim', explode(',', (string) ini_get('disable_functions'))));
-}
-
-function mailer_spawn_cli(string $jobId): void {
-    $script = __DIR__ . '/mail_worker.php';
-    $php = defined('PHP_BINARY') && PHP_BINARY !== '' ? PHP_BINARY : 'php';
-    $disabled = mailer_disabled_functions();
-    if (strncasecmp(PHP_OS, 'WIN', 3) === 0) {
-        if (in_array('popen', $disabled, true)) {
-            return;
-        }
-        $cmd = 'start /B "" ' . escapeshellarg($php) . ' ' . escapeshellarg($script) . ' ' . escapeshellarg($jobId);
-        @pclose(@popen($cmd, 'r'));
-        return;
-    }
-    $cmd = escapeshellarg($php) . ' ' . escapeshellarg($script) . ' ' . escapeshellarg($jobId) . ' >/dev/null 2>&1 &';
-    if (!in_array('exec', $disabled, true)) {
-        @exec($cmd);
-        return;
-    }
-    if (!in_array('shell_exec', $disabled, true)) {
-        @shell_exec($cmd);
-    }
-}
-
-function mailer_http_kick(string $jobId): void {
-    if (PHP_SAPI === 'cli' || defined('MAILER_WORKER')) {
-        return;
-    }
-    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
-    if ($host === '') {
-        return;
-    }
-    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443)
-        || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-    $path = '/api/mail_worker.php?job=' . rawurlencode($jobId) . '&k=' . rawurlencode(mailer_worker_key());
-    $port = $https ? 443 : (int) ($_SERVER['SERVER_PORT'] ?? 80);
-    if ($port <= 0) {
-        $port = $https ? 443 : 80;
-    }
-    $remote = ($https ? 'ssl://' : 'tcp://') . '127.0.0.1:' . $port;
-    $ctx = stream_context_create(['ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
-    $fp = @stream_socket_client($remote, $errno, $errstr, 1.2, STREAM_CLIENT_CONNECT, $ctx);
-    if (!$fp) {
-        $remote = ($https ? 'ssl://' : 'tcp://') . preg_replace('/:\\d+$/', '', $host) . ':' . $port;
-        $fp = @stream_socket_client($remote, $errno, $errstr, 1.2, STREAM_CLIENT_CONNECT, $ctx);
-    }
-    if (!$fp) {
-        return;
-    }
-    stream_set_timeout($fp, 1);
-    @fwrite($fp, "GET {$path} HTTP/1.1\r\nHost: {$host}\r\nConnection: Close\r\n\r\n");
-    @fclose($fp);
-}
-
-function mailer_queue_flush(?string $onlyId = null): void {
-    $dir = mailer_queue_dir();
-    $files = [];
-    if ($onlyId !== null && $onlyId !== '') {
-        $files[] = $dir . '/' . preg_replace('/[^a-f0-9]/', '', $onlyId) . '.json';
-    } else {
-        $files = glob($dir . '/*.json') ?: [];
-    }
-    foreach ($files as $path) {
-        if (!is_file($path)) {
-            continue;
-        }
-        $fp = @fopen($path, 'c+');
-        if (!$fp) {
-            continue;
-        }
-        if (!@flock($fp, LOCK_EX | LOCK_NB)) {
-            fclose($fp);
-            continue;
-        }
-        $raw = stream_get_contents($fp);
-        $job = json_decode((string) $raw, true);
-        if (!is_array($job) || empty($job['to'])) {
-            @flock($fp, LOCK_UN);
-            fclose($fp);
-            continue;
-        }
-        $tries = (int) ($job['tries'] ?? 0);
-        if ($tries >= 6) {
-            @flock($fp, LOCK_UN);
-            fclose($fp);
-            @rename($path, $path . '.fail');
-            continue;
-        }
-        $job['tries'] = $tries + 1;
-        rewind($fp);
-        ftruncate($fp, 0);
-        fwrite($fp, json_encode($job, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-        fflush($fp);
-        $res = mailer_send((string) $job['to'], (string) $job['subject'], (string) $job['html'], (string) ($job['text'] ?? ''));
-        @flock($fp, LOCK_UN);
-        fclose($fp);
-        if (!empty($res['ok'])) {
-            @unlink($path);
-        }
-    }
-}
-
-/** Sayfa bitti; SMTP kullanıcı beklemeden gider. */
-function mailer_after_page(string $jobId): void {
-    if ($jobId === '') {
-        return;
-    }
-    ignore_user_abort(true);
-    @set_time_limit(120);
-    mailer_spawn_cli($jobId);
-    mailer_finish_response();
-    mailer_http_kick($jobId);
-    mailer_queue_flush($jobId);
 }
 
 /**
@@ -250,6 +88,15 @@ function mailer_config(): array {
 
 /** Satış / abonelik bildirimlerinin gideceği akademi kutusu */
 function mailer_ops_inbox(): string {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+    $cached = mailer_ops_inbox_lookup();
+    return $cached;
+}
+
+function mailer_ops_inbox_lookup(): string {
     if (defined('SMTP_NOTIFY')) {
         $n = trim((string)SMTP_NOTIFY);
         if (filter_var($n, FILTER_VALIDATE_EMAIL)) {
@@ -274,18 +121,105 @@ function mailer_ops_inbox(): string {
     return 'bmcapitalakademi@gmail.com';
 }
 
-function mailer_use_local(): bool {
-    return false;
+function mailer_is_windows(): bool {
+    return strncasecmp(PHP_OS, 'WIN', 3) === 0;
 }
 
-function mailer_domain_from(): string {
+/**
+ * Sunucudan (cPanel Exim) gönderirken kullanılacak adres.
+ * Gmail adresiyle sunucudan göndermek DMARC'ı bozar ve spam'e düşer;
+ * bu yüzden burada her zaman domain adresi döner.
+ */
+function mailer_domain_sender(): string {
+    if (defined('MAIL_DOMAIN_FROM')) {
+        $d = strtolower(trim((string) MAIL_DOMAIN_FROM));
+        if (filter_var($d, FILTER_VALIDATE_EMAIL)) {
+            return $d;
+        }
+    }
     $c = mailer_config();
-    return (string) ($c['from'] ?? 'bmcapitalakademi@gmail.com');
+    $from = strtolower(trim((string) ($c['from'] ?? '')));
+    if (filter_var($from, FILTER_VALIDATE_EMAIL) && !str_ends_with($from, '@gmail.com')) {
+        return $from;
+    }
+    return 'noreply@bmcapitalakademi.com';
+}
+
+/** Sunucunun kendi mail servisi kullanılabilir mi */
+function mailer_server_available(): bool {
+    $disabled = mailer_disabled_functions();
+    if (function_exists('mail') && !in_array('mail', $disabled, true)) {
+        return true;
+    }
+    return !in_array('popen', $disabled, true);
+}
+
+function mailer_smtp_available(): bool {
+    $c = mailer_config();
+    if ($c['host'] === '' || $c['from'] === '') {
+        return false;
+    }
+    return $c['user'] === '' || $c['pass'] !== '';
+}
+
+/**
+ * Denenecek gönderim yolları. Canlıda (Linux) önce sunucu, sonra SMTP.
+ * Windows'ta sendmail yok, o yüzden yerel testte SMTP başa alınır.
+ *
+ * @return string[]
+ */
+function mailer_transport_order(): array {
+    $forced = '';
+    if (defined('SMTP_DRIVER')) {
+        $d = strtolower(trim((string) SMTP_DRIVER));
+        if (in_array($d, ['mail', 'local', 'sendmail', 'server'], true)) {
+            $forced = 'server';
+        } elseif ($d === 'smtp') {
+            $forced = 'smtp';
+        }
+    }
+    if ($forced === 'server') {
+        $order = ['server'];
+    } elseif ($forced === 'smtp') {
+        $order = ['smtp'];
+    } else {
+        $order = mailer_is_windows() ? ['smtp', 'server'] : ['server', 'smtp'];
+    }
+    return array_values(array_filter($order, static function (string $t): bool {
+        return $t === 'server' ? mailer_server_available() : mailer_smtp_available();
+    }));
 }
 
 function mailer_is_configured(): bool {
+    return mailer_transport_order() !== [];
+}
+
+/**
+ * Gönderen bilgisi yola göre değişir: sunucu → domain adresi,
+ * SMTP → hesabın kendi adresi (aksi halde Gmail reddeder).
+ *
+ * @return array{addr:string,name:string,reply:string}
+ */
+function mailer_sender_for(string $transport): array {
     $c = mailer_config();
-    return $c['host'] !== '' && $c['from'] !== '' && $c['pass'] !== '';
+    $name = trim((string) ($c['from_name'] ?? '')) !== ''
+        ? (string) $c['from_name']
+        : (defined('BRAND_NAME') ? BRAND_NAME : 'BM Capital Akademi');
+
+    if ($transport === 'smtp') {
+        $addr = trim((string) ($c['from'] ?? ''));
+        if (!filter_var($addr, FILTER_VALIDATE_EMAIL)) {
+            $addr = trim((string) ($c['user'] ?? ''));
+        }
+    } else {
+        $addr = mailer_domain_sender();
+    }
+
+    $reply = mailer_ops_inbox();
+    if (!filter_var($reply, FILTER_VALIDATE_EMAIL)) {
+        $reply = $addr;
+    }
+    return ['addr' => $addr, 'name' => $name, 'reply' => $reply];
 }
 
 function mailer_encode_header(string $text): string {
@@ -303,36 +237,25 @@ function mailer_crlf(string $raw): string {
 }
 
 /**
- * @return array{ok:bool, error:string}
+ * Tek mesajın başlık + gövdesini üretir.
+ *
+ * @param array{addr:string,name:string,reply:string} $sender
+ * @return array{subject:string,headers:string,body:string,raw:string}
  */
-function mailer_send(string $to, string $subject, string $html, string $text = ''): array {
-    $to = trim($to);
-    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
-        return ['ok' => false, 'error' => 'Geçersiz alıcı'];
-    }
-    if (!mailer_is_configured()) {
-        return ['ok' => false, 'error' => 'SMTP yapılandırılmadı'];
-    }
-
-    $c = mailer_config();
-    $html = (string)$html;
-    if ($text === '') {
-        $text = trim(html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>'], "\n", $html)), ENT_QUOTES, 'UTF-8'));
-    }
-
+function mailer_build_message(string $to, string $subject, string $html, string $text, array $sender): array {
     $boundary = 'b' . bin2hex(random_bytes(8));
-    $fromHdr = mailer_encode_header($c['from_name']) . ' <' . $c['from'] . '>';
-    $reply = (string) ($c['reply_to'] ?? $c['from']);
-    $msgid = '<m' . bin2hex(random_bytes(10)) . '@bmcapitalakademi.com>';
-    $headers = [
+    $domain = ltrim((string) strrchr($sender['addr'], '@'), '@');
+    if ($domain === '') {
+        $domain = 'bmcapitalakademi.com';
+    }
+    $encodedSubject = mailer_encode_header($subject);
+    $common = [
         'Date: ' . date('r'),
-        'From: ' . $fromHdr,
-        'Reply-To: ' . $reply,
-        'To: ' . $to,
-        'Message-ID: ' . $msgid,
-        'Subject: ' . mailer_encode_header($subject),
+        'From: ' . mailer_encode_header($sender['name']) . ' <' . $sender['addr'] . '>',
+        'Reply-To: ' . $sender['reply'],
+        'Message-ID: <' . bin2hex(random_bytes(12)) . '@' . $domain . '>',
         'MIME-Version: 1.0',
-        'List-Unsubscribe: <mailto:' . $reply . '?subject=unsubscribe>',
+        'Auto-Submitted: auto-generated',
         'Content-Type: multipart/alternative; boundary="' . $boundary . '"',
     ];
     $body =
@@ -345,41 +268,84 @@ function mailer_send(string $to, string $subject, string $html, string $text = '
         "Content-Transfer-Encoding: quoted-printable\n\n" .
         quoted_printable_encode($html) . "\n" .
         '--' . $boundary . "--\n";
-    $raw = implode("\n", $headers) . "\n\n" . $body;
+    $rawHeaders = array_merge(['To: ' . $to, 'Subject: ' . $encodedSubject], $common);
 
-    try {
-        mailer_smtp_send($c, $to, $raw);
-        return ['ok' => true, 'error' => ''];
-    } catch (Throwable $e) {
-        error_log('mailer smtp: ' . $e->getMessage());
-        return ['ok' => false, 'error' => $e->getMessage()];
-    }
+    return [
+        'subject' => $encodedSubject,
+        'headers' => implode("\r\n", $common),
+        'body' => $body,
+        'raw' => implode("\n", $rawHeaders) . "\n\n" . $body,
+    ];
 }
 
-function mailer_php_mail(string $to, string $subject, string $html, array $c): bool {
-    $from = $c['from'];
-    $reply = (string) ($c['reply_to'] ?? $from);
-    $msgid = '<m' . bin2hex(random_bytes(8)) . '@bmcapitalakademi.com>';
-    $encodedSubject = mailer_encode_header($subject);
-    $headers = implode("\r\n", [
-        'MIME-Version: 1.0',
-        'Content-Type: text/html; charset=UTF-8',
-        'Date: ' . date('r'),
-        'Message-ID: ' . $msgid,
-        'From: ' . mailer_encode_header($c['from_name']) . ' <' . $from . '>',
-        'Reply-To: ' . $reply,
-    ]);
+/**
+ * @return array{ok:bool, error:string, transport?:string}
+ */
+function mailer_send(string $to, string $subject, string $html, string $text = ''): array {
+    $to = trim($to);
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        return ['ok' => false, 'error' => 'Geçersiz alıcı'];
+    }
+    $order = mailer_transport_order();
+    if (!$order) {
+        return ['ok' => false, 'error' => 'E-posta gönderimi yapılandırılmadı'];
+    }
+
+    $html = (string) $html;
+    if ($text === '') {
+        $text = trim(html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>'], "\n", $html)), ENT_QUOTES, 'UTF-8'));
+    }
+
+    $errors = [];
+    foreach ($order as $transport) {
+        $sender = mailer_sender_for($transport);
+        if (!filter_var($sender['addr'], FILTER_VALIDATE_EMAIL)) {
+            $errors[] = $transport . ': gönderen adresi yok';
+            continue;
+        }
+        $msg = mailer_build_message($to, $subject, $html, $text, $sender);
+
+        if ($transport === 'server') {
+            if (mailer_server_send($to, $msg, $sender)) {
+                return ['ok' => true, 'error' => '', 'transport' => 'server'];
+            }
+            $errors[] = 'server: sunucu mail servisi kabul etmedi';
+            continue;
+        }
+
+        try {
+            mailer_smtp_send(mailer_config(), $to, $msg['raw']);
+            return ['ok' => true, 'error' => '', 'transport' => 'smtp'];
+        } catch (Throwable $e) {
+            $errors[] = 'smtp: ' . $e->getMessage();
+        }
+    }
+
+    $err = implode(' | ', $errors);
+    error_log('mailer: ' . $err);
+    return ['ok' => false, 'error' => $err];
+}
+
+/**
+ * cPanel / Exim üzerinden gönderim. Zarf adresi (-f) domain adresidir;
+ * SPF ve DKIM bu adres için açık olmalı.
+ *
+ * @param array{subject:string,headers:string,body:string,raw:string} $msg
+ * @param array{addr:string,name:string,reply:string} $sender
+ */
+function mailer_server_send(string $to, array $msg, array $sender): bool {
     $disabled = mailer_disabled_functions();
-    if (!in_array('mail', $disabled, true)) {
-        @ini_set('sendmail_from', $from);
-        if (@mail($to, $encodedSubject, $html, $headers, '-f' . $from)) {
+    $body = mailer_crlf($msg['body']);
+    if (function_exists('mail') && !in_array('mail', $disabled, true)) {
+        @ini_set('sendmail_from', $sender['addr']);
+        if (@mail($to, $msg['subject'], $body, $msg['headers'], '-f' . $sender['addr'])) {
             return true;
         }
-        if (@mail($to, $encodedSubject, $html, $headers)) {
+        if (@mail($to, $msg['subject'], $body, $msg['headers'])) {
             return true;
         }
     }
-    return mailer_sendmail_pipe($to, $encodedSubject, $html, $headers, $from);
+    return mailer_sendmail_pipe($to, $msg['subject'], $body, $msg['headers'], $sender['addr']);
 }
 
 function mailer_sendmail_pipe(string $to, string $subject, string $html, string $headers, string $from): bool {
@@ -638,11 +604,6 @@ function mailer_send_instructor_invite(array $instructor, string $link, string $
     return mailer_send($p['to'], $p['subject'], $p['html'], $p['text']);
 }
 
-function mailer_queue_instructor_invite(array $instructor, string $link, string $purpose = 'invite'): string {
-    $p = mailer_instructor_payload($instructor, $link, $purpose);
-    return mailer_queue_put($p['to'], $p['subject'], $p['html'], $p['text']);
-}
-
 function mailer_reset_payload(array $student, string $link): array {
     $brand = defined('BRAND_NAME') ? BRAND_NAME : 'BM Capital Akademi';
     $mailLink = $link;
@@ -673,11 +634,6 @@ function mailer_reset_payload(array $student, string $link): array {
 function mailer_send_reset(array $student, string $link): array {
     $p = mailer_reset_payload($student, $link);
     return mailer_send($p['to'], $p['subject'], $p['html'], $p['text']);
-}
-
-function mailer_queue_reset(array $student, string $link): string {
-    $p = mailer_reset_payload($student, $link);
-    return mailer_queue_put($p['to'], $p['subject'], $p['html'], $p['text']);
 }
 
 function mailer_notify_order_paid(PDO $pdo, array $order): void {

@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $devLink = 'sifre-sifirla.php?token=' . urlencode($token);
             }
             if (!mailer_is_configured()) {
-                $error = 'E-posta şu an gönderilemiyor. public_html/api/mail_config.local.php dosyasını kontrol edin.';
+                $error = 'E-posta gönderimi şu an kapalı. Lütfen bizimle iletişime geçin.';
             } else {
                 $res = mailer_send_reset($student, $link);
                 if (!empty($res['ok'])) {

@@ -7,8 +7,7 @@ api/iyzico_config.local.php
 api/mail_config.local.php
 deploy/
 backups/
-uploads/mail-outbox/*.json
-uploads/mail-outbox/*.fail
+data/login_guard/
 .tools/
 .cursor/
 

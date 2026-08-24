@@ -312,6 +312,47 @@ function student_read_token(): string {
     return student_extract_token(trim((string) ($_SERVER['PATH_INFO'] ?? ''), '/'));
 }
 
+/**
+ * Jetonun neden çalışmadığını ayırt eder: empty | missing | used | expired | ok
+ *
+ * @return array{state:string, student_id:int}
+ */
+function student_token_status(PDO $pdo, $rawToken, $purpose = 'reset'): array {
+    $rawToken = strtolower(preg_replace('/[^a-f0-9]/i', '', trim((string) $rawToken)) ?? '');
+    if ($rawToken === '') {
+        return ['state' => 'empty', 'student_id' => 0];
+    }
+    $st = $pdo->prepare(
+        "SELECT student_id, used_at, (expires_at <= NOW()) AS expired
+         FROM student_tokens WHERE token_hash = ? AND purpose = ? ORDER BY id DESC LIMIT 1"
+    );
+    $st->execute([hash('sha256', $rawToken), $purpose]);
+    $row = $st->fetch();
+    if (!$row) {
+        return ['state' => 'missing', 'student_id' => 0];
+    }
+    if (!empty($row['used_at'])) {
+        return ['state' => 'used', 'student_id' => (int) $row['student_id']];
+    }
+    if ((int) $row['expired'] === 1) {
+        return ['state' => 'expired', 'student_id' => (int) $row['student_id']];
+    }
+    return ['state' => 'ok', 'student_id' => (int) $row['student_id']];
+}
+
+function student_token_state_message(string $state): string {
+    switch ($state) {
+        case 'empty':
+            return 'Bağlantıda jeton yok. E-postadaki “Şifreyi Sıfırla” düğmesine tekrar tıklayın.';
+        case 'used':
+            return 'Bu bağlantı daha önce kullanıldı. Yeni bağlantı isteyin.';
+        case 'expired':
+            return 'Bu bağlantının süresi doldu. Yeni bağlantı isteyin.';
+        default:
+            return 'Bu bağlantı bulunamadı. E-postadaki en son bağlantıyı kullanın veya yeni bağlantı isteyin.';
+    }
+}
+
 function student_consume_token(PDO $pdo, $rawToken, $purpose = 'reset') {
     $rawToken = strtolower(preg_replace('/[^a-f0-9]/i', '', trim((string) $rawToken)) ?? '');
     if ($rawToken === '') {
