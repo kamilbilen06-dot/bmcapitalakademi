@@ -240,7 +240,8 @@ img { max-width: 100%; display: block; }
   grid-template-columns: 1.15fr 0.85fr;
   gap: 48px;
   align-items: center;
-  padding: 90px 0;
+  padding-top: 90px;
+  padding-bottom: 90px;
 }
 .hero-badge {
   display: inline-flex;
@@ -2611,7 +2612,7 @@ a.instructor-link { color: var(--gold); }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 960px) {
-  .hero-inner { grid-template-columns: 1fr; gap: 36px; padding: 64px 0; }
+  .hero-inner { grid-template-columns: 1fr; gap: 36px; padding-top: 64px; padding-bottom: 64px; }
   .detail-grid { grid-template-columns: 1fr; }
   .side-card { position: static; }
   .footer-grid { grid-template-columns: 1fr 1fr; }
