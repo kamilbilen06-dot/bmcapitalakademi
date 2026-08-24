@@ -1155,61 +1155,12 @@
         "</div>" +
         '<div class="form-actions"><button type="submit" class="btn-primary sm">Ayarları Kaydet</button></div></form>' +
         "</div></div>" +
-        '<div class="panel"><div class="panel-head"><h3>Canlı Yayın (Domain → PayTR)</h3></div><div class="panel-body" id="launchBox"><p class="empty">Kontrol yükleniyor…</p></div></div>' +
         '<div class="panel"><div class="panel-head"><h3>Şifre Değiştir</h3></div><div class="panel-body">' +
         '<form id="pwForm"><div class="form-grid">' +
         '<div class="field"><label>Mevcut Şifre</label><input type="password" name="current" required></div>' +
         '<div class="field"><label>Yeni Şifre (min 6)</label><input type="password" name="new" required></div>' +
         '</div><div class="form-actions"><button type="submit" class="btn-ghost">Şifreyi Güncelle</button></div></form>' +
         "</div></div>";
-
-      fetch("../api/launch_status.php", { credentials: "same-origin" })
-        .then(function (r) { return r.json(); })
-        .then(function (ls) {
-          var box = document.getElementById("launchBox");
-          if (!box || !ls || !ls.ok) return;
-          var pct = (ls.progress && ls.progress.pct) || 0;
-          var rows = (ls.steps || []).map(function (st) {
-            return (
-              "<tr><td>" +
-              (st.done ? "✅" : "⬜") +
-              "</td><td><strong>" +
-              esc(st.title) +
-              "</strong><div style='font-size:12px;color:#64748b;margin-top:4px'>" +
-              esc(st.detail || "") +
-              "</div></td></tr>"
-            );
-          }).join("");
-          var cb = (ls.paytr && ls.paytr.callback_url) || "";
-          box.innerHTML =
-            "<p><strong>İlerleme:</strong> %" +
-            pct +
-            " · Marka: " +
-            esc((ls.brand && ls.brand.marka) || "") +
-            " · URL: " +
-            esc((ls.brand && ls.brand.publicUrl) || "") +
-            "</p>" +
-            '<div class="table-wrap"><table><tbody>' +
-            rows +
-            "</tbody></table></div>" +
-            (cb
-              ? '<p style="margin-top:12px;font-size:13px"><strong>PayTR Bildirim URL:</strong><br><code id="paytrCb">' +
-                esc(cb) +
-                '</code> <button type="button" class="btn-ghost sm" id="copyCb">Kopyala</button></p>'
-              : "") +
-            '<p style="font-size:12px;color:#64748b;margin-top:8px">Marka/domain: <code>api/site_brand.local.php</code> · Anahtarlar: <code>api/paytr_config.local.php</code> · Detay: <a href="../CANLI-YAYIN.md" target="_blank">CANLI-YAYIN.md</a></p>';
-          var btn = document.getElementById("copyCb");
-          if (btn) {
-            btn.onclick = function () {
-              var t = document.getElementById("paytrCb");
-              if (!t) return;
-              navigator.clipboard.writeText(t.textContent || "").then(function () {
-                toast("Bildirim URL kopyalandı", "ok");
-              });
-            };
-          }
-        })
-        .catch(function () {});
 
       document.getElementById("setForm").onsubmit = function (e) {
         e.preventDefault();

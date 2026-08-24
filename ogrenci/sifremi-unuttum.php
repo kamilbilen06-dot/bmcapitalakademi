@@ -18,7 +18,6 @@ $error = '';
 $sent = false;
 $devLink = '';
 $email = '';
-$pendingReset = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = clean($_POST['email'] ?? '');
@@ -41,11 +40,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $token = student_issue_token($pdo, (int)$student['id'], 'reset');
             $link = student_reset_link($token);
-            $pendingReset = ['student' => $student, 'link' => $link];
             if (ogrenci_is_local_env() || !mailer_url_is_safe($link)) {
                 $devLink = 'sifre-sifirla.php?token=' . urlencode($token);
             }
-            $sent = true;
+            if (!mailer_is_configured()) {
+                $error = 'E-posta şu an gönderilemiyor (SMTP). public_html/api/mail_config.local.php dosyasını kontrol edin.';
+            } else {
+                $res = mailer_send_reset($student, $link);
+                if (!empty($res['ok'])) {
+                    $sent = true;
+                } else {
+                    $error = 'E-posta gönderilemedi. Spam klasörüne bakın veya biraz sonra tekrar deneyin.';
+                }
+            }
         } catch (Throwable $e) {
             $error = 'İşlem tamamlanamadı. Veritabanı bağlantısını kontrol edin.';
         }
@@ -53,10 +60,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = student_csrf_token();
-$shouldDeferMail = is_array($pendingReset) && mailer_is_configured();
-if ($shouldDeferMail) {
-    ob_start();
-}
 
 ogrenci_head('Şifremi Unuttum', 'page-auth');
 ?>
@@ -75,9 +78,7 @@ ogrenci_head('Şifremi Unuttum', 'page-auth');
       <?php if ($sent): ?>
         <div class="alert alert-ok">
           <i class="fa-solid fa-paper-plane"></i>
-          <span><?= mailer_is_configured()
-              ? 'Şifre sıfırlama bağlantısı gönderildi.'
-              : 'E-posta şu an gönderilemiyor (SMTP). public_html/api/mail_config.local.php dosyasını kontrol edin.' ?></span>
+          <span>Şifre sıfırlama bağlantısı gönderildi. Gelen kutusu ve spam klasörünü kontrol edin.</span>
         </div>
         <?php if ($devLink !== ''): ?>
           <div class="alert alert-info">
@@ -110,10 +111,4 @@ ogrenci_head('Şifremi Unuttum', 'page-auth');
 </div>
 <?php
 ogrenci_foot();
-if ($shouldDeferMail) {
-    $html = ob_get_clean();
-    mailer_respond_html_then($html, static function () use ($pendingReset) {
-        mailer_send_reset($pendingReset['student'], $pendingReset['link']);
-    });
-}
 ?>

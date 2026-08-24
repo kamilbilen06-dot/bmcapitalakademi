@@ -60,7 +60,8 @@ function ogrenci_order_card(array $o): void {
     $date = $when ? date('d.m.Y', strtotime((string)$when)) : '';
     $kurus = (int)$o['amount_kurus'];
     $price = '₺' . number_format($kurus / 100, 2, ',', '.');
-    $method = ($o['provider'] ?? '') === 'paytr' ? 'Kredi Kartı (PayTR)' : 'Kredi Kartı Tek Çekim';
+    $provider = (string)($o['provider'] ?? '');
+    $method = $provider === 'havale' ? 'Havale / EFT' : 'Kredi Kartı Tek Çekim';
     $title = trim((string)($o['course_title'] ?? '')) !== '' ? (string)$o['course_title'] : 'Eğitim';
 
     $badgeClass = 'wait';

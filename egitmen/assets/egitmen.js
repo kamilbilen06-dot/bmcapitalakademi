@@ -2326,7 +2326,7 @@
       '<div class="file-row"><input type="text" id="sharePayUrl" readonly value="' +
       esc(payUrl) +
       '"><button type="button" class="btn" id="btnCopyPay">Kopyala</button></div>' +
-      '<p class="hint">Kart ödemesi için domain + PayTR canlı olmalı. Yerelde sadece önizleme.</p></div>' +
+      '<p class="hint">Kart ödemesi iyzico ile alınır. Havale / EFT ödeme sayfasında durur.</p></div>' +
       '</div></div><div class="actions-bar"><button type="button" class="btn-primary sm" id="btnSavePub">Kaydet</button></div>';
     $("btnSavePub").onclick = function () {
       saveCourseFields({ status: $("fStatus").value });

@@ -1,13 +1,11 @@
 <?php
 /**
- * Canlı yayın kontrol listesi — Domain → PayTR → Satış sırası.
+ * Canlı yayın kontrol listesi.
  * GET /api/launch_status.php
  * Gizli anahtar döndürmez.
  */
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/site_brand.php';
-require_once __DIR__ . '/paytr_config.php';
-require_once __DIR__ . '/paytr_schema.php';
 
 header('Access-Control-Allow-Origin: *');
 
@@ -42,10 +40,6 @@ try {
     $dbOk = false;
 }
 
-$paytrReady = paytr_credentials_ready();
-$testMode = (int)(defined('PAYTR_TEST_MODE') ? PAYTR_TEST_MODE : 1);
-$callback = paytr_site_base() . '/api/paytr_callback.php';
-
 $steps = [
     [
         'id' => 'brand-domain',
@@ -79,24 +73,6 @@ $steps = [
         'owner' => 'yazilim_siz',
     ],
     [
-        'id' => 'paytr-apply',
-        'title' => 'PayTR üye işyeri + bildirim URL',
-        'done' => $paytrReady,
-        'detail' => 'Bildirim URL (PayTR panele yapıştırın): ' . $callback
-            . ' · Başarı: ' . paytr_site_base() . '/odeme-basarili.html'
-            . ' · Başarısız: ' . paytr_site_base() . '/odeme-basarisiz.html',
-        'owner' => 'sirket',
-    ],
-    [
-        'id' => 'paytr-test-live',
-        'title' => 'Test ödeme → canlı',
-        'done' => $paytrReady && $testMode === 0 && $httpsOn && !$isLocalHost,
-        'detail' => $paytrReady
-            ? ('Anahtarlar var · PAYTR_TEST_MODE=' . $testMode . ($testMode === 1 ? ' (önce test kartı ile deneyin, sonra 0 yapın)' : ' (canlı)'))
-            : 'Önce api/paytr_config.local.php doldurun.',
-        'owner' => 'yazilim_siz',
-    ],
-    [
         'id' => 'instructor-share',
         'title' => 'Hoca kurs yayınla + link paylaş',
         'done' => $publishedCourses > 0 && $configuredUrl !== '' && !$isLocalHost,
@@ -123,18 +99,8 @@ json_out([
         'pct' => (int)round(100 * $doneCount / max(1, count($steps))),
     ],
     'steps' => $steps,
-    'paytr' => [
-        'ready' => $paytrReady,
-        'test_mode' => $testMode,
-        'callback_url' => $callback,
-        'ok_url' => paytr_site_base() . '/odeme-basarili.html',
-        'fail_url' => paytr_site_base() . '/odeme-basarisiz.html',
-        'basvuru' => 'https://www.paytr.com/uye-isyeri-olun',
-        'iframe_docs' => 'https://dev.paytr.com/iframe-api',
-    ],
     'hints' => [
-        'Sıra: marka → domain+HTTPS → deploy → PayTR başvuru → test → canlı → hoca paylaşır.',
+        'Kart ödemesi iyzico ile alınır. Havale / EFT ödeme sayfasında durur.',
         'Yeni domain olmadan canlı kart ödemesi açılamaz.',
-        'Teknopark şirketi aktifse PayTR başvurusunda o unvan/vergi bilgileri kullanılır.',
     ],
 ]);

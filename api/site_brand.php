@@ -47,7 +47,7 @@ if (!defined('BRAND_CITY')) {
     define('BRAND_CITY', 'İzmir');
 }
 /**
- * true: marka + domain dolduruldu, PayTR başvurusuna hazır.
+ * true: marka + domain dolduruldu, canlı satışa hazır.
  * Yeni projede local dosyada true yapın.
  */
 if (!defined('BRAND_DOMAIN_READY')) {

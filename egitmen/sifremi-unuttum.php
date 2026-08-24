@@ -17,7 +17,6 @@ $error = '';
 $sent = false;
 $devLink = '';
 $email = '';
-$pendingInvite = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = instructor_normalize_email($_POST['email'] ?? '');
@@ -39,17 +38,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
             $st->execute([$email, $email]);
             $userId = (int)$st->fetchColumn();
-            if ($userId > 0) {
+            if ($userId <= 0) {
+                $error = 'Bu e-posta ile eğitmen hesabı bulunamadı.';
+            } else {
                 if (function_exists('session_write_close')) {
                     session_write_close();
                 }
-                $pendingInvite = instructor_deliver_invite($pdo, $userId, 'reset', false);
-                if (instructor_invite_is_local($pendingInvite['link'] ?? '')) {
-                    $devLink = $pendingInvite['link'];
+                $invite = instructor_deliver_invite($pdo, $userId, 'reset', false);
+                $link = (string)($invite['link'] ?? '');
+                if (instructor_invite_is_local($link)) {
+                    $devLink = $link;
                 }
-                $sent = true;
-            } else {
-                $error = 'Bu e-posta ile eğitmen hesabı bulunamadı.';
+                if (!mailer_is_configured() || $link === '') {
+                    $error = 'Canlıda SMTP yok; e-posta şu an gidemez. Yönetici → Eğitmenler → davet / şifre linkini açın.';
+                } else {
+                    $res = mailer_send_instructor_invite(
+                        $invite['email_payload'] ?? [],
+                        $link,
+                        (string)($invite['purpose'] ?? 'reset')
+                    );
+                    if (!empty($res['ok'])) {
+                        $sent = true;
+                    } else {
+                        $error = 'E-posta gönderilemedi. Spam klasörüne bakın veya biraz sonra tekrar deneyin.';
+                    }
+                }
             }
         } catch (Throwable $e) {
             $error = 'İşlem tamamlanamadı. Veritabanı bağlantısını kontrol edin.';
@@ -58,10 +71,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = admin_csrf_token();
-$shouldDeferMail = is_array($pendingInvite) && mailer_is_configured() && !empty($pendingInvite['link']);
-if ($shouldDeferMail) {
-    ob_start();
-}
 ?><!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -77,9 +86,7 @@ if ($shouldDeferMail) {
     <p class="login-sub">E-postana şifre belirleme bağlantısı gönderilir.</p>
     <?php if ($error): ?><div class="alert err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
     <?php if ($sent): ?>
-      <div class="alert ok"><?= mailer_is_configured()
-          ? 'Şifre sıfırlama bağlantısı gönderildi.'
-          : 'Canlıda SMTP yok; e-posta şu an gidemez. Yönetici → Eğitmenler → davet / şifre linkini açın.' ?></div>
+      <div class="alert ok">Şifre sıfırlama bağlantısı gönderildi. Gelen kutusu ve spam klasörünü kontrol edin.</div>
       <?php if ($devLink !== ''): ?>
         <p class="login-sub"><a href="<?= htmlspecialchars($devLink) ?>">Yerel: şifreyi buradan belirle</a></p>
       <?php endif; ?>
@@ -94,14 +101,3 @@ if ($shouldDeferMail) {
   </form>
 </body>
 </html>
-<?php
-if ($shouldDeferMail) {
-    $html = ob_get_clean();
-    mailer_respond_html_then($html, static function () use ($pendingInvite) {
-        mailer_send_instructor_invite(
-            $pendingInvite['email_payload'] ?? [],
-            $pendingInvite['link'],
-            (string) ($pendingInvite['purpose'] ?? 'reset')
-        );
-    });
-}
