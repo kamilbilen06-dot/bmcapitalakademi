@@ -31,7 +31,8 @@ define('SMTP_FROM', 'bmcapitalakademi@gmail.com');
 define('SMTP_FROM_NAME', 'BM Capital Akademi');
 
 /**
- * Yolu zorlamak isterseniz: 'server' (cPanel) veya 'smtp'.
- * Tanımlamazsanız canlıda server, yerelde smtp seçilir.
+ * Gönderim yolu: 'smtp' (Gmail, hızlı) veya 'server' (cPanel Exim).
+ * Tanımlamazsanız api/mail_config.php varsayılanı ('smtp') geçerlidir.
+ * SPF ve DKIM açıldıktan sonra 'server' yapıp noreply@ ile gönderebilirsiniz.
  */
-// define('SMTP_DRIVER', 'server');
+// define('MAIL_TRANSPORT', 'server');
