@@ -17,6 +17,7 @@ $error = '';
 $sent = false;
 $devLink = '';
 $email = '';
+$jobId = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = instructor_normalize_email($_POST['email'] ?? '');
@@ -52,15 +53,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!mailer_is_configured() || $link === '') {
                     $error = 'Canlıda SMTP yok; e-posta şu an gidemez. Yönetici → Eğitmenler → davet / şifre linkini açın.';
                 } else {
-                    $res = mailer_send_instructor_invite(
+                    $jobId = mailer_queue_instructor_invite(
                         $invite['email_payload'] ?? [],
                         $link,
                         (string)($invite['purpose'] ?? 'reset')
                     );
-                    if (!empty($res['ok'])) {
-                        $sent = true;
+                    if ($jobId === '') {
+                        $error = 'E-posta kuyruğa alınamadı.';
                     } else {
-                        $error = 'E-posta gönderilemedi. Spam klasörüne bakın veya biraz sonra tekrar deneyin.';
+                        $sent = true;
                     }
                 }
             }
@@ -71,6 +72,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = admin_csrf_token();
+if ($jobId !== '') {
+    ob_start();
+}
 ?><!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -80,13 +84,13 @@ $csrf = admin_csrf_token();
   <link rel="stylesheet" href="assets/egitmen.css?v=20260824a">
 </head>
 <body class="login-body">
-  <form class="login-card" method="post" action="sifremi-unuttum.php" onsubmit="var b=this.querySelector('button'); if(b){b.disabled=true;b.textContent='Gönderiliyor...';}">
+  <form class="login-card" method="post" action="sifremi-unuttum.php">
     <div class="login-brand"><span class="bm">BM</span> Capital · Eğitmen</div>
     <h1>Şifremi unuttum</h1>
     <p class="login-sub">E-postana şifre belirleme bağlantısı gönderilir.</p>
     <?php if ($error): ?><div class="alert err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
     <?php if ($sent): ?>
-      <div class="alert ok">Şifre sıfırlama bağlantısı gönderildi. Gelen kutusu ve spam klasörünü kontrol edin.</div>
+      <div class="alert ok">Şifre sıfırlama bağlantısı gönderildi.</div>
       <?php if ($devLink !== ''): ?>
         <p class="login-sub"><a href="<?= htmlspecialchars($devLink) ?>">Yerel: şifreyi buradan belirle</a></p>
       <?php endif; ?>
@@ -101,3 +105,14 @@ $csrf = admin_csrf_token();
   </form>
 </body>
 </html>
+<?php
+if ($jobId !== '') {
+    $html = ob_get_clean();
+    if (!headers_sent()) {
+        header('Content-Type: text/html; charset=UTF-8');
+        header('Content-Length: ' . (string) strlen($html));
+        header('Connection: close');
+    }
+    echo $html;
+    mailer_after_page($jobId);
+}

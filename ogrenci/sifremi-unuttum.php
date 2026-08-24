@@ -2,7 +2,8 @@
 /**
  * Şifre sıfırlama talebi.
  *
- * Hesap varsa bağlantı gönderilir. Yoksa kayıt sayfasına yönlendirilir.
+ * Hesap varsa bağlantı kuyruğa alınır ve sayfa hemen “gönderildi” der.
+ * SMTP arka planda gider.
  */
 require_once __DIR__ . '/../api/student_account.php';
 require_once __DIR__ . '/../api/mailer.php';
@@ -18,6 +19,7 @@ $error = '';
 $sent = false;
 $devLink = '';
 $email = '';
+$jobId = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = clean($_POST['email'] ?? '');
@@ -46,11 +48,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!mailer_is_configured()) {
                 $error = 'E-posta şu an gönderilemiyor (SMTP). public_html/api/mail_config.local.php dosyasını kontrol edin.';
             } else {
-                $res = mailer_send_reset($student, $link);
-                if (!empty($res['ok'])) {
-                    $sent = true;
+                $jobId = mailer_queue_reset($student, $link);
+                if ($jobId === '') {
+                    $error = 'E-posta kuyruğa alınamadı. Klasör yazma iznini kontrol edin.';
                 } else {
-                    $error = 'E-posta gönderilemedi. Spam klasörüne bakın veya biraz sonra tekrar deneyin.';
+                    $sent = true;
                 }
             }
         } catch (Throwable $e) {
@@ -60,6 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = student_csrf_token();
+if ($jobId !== '') {
+    ob_start();
+}
 
 ogrenci_head('Şifremi Unuttum', 'page-auth');
 ?>
@@ -78,7 +83,7 @@ ogrenci_head('Şifremi Unuttum', 'page-auth');
       <?php if ($sent): ?>
         <div class="alert alert-ok">
           <i class="fa-solid fa-paper-plane"></i>
-          <span>Şifre sıfırlama bağlantısı gönderildi. Gelen kutusu ve spam klasörünü kontrol edin.</span>
+          <span>Şifre sıfırlama bağlantısı gönderildi.</span>
         </div>
         <?php if ($devLink !== ''): ?>
           <div class="alert alert-info">
@@ -91,7 +96,7 @@ ogrenci_head('Şifremi Unuttum', 'page-auth');
         <?php endif; ?>
         <a href="giris.php" class="btn btn-outline btn-block">Giriş ekranına dön</a>
       <?php else: ?>
-        <form method="post" data-guard novalidate>
+        <form method="post" novalidate>
           <input type="hidden" name="csrf" value="<?= ogrenci_e($csrf) ?>">
           <div class="field">
             <label for="f-email">E-posta</label>
@@ -111,4 +116,14 @@ ogrenci_head('Şifremi Unuttum', 'page-auth');
 </div>
 <?php
 ogrenci_foot();
+if ($jobId !== '') {
+    $html = ob_get_clean();
+    if (!headers_sent()) {
+        header('Content-Type: text/html; charset=UTF-8');
+        header('Content-Length: ' . (string) strlen($html));
+        header('Connection: close');
+    }
+    echo $html;
+    mailer_after_page($jobId);
+}
 ?>
