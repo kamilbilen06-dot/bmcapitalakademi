@@ -295,17 +295,21 @@ function student_extract_token(string $raw): string {
 }
 
 function student_read_token(): string {
-    foreach ([$_GET['token'] ?? '', $_GET['t'] ?? '', $_POST['token'] ?? ''] as $cand) {
-        $t = student_extract_token((string) $cand);
+    foreach ([
+        request_scalar($_GET['token'] ?? ''),
+        request_scalar($_GET['t'] ?? ''),
+        request_scalar($_POST['token'] ?? ''),
+    ] as $cand) {
+        $t = student_extract_token($cand);
         if ($t !== '') {
             return $t;
         }
     }
-    $qs = student_extract_token((string) ($_SERVER['QUERY_STRING'] ?? ''));
+    $qs = student_extract_token(urldecode((string) ($_SERVER['QUERY_STRING'] ?? '')));
     if ($qs !== '') {
         return $qs;
     }
-    $uri = student_extract_token((string) ($_SERVER['REQUEST_URI'] ?? ''));
+    $uri = student_extract_token(urldecode((string) ($_SERVER['REQUEST_URI'] ?? '')));
     if ($uri !== '') {
         return $uri;
     }

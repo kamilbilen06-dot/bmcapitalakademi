@@ -68,7 +68,16 @@ ogrenci_head('Yeni Şifre', 'page-auth');
           <i class="fa-solid fa-link-slash"></i>
           <span><?= ogrenci_e(student_token_state_message($tokenState)) ?></span>
         </div>
-        <a href="sifremi-unuttum.php" class="btn btn-primary btn-block btn-lg">Yeni bağlantı gönder</a>
+        <form method="get" action="sifre-sifirla.php" style="margin:0 0 16px">
+          <div class="field">
+            <label for="f-token">E-postadaki bağlantıyı yapıştırın</label>
+            <div class="input-wrap">
+              <input id="f-token" type="text" name="token" placeholder="https://…/sifre-sifirla.php?token=…" autocomplete="off">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Bağlantıyı aç</button>
+        </form>
+        <a href="sifremi-unuttum.php" class="btn btn-outline btn-block">Yeni bağlantı gönder</a>
       <?php else: ?>
         <form method="post" data-guard novalidate>
           <input type="hidden" name="csrf" value="<?= ogrenci_e($csrf) ?>">

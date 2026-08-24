@@ -2,8 +2,7 @@
 /**
  * Şifre sıfırlama talebi.
  *
- * Hesap varsa Gmail SMTP ile bağlantı gönderilir (eğitmen paneliyle aynı yol).
- * Yoksa kayıt sayfasına yönlendirilir.
+ * Jeton hemen üretilir, mail sayfa çizildikten sonra gönderilir; kullanıcı beklemez.
  */
 require_once __DIR__ . '/../api/student_account.php';
 require_once __DIR__ . '/../api/mailer.php';
@@ -33,25 +32,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             students_ensure_schema($pdo);
             $student = student_find_by_email($pdo, $email);
             if (!$student) {
-                header('Location: kayit.php?from=reset&email=' . rawurlencode(student_normalize_email($email)));
-                exit;
-            }
-            if (function_exists('session_write_close')) {
-                session_write_close();
-            }
-            $token = student_issue_token($pdo, (int)$student['id'], 'reset');
-            $link = student_reset_link($token);
-            if (ogrenci_is_local_env() || !mailer_url_is_safe($link)) {
-                $devLink = 'sifre-sifirla.php?token=' . urlencode($token);
-            }
-            if (!mailer_is_configured()) {
-                $error = 'E-posta gönderimi şu an kapalı. Lütfen bizimle iletişime geçin.';
+                $error = 'Bu e-posta ile öğrenci hesabı yok. Mail yalnızca kayıtlı adrese gider.';
             } else {
-                $res = mailer_send_reset($student, $link);
-                if (!empty($res['ok'])) {
-                    $sent = true;
+                $token = student_issue_token($pdo, (int)$student['id'], 'reset');
+                $link = student_reset_link($token);
+                if (ogrenci_is_local_env() || !mailer_url_is_safe($link)) {
+                    $devLink = 'sifre-sifirla.php?token=' . urlencode($token);
+                }
+                if (!mailer_is_configured()) {
+                    $error = 'E-posta gönderimi şu an kapalı. Lütfen bizimle iletişime geçin.';
                 } else {
-                    $error = 'E-posta gönderilemedi. Birkaç saniye sonra tekrar deneyin.';
+                    mailer_defer(static function () use ($student, $link): void {
+                        mailer_send_reset($student, $link);
+                    });
+                    $sent = true;
                 }
             }
         } catch (Throwable $e) {

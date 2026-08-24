@@ -169,16 +169,81 @@ function mailer_smtp_available(): bool {
  * @return string[]
  */
 function mailer_transport_order(): array {
-    // Canlı Linux'ta her zaman önce sunucu. Eski local dosyadaki SMTP_DRIVER=smtp
-    // bunu ezmesin; Gmail From + sunucu IP = spam.
-    if (mailer_is_windows()) {
-        $order = ['smtp', 'server'];
-    } else {
-        $order = ['server', 'smtp'];
+    $order = mailer_is_windows() ? ['smtp', 'server'] : ['server', 'smtp'];
+    if (defined('MAIL_TRANSPORT')) {
+        $t = strtolower(trim((string) MAIL_TRANSPORT));
+        if ($t === 'smtp') {
+            $order = ['smtp', 'server'];
+        } elseif (in_array($t, ['server', 'mail', 'sendmail'], true)) {
+            $order = ['server', 'smtp'];
+        }
     }
     return array_values(array_filter($order, static function (string $t): bool {
         return $t === 'server' ? mailer_server_available() : mailer_smtp_available();
     }));
+}
+
+/**
+ * Yanıtı tarayıcıya bırak, PHP arka planda çalışmaya devam etsin.
+ * Alt süreç / kuyruk dosyası yok; aynı istek içinde kalır.
+ */
+function mailer_flush_response(): bool {
+    if (function_exists('litespeed_finish_request')) {
+        @litespeed_finish_request();
+        return true;
+    }
+    if (function_exists('fastcgi_finish_request')) {
+        @fastcgi_finish_request();
+        return true;
+    }
+    return false;
+}
+
+/** @return callable[] */
+function mailer_deferred_jobs(?callable $add = null, bool $take = false): array {
+    static $jobs = [];
+    if ($add !== null) {
+        $jobs[] = $add;
+    }
+    if ($take) {
+        $out = $jobs;
+        $jobs = [];
+        return $out;
+    }
+    return $jobs;
+}
+
+/**
+ * Maili sayfa çizildikten sonra gönder. Kullanıcı SMTP'yi beklemez.
+ * Gönderim yine bu istekte yapılır, sadece yanıttan sonraya alınır.
+ */
+function mailer_defer(callable $job): void {
+    static $registered = false;
+    mailer_deferred_jobs($job);
+    if (!$registered) {
+        $registered = true;
+        register_shutdown_function('mailer_run_deferred');
+    }
+}
+
+function mailer_run_deferred(): void {
+    $jobs = mailer_deferred_jobs(null, true);
+    if (!$jobs) {
+        return;
+    }
+    ignore_user_abort(true);
+    @set_time_limit(120);
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        @session_write_close();
+    }
+    mailer_flush_response();
+    foreach ($jobs as $job) {
+        try {
+            $job();
+        } catch (Throwable $e) {
+            error_log('mailer defer: ' . $e->getMessage());
+        }
+    }
 }
 
 function mailer_is_configured(): bool {
@@ -256,8 +321,8 @@ function mailer_build_message(string $to, string $subject, string $html, string 
         quoted_printable_encode($text) . "\n" .
         '--' . $boundary . "\n" .
         "Content-Type: text/html; charset=UTF-8\n" .
-        "Content-Transfer-Encoding: quoted-printable\n\n" .
-        quoted_printable_encode($html) . "\n" .
+        "Content-Transfer-Encoding: base64\n\n" .
+        chunk_split(base64_encode($html)) .
         '--' . $boundary . "--\n";
     $rawHeaders = array_merge(['To: ' . $to, 'Subject: ' . $encodedSubject], $common);
 
@@ -525,8 +590,8 @@ function mailer_cta(string $url, string $label): string {
         return '';
     }
     return mailer_button($url, $label)
-        . '<p style="margin:0 0 8px;font-size:13px;color:#8a93a0;">Tıklamakta zorluk yaşıyorsanız aşağıdaki bağlantıyı deneyebilirsiniz.</p>'
-        . '<p style="margin:0;font-size:13px;"><a href="' . mailer_e($url) . '" style="color:#2563eb;text-decoration:underline;">' . mailer_e($label) . '</a></p>';
+        . '<p style="margin:0 0 8px;font-size:13px;color:#8a93a0;">Tıklamakta zorluk yaşıyorsanız bağlantının tamamını tarayıcıya yapıştırın:</p>'
+        . '<p style="margin:0;font-size:13px;word-break:break-all;"><a href="' . mailer_e($url) . '" style="color:#2563eb;text-decoration:underline;">' . mailer_e($url) . '</a></p>';
 }
 
 function mailer_send_verify(array $student, string $code, string $link): array {

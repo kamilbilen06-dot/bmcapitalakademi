@@ -65,17 +65,21 @@ function instructor_extract_token(string $raw): string {
 }
 
 function instructor_read_token(): string {
-    foreach ([$_GET['token'] ?? '', $_GET['t'] ?? '', $_POST['token'] ?? ''] as $cand) {
-        $t = instructor_extract_token((string) $cand);
+    foreach ([
+        request_scalar($_GET['token'] ?? ''),
+        request_scalar($_GET['t'] ?? ''),
+        request_scalar($_POST['token'] ?? ''),
+    ] as $cand) {
+        $t = instructor_extract_token($cand);
         if ($t !== '') {
             return $t;
         }
     }
-    $qs = instructor_extract_token((string) ($_SERVER['QUERY_STRING'] ?? ''));
+    $qs = instructor_extract_token(urldecode((string) ($_SERVER['QUERY_STRING'] ?? '')));
     if ($qs !== '') {
         return $qs;
     }
-    $uri = instructor_extract_token((string) ($_SERVER['REQUEST_URI'] ?? ''));
+    $uri = instructor_extract_token(urldecode((string) ($_SERVER['REQUEST_URI'] ?? '')));
     if ($uri !== '') {
         return $uri;
     }

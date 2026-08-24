@@ -277,6 +277,23 @@ function clean($v) {
 }
 
 /**
+ * GET/POST değeri dizi gelebilir (www/https yönlendirmesi token=...&token=...).
+ * Dizi stringe çevrilirse PHP "Array to string conversion" uyarısı basar ve jeton bozulur.
+ */
+function request_scalar($value): string {
+    while (is_array($value)) {
+        if ($value === []) {
+            return '';
+        }
+        $value = reset($value);
+    }
+    if ($value === null || is_bool($value) || is_object($value)) {
+        return '';
+    }
+    return trim((string) $value);
+}
+
+/**
  * Eğitmen payı (0–100). Ayar yoksa 60.
  */
 function instructor_share_pct(PDO $pdo): float {

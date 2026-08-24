@@ -41,9 +41,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($userId <= 0) {
                 $error = 'Bu e-posta ile eğitmen hesabı bulunamadı.';
             } else {
-                if (function_exists('session_write_close')) {
-                    session_write_close();
-                }
                 $invite = instructor_deliver_invite($pdo, $userId, 'reset', false);
                 $link = (string)($invite['link'] ?? '');
                 if (instructor_invite_is_local($link)) {
@@ -52,16 +49,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!mailer_is_configured() || $link === '') {
                     $error = 'E-posta gönderimi kapalı. Yönetici → Eğitmenler → davet / şifre linkini açın.';
                 } else {
-                    $res = mailer_send_instructor_invite(
-                        $invite['email_payload'] ?? [],
-                        $link,
-                        (string)($invite['purpose'] ?? 'reset')
-                    );
-                    if (!empty($res['ok'])) {
-                        $sent = true;
-                    } else {
-                        $error = 'E-posta gönderilemedi. Birkaç saniye sonra tekrar deneyin.';
-                    }
+                    $payload = $invite['email_payload'] ?? [];
+                    $purpose = (string)($invite['purpose'] ?? 'reset');
+                    mailer_defer(static function () use ($payload, $link, $purpose): void {
+                        mailer_send_instructor_invite($payload, $link, $purpose);
+                    });
+                    $sent = true;
                 }
             }
         } catch (Throwable $e) {
