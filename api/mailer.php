@@ -243,6 +243,27 @@ function mailer_config(): array {
         $cfg['port'] = $cfg['secure'] === 'ssl' ? 465 : 587;
     }
 
+    $reply = '';
+    if (filter_var((string) ($cfg['from'] ?? ''), FILTER_VALIDATE_EMAIL) && str_contains(strtolower($cfg['from']), 'gmail.com')) {
+        $reply = $cfg['from'];
+    }
+    if (mailer_use_local()) {
+        $cfg['from'] = mailer_domain_from();
+        $cfg['from_name'] = $fromName;
+        $cfg['host'] = 'localhost';
+        $cfg['port'] = 25;
+        $cfg['secure'] = 'none';
+        $cfg['user'] = '';
+        $cfg['pass'] = '';
+    }
+    if ($reply === '') {
+        $reply = function_exists('mailer_ops_inbox') ? mailer_ops_inbox() : $cfg['from'];
+    }
+    if (!filter_var($reply, FILTER_VALIDATE_EMAIL)) {
+        $reply = $cfg['from'];
+    }
+    $cfg['reply_to'] = $reply;
+
     $cached = $cfg;
     return $cached;
 }
@@ -273,7 +294,39 @@ function mailer_ops_inbox(): string {
     return 'bmcapitalakademi@gmail.com';
 }
 
+function mailer_use_local(): bool {
+    if (defined('SMTP_DRIVER')) {
+        $d = strtolower(trim((string) SMTP_DRIVER));
+        if (in_array($d, ['local', 'mail', 'sendmail'], true)) {
+            return true;
+        }
+        if ($d === 'smtp') {
+            return false;
+        }
+    }
+    $hosts = [];
+    $http = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    $hosts[] = preg_replace('/:\\d+$/', '', $http);
+    if (defined('PUBLIC_SITE_URL')) {
+        $hosts[] = strtolower((string) (parse_url((string) PUBLIC_SITE_URL, PHP_URL_HOST) ?? ''));
+    }
+    foreach ($hosts as $h) {
+        if ($h !== '' && str_contains($h, 'bmcapitalakademi.com')) {
+            return true;
+        }
+    }
+    $root = strtolower(str_replace('\\', '/', dirname(__DIR__)));
+    return str_contains($root, '/public_html');
+}
+
+function mailer_domain_from(): string {
+    return 'noreply@bmcapitalakademi.com';
+}
+
 function mailer_is_configured(): bool {
+    if (mailer_use_local()) {
+        return true;
+    }
     $c = mailer_config();
     return $c['host'] !== '' && $c['from'] !== '';
 }
@@ -312,14 +365,17 @@ function mailer_send(string $to, string $subject, string $html, string $text = '
 
     $boundary = 'b' . bin2hex(random_bytes(8));
     $fromHdr = mailer_encode_header($c['from_name']) . ' <' . $c['from'] . '>';
+    $reply = (string) ($c['reply_to'] ?? $c['from']);
+    $msgid = '<m' . bin2hex(random_bytes(10)) . '@bmcapitalakademi.com>';
     $headers = [
         'Date: ' . date('r'),
         'From: ' . $fromHdr,
-        'Reply-To: ' . $c['from'],
+        'Reply-To: ' . $reply,
         'To: ' . $to,
+        'Message-ID: ' . $msgid,
         'Subject: ' . mailer_encode_header($subject),
         'MIME-Version: 1.0',
-        'List-Unsubscribe: <mailto:' . $c['from'] . '?subject=unsubscribe>',
+        'List-Unsubscribe: <mailto:' . $reply . '?subject=unsubscribe>',
         'Content-Type: multipart/alternative; boundary="' . $boundary . '"',
     ];
     $body =
@@ -333,6 +389,19 @@ function mailer_send(string $to, string $subject, string $html, string $text = '
         quoted_printable_encode($html) . "\n" .
         '--' . $boundary . "--\n";
     $raw = implode("\n", $headers) . "\n\n" . $body;
+
+    if (mailer_use_local()) {
+        if (mailer_php_mail($to, $subject, $html, $c)) {
+            return ['ok' => true, 'error' => ''];
+        }
+        try {
+            mailer_smtp_send($c, $to, $raw);
+            return ['ok' => true, 'error' => ''];
+        } catch (Throwable $e) {
+            error_log('mailer local smtp: ' . $e->getMessage());
+        }
+        return ['ok' => false, 'error' => 'E-posta gönderilemedi'];
+    }
 
     try {
         mailer_smtp_send($c, $to, $raw);
@@ -359,13 +428,23 @@ function mailer_send(string $to, string $subject, string $html, string $text = '
 
 function mailer_php_mail(string $to, string $subject, string $html, array $c): bool {
     $from = $c['from'];
+    $reply = (string) ($c['reply_to'] ?? $from);
+    $msgid = '<m' . bin2hex(random_bytes(8)) . '@bmcapitalakademi.com>';
     $headers = implode("\r\n", [
         'MIME-Version: 1.0',
         'Content-Type: text/html; charset=UTF-8',
+        'Date: ' . date('r'),
+        'Message-ID: ' . $msgid,
         'From: ' . mailer_encode_header($c['from_name']) . ' <' . $from . '>',
-        'Reply-To: ' . $from,
+        'Reply-To: ' . $reply,
     ]);
-    return @mail($to, mailer_encode_header($subject), $html, $headers);
+    $params = '';
+    if (strncasecmp(PHP_OS, 'WIN', 3) !== 0) {
+        $params = '-f' . $from;
+    }
+    return $params !== ''
+        ? @mail($to, mailer_encode_header($subject), $html, $headers, $params)
+        : @mail($to, mailer_encode_header($subject), $html, $headers);
 }
 
 function mailer_smtp_send(array $c, string $to, string $raw): void {

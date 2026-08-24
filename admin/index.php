@@ -67,6 +67,6 @@ $csrfToken = admin_csrf_token();
 
   <script src="../assets/js/photo-crop.js"></script>
   <script>window.BM_ADMIN_CSRF = <?= json_encode($csrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_SLASHES) ?>;</script>
-  <script src="assets/admin.js?v=20260824b"></script>
+  <script src="assets/admin.js?v=20260824c"></script>
 </body>
 </html>

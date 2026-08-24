@@ -1,23 +1,24 @@
 <?php
 /**
  * ÖRNEK — kopyalayın: api/mail_config.local.php
- * Bu dosya (local) Git'e eklenmez.
+ * Bu dosya (local) Git'e girmez.
  *
- * Hosting SMTP (cPanel / Plesk) veya Gmail uygulama şifresi kullanın.
- * Admin panel → Ayarlar içindeki SMTP alanları da aynı işi görür;
- * bu dosya doluysa ayar tablosunun üstüne yazılır.
+ * Canlı sitede (bmcapitalakademi.com) kod cPanel Exim / PHP mail kullanır.
+ * Ücret yoktur. Gönderen: noreply@bmcapitalakademi.com
  *
- * Gmail: smtp.gmail.com, 587, tls, hesap e-postası + uygulama şifresi
- * cPanel: mail.alanadiniz.com, 587, tls, tam e-posta + şifre
+ * cPanel’de bir kez:
+ *  1) Email Accounts → noreply@bmcapitalakademi.com (isteğe bağlı, önerilir)
+ *  2) Email Deliverability → SPF + DKIM Enable
+ *
+ * Yerelde Windows’ta PHP mail çalışmaz; SMTP_DRIVER=smtp ve Gmail bırakın.
  */
 
-define('SMTP_HOST', 'mail.bmcapitalakademi.com');
-define('SMTP_PORT', 587);
-define('SMTP_SECURE', 'tls'); // tls | ssl | none
-define('SMTP_USER', 'noreply@bmcapitalakademi.com');
+define('SMTP_DRIVER', 'local'); // canlı: local (cPanel) · yerelde test: smtp
+define('SMTP_HOST', 'localhost');
+define('SMTP_PORT', 25);
+define('SMTP_SECURE', 'none');
+define('SMTP_USER', '');
 define('SMTP_PASS', '');
 define('SMTP_FROM', 'noreply@bmcapitalakademi.com');
 define('SMTP_FROM_NAME', 'BM Capital Akademi');
-
-/** Satış ve yeni abonelik bildirimleri (boşsa bmcapitalakademi@gmail.com) */
 define('SMTP_NOTIFY', 'bmcapitalakademi@gmail.com');
