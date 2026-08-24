@@ -169,21 +169,12 @@ function mailer_smtp_available(): bool {
  * @return string[]
  */
 function mailer_transport_order(): array {
-    $forced = '';
-    if (defined('SMTP_DRIVER')) {
-        $d = strtolower(trim((string) SMTP_DRIVER));
-        if (in_array($d, ['mail', 'local', 'sendmail', 'server'], true)) {
-            $forced = 'server';
-        } elseif ($d === 'smtp') {
-            $forced = 'smtp';
-        }
-    }
-    if ($forced === 'server') {
-        $order = ['server'];
-    } elseif ($forced === 'smtp') {
-        $order = ['smtp'];
+    // Canlı Linux'ta her zaman önce sunucu. Eski local dosyadaki SMTP_DRIVER=smtp
+    // bunu ezmesin; Gmail From + sunucu IP = spam.
+    if (mailer_is_windows()) {
+        $order = ['smtp', 'server'];
     } else {
-        $order = mailer_is_windows() ? ['smtp', 'server'] : ['server', 'smtp'];
+        $order = ['server', 'smtp'];
     }
     return array_values(array_filter($order, static function (string $t): bool {
         return $t === 'server' ? mailer_server_available() : mailer_smtp_available();
