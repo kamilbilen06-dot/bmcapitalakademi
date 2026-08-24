@@ -17,7 +17,6 @@ $error = '';
 $sent = false;
 $devLink = '';
 $email = '';
-$jobId = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = instructor_normalize_email($_POST['email'] ?? '');
@@ -51,17 +50,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $devLink = $link;
                 }
                 if (!mailer_is_configured() || $link === '') {
-                    $error = 'Canlıda SMTP yok; e-posta şu an gidemez. Yönetici → Eğitmenler → davet / şifre linkini açın.';
+                    $error = 'E-posta gönderilemiyor. Yönetici → Eğitmenler → davet / şifre linkini açın.';
                 } else {
-                    $jobId = mailer_queue_instructor_invite(
+                    $res = mailer_send_instructor_invite(
                         $invite['email_payload'] ?? [],
                         $link,
                         (string)($invite['purpose'] ?? 'reset')
                     );
-                    if ($jobId === '') {
-                        $error = 'E-posta kuyruğa alınamadı.';
-                    } else {
+                    if (!empty($res['ok'])) {
                         $sent = true;
+                    } else {
+                        $error = 'Sunucu e-postayı gönderemedi. cPanel → Email → Track Delivery kaydına bakın.';
                     }
                 }
             }
@@ -72,9 +71,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = admin_csrf_token();
-if ($jobId !== '') {
-    ob_start();
-}
 ?><!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -105,14 +101,3 @@ if ($jobId !== '') {
   </form>
 </body>
 </html>
-<?php
-if ($jobId !== '') {
-    $html = ob_get_clean();
-    if (!headers_sent()) {
-        header('Content-Type: text/html; charset=UTF-8');
-        header('Content-Length: ' . (string) strlen($html));
-        header('Connection: close');
-    }
-    echo $html;
-    mailer_after_page($jobId);
-}

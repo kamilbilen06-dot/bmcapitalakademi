@@ -19,7 +19,6 @@ $error = '';
 $sent = false;
 $devLink = '';
 $email = '';
-$jobId = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = clean($_POST['email'] ?? '');
@@ -46,13 +45,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $devLink = 'sifre-sifirla.php?token=' . urlencode($token);
             }
             if (!mailer_is_configured()) {
-                $error = 'E-posta şu an gönderilemiyor (SMTP). public_html/api/mail_config.local.php dosyasını kontrol edin.';
+                $error = 'E-posta şu an gönderilemiyor. public_html/api/mail_config.local.php dosyasını kontrol edin.';
             } else {
-                $jobId = mailer_queue_reset($student, $link);
-                if ($jobId === '') {
-                    $error = 'E-posta kuyruğa alınamadı. Klasör yazma iznini kontrol edin.';
-                } else {
+                $res = mailer_send_reset($student, $link);
+                if (!empty($res['ok'])) {
                     $sent = true;
+                } else {
+                    $error = 'Sunucu e-postayı gönderemedi. cPanel → Email → Track Delivery kaydına bakın.';
                 }
             }
         } catch (Throwable $e) {
@@ -62,9 +61,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = student_csrf_token();
-if ($jobId !== '') {
-    ob_start();
-}
 
 ogrenci_head('Şifremi Unuttum', 'page-auth');
 ?>
@@ -116,14 +112,4 @@ ogrenci_head('Şifremi Unuttum', 'page-auth');
 </div>
 <?php
 ogrenci_foot();
-if ($jobId !== '') {
-    $html = ob_get_clean();
-    if (!headers_sent()) {
-        header('Content-Type: text/html; charset=UTF-8');
-        header('Content-Length: ' . (string) strlen($html));
-        header('Connection: close');
-    }
-    echo $html;
-    mailer_after_page($jobId);
-}
 ?>

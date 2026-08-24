@@ -295,15 +295,6 @@ function mailer_ops_inbox(): string {
 }
 
 function mailer_use_local(): bool {
-    if (defined('SMTP_DRIVER')) {
-        $d = strtolower(trim((string) SMTP_DRIVER));
-        if (in_array($d, ['local', 'mail', 'sendmail'], true)) {
-            return true;
-        }
-        if ($d === 'smtp') {
-            return false;
-        }
-    }
     $hosts = [];
     $http = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
     $hosts[] = preg_replace('/:\\d+$/', '', $http);
@@ -316,7 +307,19 @@ function mailer_use_local(): bool {
         }
     }
     $root = strtolower(str_replace('\\', '/', dirname(__DIR__)));
-    return str_contains($root, '/public_html');
+    if (str_contains($root, '/public_html')) {
+        return true;
+    }
+    if (defined('SMTP_DRIVER')) {
+        $d = strtolower(trim((string) SMTP_DRIVER));
+        if (in_array($d, ['local', 'mail', 'sendmail'], true)) {
+            return true;
+        }
+        if ($d === 'smtp') {
+            return false;
+        }
+    }
+    return false;
 }
 
 function mailer_domain_from(): string {
@@ -394,11 +397,18 @@ function mailer_send(string $to, string $subject, string $html, string $text = '
         if (mailer_php_mail($to, $subject, $html, $c)) {
             return ['ok' => true, 'error' => ''];
         }
-        try {
-            mailer_smtp_send($c, $to, $raw);
-            return ['ok' => true, 'error' => ''];
-        } catch (Throwable $e) {
-            error_log('mailer local smtp: ' . $e->getMessage());
+        foreach ([
+            ['host' => '127.0.0.1', 'port' => 25, 'secure' => 'none'],
+            ['host' => '127.0.0.1', 'port' => 587, 'secure' => 'none'],
+            ['host' => 'localhost', 'port' => 25, 'secure' => 'none'],
+        ] as $try) {
+            $local = array_merge($c, $try, ['user' => '', 'pass' => '']);
+            try {
+                mailer_smtp_send($local, $to, $raw, 2);
+                return ['ok' => true, 'error' => ''];
+            } catch (Throwable $e) {
+                error_log('mailer local smtp ' . $try['host'] . ':' . $try['port'] . ': ' . $e->getMessage());
+            }
         }
         return ['ok' => false, 'error' => 'E-posta gönderilemedi'];
     }
@@ -430,6 +440,7 @@ function mailer_php_mail(string $to, string $subject, string $html, array $c): b
     $from = $c['from'];
     $reply = (string) ($c['reply_to'] ?? $from);
     $msgid = '<m' . bin2hex(random_bytes(8)) . '@bmcapitalakademi.com>';
+    $encodedSubject = mailer_encode_header($subject);
     $headers = implode("\r\n", [
         'MIME-Version: 1.0',
         'Content-Type: text/html; charset=UTF-8',
@@ -438,16 +449,54 @@ function mailer_php_mail(string $to, string $subject, string $html, array $c): b
         'From: ' . mailer_encode_header($c['from_name']) . ' <' . $from . '>',
         'Reply-To: ' . $reply,
     ]);
-    $params = '';
-    if (strncasecmp(PHP_OS, 'WIN', 3) !== 0) {
-        $params = '-f' . $from;
+    $disabled = mailer_disabled_functions();
+    if (!in_array('mail', $disabled, true)) {
+        @ini_set('sendmail_from', $from);
+        if (@mail($to, $encodedSubject, $html, $headers, '-f' . $from)) {
+            return true;
+        }
+        if (@mail($to, $encodedSubject, $html, $headers)) {
+            return true;
+        }
     }
-    return $params !== ''
-        ? @mail($to, mailer_encode_header($subject), $html, $headers, $params)
-        : @mail($to, mailer_encode_header($subject), $html, $headers);
+    return mailer_sendmail_pipe($to, $encodedSubject, $html, $headers, $from);
 }
 
-function mailer_smtp_send(array $c, string $to, string $raw): void {
+function mailer_sendmail_pipe(string $to, string $subject, string $html, string $headers, string $from): bool {
+    $candidates = [];
+    $ini = trim((string) ini_get('sendmail_path'));
+    if ($ini !== '') {
+        $candidates[] = $ini;
+    }
+    $candidates[] = '/usr/sbin/sendmail -t -i';
+    $candidates[] = '/usr/sbin/sendmail -t -i -f' . $from;
+    $disabled = mailer_disabled_functions();
+    if (in_array('popen', $disabled, true) && in_array('proc_open', $disabled, true)) {
+        return false;
+    }
+    $raw = 'To: ' . $to . "\r\n" . 'Subject: ' . $subject . "\r\n" . $headers . "\r\n\r\n" . $html;
+    foreach ($candidates as $cmd) {
+        $cmd = trim($cmd);
+        if ($cmd === '') {
+            continue;
+        }
+        $fp = null;
+        if (!in_array('popen', $disabled, true)) {
+            $fp = @popen($cmd, 'w');
+        }
+        if (!$fp) {
+            continue;
+        }
+        $ok = @fwrite($fp, $raw) !== false;
+        $code = @pclose($fp);
+        if ($ok && $code === 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function mailer_smtp_send(array $c, string $to, string $raw, int $connectTimeout = 8): void {
     $host = $c['host'];
     $port = (int)$c['port'];
     $secure = $c['secure'];
@@ -470,7 +519,7 @@ function mailer_smtp_send(array $c, string $to, string $raw): void {
     }
     $ctx = stream_context_create(['ssl' => $ssl]);
 
-    $fp = @stream_socket_client($remote, $errno, $errstr, 8, STREAM_CLIENT_CONNECT, $ctx);
+    $fp = @stream_socket_client($remote, $errno, $errstr, max(1, $connectTimeout), STREAM_CLIENT_CONNECT, $ctx);
     if (!$fp) {
         throw new RuntimeException('SMTP bağlantısı kurulamadı: ' . $errstr);
     }
