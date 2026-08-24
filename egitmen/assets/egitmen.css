@@ -287,21 +287,57 @@ a { text-decoration: none; color: inherit; }
 }
 .nav-item.active i { color: #fff; }
 .nav-item.is-disabled { opacity: 0.32; pointer-events: none; }
+.nav-logout {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-radius: 12px;
+  color: #ffb4b4;
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+  min-height: 48px;
+}
+.nav-logout i {
+  width: 60px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 16px;
+}
+.nav-logout span {
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.sidebar:hover .nav-logout span,
+.sidebar.is-expanded .nav-logout span,
+.sidebar:focus-within .nav-logout span {
+  opacity: 1;
+  transform: none;
+}
+.nav-logout:hover { background: rgba(255, 92, 92, 0.14); color: #fff; }
 .side-logout,
 .top-logout {
   color: #c5cbe0;
   text-decoration: none;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
 }
 .side-logout { padding: 4px 10px; }
-.side-logout:hover,
-.top-logout:hover { color: #fff; }
+.side-logout:hover { color: #fff; }
 .top-logout {
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: #e74c3c;
+  color: #fff;
+  white-space: nowrap;
 }
+.top-logout:hover { background: #c0392b; color: #fff; }
 .side-foot {
   padding: 12px 12px 18px;
   display: flex;
@@ -1650,6 +1686,7 @@ a { text-decoration: none; color: inherit; }
   .sidebar.open { transform: translateX(0); }
   .sidebar .side-brand-text,
   .sidebar .nav-item span,
+  .sidebar .nav-logout span,
   .sidebar .side-user-meta {
     opacity: 1;
     transform: none;
@@ -1671,6 +1708,7 @@ a { text-decoration: none; color: inherit; }
   .top-user span:first-child { display: none; }
   .topbar-actions .btn-primary.sm span { display: none; }
   .topbar-actions .btn-primary.sm { padding: 11px 12px; }
+  .top-logout { padding: 10px 12px; font-size: 12px; }
   .view-wrap { padding: 12px 16px 48px; }
   .dash-kpi { grid-template-columns: 1fr; }
   .dash-hello h2 { font-size: 24px; }

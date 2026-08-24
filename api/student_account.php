@@ -276,17 +276,40 @@ function student_issue_token(PDO $pdo, $studentId, $purpose = 'reset', $ttlMinut
 /**
  * Jetonu doğrula ve tüket. Geçerliyse student_id, değilse 0 döner.
  */
-function student_read_token(): string {
-    $t = (string) ($_GET['token'] ?? $_GET['t'] ?? $_POST['token'] ?? '');
-    $t = strtolower(preg_replace('/[^a-f0-9]/i', '', $t) ?? '');
-    if ($t !== '') {
-        return $t;
+function student_extract_token(string $raw): string {
+    $raw = trim($raw);
+    if ($raw === '') {
+        return '';
     }
-    $uri = (string) ($_SERVER['REQUEST_URI'] ?? '');
-    if (preg_match('/sifre-sifirla\\.php\\/([a-f0-9]{32,128})/i', $uri, $m)) {
+    if (preg_match('/(?:^|[?&]|\\/)(?:token|t)=([a-f0-9]{32,128})/i', $raw, $m)) {
         return strtolower($m[1]);
     }
-    return strtolower(preg_replace('/[^a-f0-9]/i', '', trim((string) ($_SERVER['PATH_INFO'] ?? ''), '/')) ?? '');
+    if (preg_match('/sifre-sifirla\\.php\\/([a-f0-9]{32,128})/i', $raw, $m)) {
+        return strtolower($m[1]);
+    }
+    $clean = strtolower(preg_replace('/[^a-f0-9]/i', '', $raw) ?? '');
+    if (strlen($clean) >= 32 && strlen($clean) <= 128) {
+        return $clean;
+    }
+    return '';
+}
+
+function student_read_token(): string {
+    foreach ([$_GET['token'] ?? '', $_GET['t'] ?? '', $_POST['token'] ?? ''] as $cand) {
+        $t = student_extract_token((string) $cand);
+        if ($t !== '') {
+            return $t;
+        }
+    }
+    $qs = student_extract_token((string) ($_SERVER['QUERY_STRING'] ?? ''));
+    if ($qs !== '') {
+        return $qs;
+    }
+    $uri = student_extract_token((string) ($_SERVER['REQUEST_URI'] ?? ''));
+    if ($uri !== '') {
+        return $uri;
+    }
+    return student_extract_token(trim((string) ($_SERVER['PATH_INFO'] ?? ''), '/'));
 }
 
 function student_consume_token(PDO $pdo, $rawToken, $purpose = 'reset') {

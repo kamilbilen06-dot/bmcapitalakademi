@@ -66,8 +66,14 @@ $csrf = admin_csrf_token();
     <p class="login-sub">Panele girmek için kendi şifreni yaz.</p>
     <?php if ($error): ?><div class="alert err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
     <?php if (!$tokenValid): ?>
-      <div class="alert err">Bu bağlantı geçersiz. Yeni bağlantı isteyin.</div>
-      <p class="login-sub">Yönetici oturumu açıksa önce çıkış yapın.</p>
+      <div class="alert err"><?= $token === ''
+          ? 'Bağlantıda jeton yok. E-postadaki “Şifreyi Belirle” düğmesine tekrar tıklayın veya yeni bağlantı isteyin.'
+          : 'Bu bağlantı geçersiz. Yeni bağlantı isteyin.' ?></div>
+      <form method="get" action="sifre-belirle.php" style="margin:14px 0 8px">
+        <label>E-postadaki bağlantıyı yapıştırın</label>
+        <input type="text" name="token" placeholder="https://…/sifre-belirle.php?token=…" autocomplete="off">
+        <button type="submit" class="btn-primary">Bağlantıyı aç</button>
+      </form>
       <a class="btn-primary" href="sifremi-unuttum.php" style="display:block;text-align:center;text-decoration:none;margin-top:12px">Yeni bağlantı iste</a>
       <a class="login-back" href="logout.php">Çıkış yap (yönetici oturumu)</a>
     <?php else: ?>

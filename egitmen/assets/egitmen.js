@@ -2672,7 +2672,7 @@
   /* ---------- boot ---------- */
   window.__egitmenBooted = true;
 
-  document.querySelectorAll(".nav-item").forEach(function (a) {
+  document.querySelectorAll(".nav-item[data-view]").forEach(function (a) {
     a.addEventListener("click", function (e) {
       e.preventDefault();
       if (a.classList.contains("is-disabled")) return;

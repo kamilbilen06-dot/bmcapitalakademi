@@ -86,6 +86,9 @@ function site_mail_public_url(): string {
         $local = !filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
     }
     if (!$local) {
+        if (strcasecmp($host, 'bmcapitalakademi.com') === 0) {
+            return preg_replace('#://bmcapitalakademi\\.com#i', '://www.bmcapitalakademi.com', $u, 1);
+        }
         return $u;
     }
     return 'https://www.bmcapitalakademi.com';

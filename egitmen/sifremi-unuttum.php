@@ -1,6 +1,6 @@
 <?php
 /**
- * Eğitmen şifre sıfırlama talebi. Hesap varlığı sızdırılmaz.
+ * Eğitmen şifre sıfırlama talebi.
  */
 require_once __DIR__ . '/../api/db.php';
 require_once __DIR__ . '/../api/helpers.php';
@@ -32,9 +32,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             auth_ensure_schema($pdo);
             instructor_tokens_ensure($pdo);
             $st = $pdo->prepare(
-                "SELECT id FROM admin_users WHERE username = ? AND role = 'egitmen' LIMIT 1"
+                "SELECT u.id FROM admin_users u
+                 LEFT JOIN instructors i ON i.id = u.instructor_id
+                 WHERE u.role = 'egitmen' AND (u.username = ? OR i.email = ?)
+                 LIMIT 1"
             );
-            $st->execute([$email]);
+            $st->execute([$email, $email]);
             $userId = (int)$st->fetchColumn();
             if ($userId > 0) {
                 if (function_exists('session_write_close')) {
@@ -44,8 +47,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (instructor_invite_is_local($pendingInvite['link'] ?? '')) {
                     $devLink = $pendingInvite['link'];
                 }
+                $sent = true;
+            } else {
+                $error = 'Bu e-posta ile eğitmen hesabı bulunamadı.';
             }
-            $sent = true;
         } catch (Throwable $e) {
             $error = 'İşlem tamamlanamadı. Veritabanı bağlantısını kontrol edin.';
         }
@@ -53,13 +58,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = admin_csrf_token();
+$shouldDeferMail = is_array($pendingInvite) && mailer_is_configured() && !empty($pendingInvite['link']);
+if ($shouldDeferMail) {
+    ob_start();
+}
 ?><!DOCTYPE html>
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Şifremi Unuttum · Eğitmen — BM Capital</title>
-  <link rel="stylesheet" href="assets/egitmen.css">
+  <link rel="stylesheet" href="assets/egitmen.css?v=20260824a">
 </head>
 <body class="login-body">
   <form class="login-card" method="post" action="sifremi-unuttum.php" onsubmit="var b=this.querySelector('button'); if(b){b.disabled=true;b.textContent='Gönderiliyor...';}">
@@ -68,9 +77,9 @@ $csrf = admin_csrf_token();
     <p class="login-sub">E-postana şifre belirleme bağlantısı gönderilir.</p>
     <?php if ($error): ?><div class="alert err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
     <?php if ($sent): ?>
-      <div class="alert ok">İşlem alındı.<?= mailer_is_configured()
-          ? ' Bu adrese kayıtlı bir eğitmen varsa bağlantı gönderilir.'
-          : ' Canlıda SMTP yok; e-posta şu an gidemez. Yönetici → Eğitmenler → davet / şifre linkini açın.' ?></div>
+      <div class="alert ok"><?= mailer_is_configured()
+          ? 'Şifre sıfırlama bağlantısı gönderildi.'
+          : 'Canlıda SMTP yok; e-posta şu an gidemez. Yönetici → Eğitmenler → davet / şifre linkini açın.' ?></div>
       <?php if ($devLink !== ''): ?>
         <p class="login-sub"><a href="<?= htmlspecialchars($devLink) ?>">Yerel: şifreyi buradan belirle</a></p>
       <?php endif; ?>
@@ -86,15 +95,13 @@ $csrf = admin_csrf_token();
 </body>
 </html>
 <?php
-if (is_array($pendingInvite) && mailer_is_configured() && !empty($pendingInvite['link'])) {
-    mailer_finish_response();
-    try {
+if ($shouldDeferMail) {
+    $html = ob_get_clean();
+    mailer_respond_html_then($html, static function () use ($pendingInvite) {
         mailer_send_instructor_invite(
             $pendingInvite['email_payload'] ?? [],
             $pendingInvite['link'],
             (string) ($pendingInvite['purpose'] ?? 'reset')
         );
-    } catch (Throwable $e) {
-        error_log('egitmen reset mail: ' . $e->getMessage());
-    }
+    });
 }

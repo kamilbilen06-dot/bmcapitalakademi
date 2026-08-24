@@ -2,9 +2,7 @@
 /**
  * Şifre sıfırlama talebi.
  *
- * Hesabın var olup olmadığı dışarı sızdırılmaz: her durumda aynı mesaj döner.
- * SMTP yapılandırılmışsa e-posta gider. Yerelde gönderilemezse bağlantı
- * ekranda da gösterilir.
+ * Hesap varsa bağlantı gönderilir. Yoksa kayıt sayfasına yönlendirilir.
  */
 require_once __DIR__ . '/../api/student_account.php';
 require_once __DIR__ . '/../api/mailer.php';
@@ -34,16 +32,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = db();
             students_ensure_schema($pdo);
             $student = student_find_by_email($pdo, $email);
-            if ($student) {
-                if (function_exists('session_write_close')) {
-                    session_write_close();
-                }
-                $token = student_issue_token($pdo, (int)$student['id'], 'reset');
-                $link = student_reset_link($token);
-                $pendingReset = ['student' => $student, 'link' => $link];
-                if (ogrenci_is_local_env() || !mailer_url_is_safe($link)) {
-                    $devLink = 'sifre-sifirla.php?token=' . urlencode($token);
-                }
+            if (!$student) {
+                header('Location: kayit.php?from=reset&email=' . rawurlencode(student_normalize_email($email)));
+                exit;
+            }
+            if (function_exists('session_write_close')) {
+                session_write_close();
+            }
+            $token = student_issue_token($pdo, (int)$student['id'], 'reset');
+            $link = student_reset_link($token);
+            $pendingReset = ['student' => $student, 'link' => $link];
+            if (ogrenci_is_local_env() || !mailer_url_is_safe($link)) {
+                $devLink = 'sifre-sifirla.php?token=' . urlencode($token);
             }
             $sent = true;
         } catch (Throwable $e) {
@@ -53,6 +53,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = student_csrf_token();
+$shouldDeferMail = is_array($pendingReset) && mailer_is_configured();
+if ($shouldDeferMail) {
+    ob_start();
+}
 
 ogrenci_head('Şifremi Unuttum', 'page-auth');
 ?>
@@ -72,7 +76,7 @@ ogrenci_head('Şifremi Unuttum', 'page-auth');
         <div class="alert alert-ok">
           <i class="fa-solid fa-paper-plane"></i>
           <span><?= mailer_is_configured()
-              ? 'Bu adrese kayıtlı bir hesap varsa bağlantı gönderildi.'
+              ? 'Şifre sıfırlama bağlantısı gönderildi.'
               : 'E-posta şu an gönderilemiyor (SMTP). public_html/api/mail_config.local.php dosyasını kontrol edin.' ?></span>
         </div>
         <?php if ($devLink !== ''): ?>
@@ -106,12 +110,10 @@ ogrenci_head('Şifremi Unuttum', 'page-auth');
 </div>
 <?php
 ogrenci_foot();
-if (is_array($pendingReset) && mailer_is_configured()) {
-    mailer_finish_response();
-    try {
+if ($shouldDeferMail) {
+    $html = ob_get_clean();
+    mailer_respond_html_then($html, static function () use ($pendingReset) {
         mailer_send_reset($pendingReset['student'], $pendingReset['link']);
-    } catch (Throwable $e) {
-        error_log('ogrenci reset mail: ' . $e->getMessage());
-    }
+    });
 }
 ?>

@@ -13,10 +13,36 @@ function mailer_finish_response(): void {
         @fastcgi_finish_request();
         return;
     }
+    if (function_exists('litespeed_finish_request')) {
+        @litespeed_finish_request();
+        return;
+    }
     while (ob_get_level() > 0) {
         @ob_end_flush();
     }
     @flush();
+}
+
+/** Sayfayı hemen kapat, SMTP'yi kullanıcı beklemeden gönder. */
+function mailer_respond_html_then(string $html, callable $after): void {
+    ignore_user_abort(true);
+    @set_time_limit(90);
+    if (function_exists('apache_setenv')) {
+        @apache_setenv('no-gzip', '1');
+    }
+    @ini_set('zlib.output_compression', '0');
+    if (!headers_sent()) {
+        header('Content-Type: text/html; charset=UTF-8');
+        header('Content-Length: ' . (string) strlen($html));
+        header('Connection: close');
+    }
+    echo $html;
+    mailer_finish_response();
+    try {
+        $after();
+    } catch (Throwable $e) {
+        error_log('mailer_respond_html_then: ' . $e->getMessage());
+    }
 }
 
 /**

@@ -20,6 +20,10 @@ $error = '';
 $name = '';
 $email = '';
 $marketing = false;
+$fromReset = (string)($_GET['from'] ?? '') === 'reset';
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $email = clean($_GET['email'] ?? '');
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = clean($_POST['name'] ?? '');
@@ -77,6 +81,8 @@ ogrenci_head('Ücretsiz Kayıt', 'page-auth');
 
       <?php if ($error !== ''): ?>
         <div class="alert alert-err"><i class="fa-solid fa-circle-exclamation"></i><span><?= ogrenci_e($error) ?></span></div>
+      <?php elseif ($fromReset): ?>
+        <div class="alert alert-info"><i class="fa-solid fa-circle-info"></i><span>Bu e-posta ile kayıtlı hesap bulunamadı. Ücretsiz hesap oluşturabilirsiniz.</span></div>
       <?php endif; ?>
 
       <?php ogrenci_social_buttons($next); ?>
