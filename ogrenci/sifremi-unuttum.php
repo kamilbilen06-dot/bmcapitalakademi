@@ -2,8 +2,8 @@
 /**
  * Şifre sıfırlama talebi.
  *
- * Hesap varsa bağlantı kuyruğa alınır ve sayfa hemen “gönderildi” der.
- * SMTP arka planda gider.
+ * Hesap varsa Gmail SMTP ile bağlantı gönderilir (eğitmen paneliyle aynı yol).
+ * Yoksa kayıt sayfasına yönlendirilir.
  */
 require_once __DIR__ . '/../api/student_account.php';
 require_once __DIR__ . '/../api/mailer.php';
@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!empty($res['ok'])) {
                     $sent = true;
                 } else {
-                    $error = 'Sunucu e-postayı gönderemedi. cPanel → Email → Track Delivery kaydına bakın.';
+                    $error = 'E-posta gönderilemedi. Birkaç saniye sonra tekrar deneyin.';
                 }
             }
         } catch (Throwable $e) {

@@ -242,27 +242,7 @@ function mailer_config(): array {
     if ($cfg['port'] <= 0) {
         $cfg['port'] = $cfg['secure'] === 'ssl' ? 465 : 587;
     }
-
-    $reply = '';
-    if (filter_var((string) ($cfg['from'] ?? ''), FILTER_VALIDATE_EMAIL) && str_contains(strtolower($cfg['from']), 'gmail.com')) {
-        $reply = $cfg['from'];
-    }
-    if (mailer_use_local()) {
-        $cfg['from'] = mailer_domain_from();
-        $cfg['from_name'] = $fromName;
-        $cfg['host'] = 'localhost';
-        $cfg['port'] = 25;
-        $cfg['secure'] = 'none';
-        $cfg['user'] = '';
-        $cfg['pass'] = '';
-    }
-    if ($reply === '') {
-        $reply = function_exists('mailer_ops_inbox') ? mailer_ops_inbox() : $cfg['from'];
-    }
-    if (!filter_var($reply, FILTER_VALIDATE_EMAIL)) {
-        $reply = $cfg['from'];
-    }
-    $cfg['reply_to'] = $reply;
+    $cfg['reply_to'] = $cfg['from'];
 
     $cached = $cfg;
     return $cached;
@@ -295,43 +275,17 @@ function mailer_ops_inbox(): string {
 }
 
 function mailer_use_local(): bool {
-    $hosts = [];
-    $http = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
-    $hosts[] = preg_replace('/:\\d+$/', '', $http);
-    if (defined('PUBLIC_SITE_URL')) {
-        $hosts[] = strtolower((string) (parse_url((string) PUBLIC_SITE_URL, PHP_URL_HOST) ?? ''));
-    }
-    foreach ($hosts as $h) {
-        if ($h !== '' && str_contains($h, 'bmcapitalakademi.com')) {
-            return true;
-        }
-    }
-    $root = strtolower(str_replace('\\', '/', dirname(__DIR__)));
-    if (str_contains($root, '/public_html')) {
-        return true;
-    }
-    if (defined('SMTP_DRIVER')) {
-        $d = strtolower(trim((string) SMTP_DRIVER));
-        if (in_array($d, ['local', 'mail', 'sendmail'], true)) {
-            return true;
-        }
-        if ($d === 'smtp') {
-            return false;
-        }
-    }
     return false;
 }
 
 function mailer_domain_from(): string {
-    return 'noreply@bmcapitalakademi.com';
+    $c = mailer_config();
+    return (string) ($c['from'] ?? 'bmcapitalakademi@gmail.com');
 }
 
 function mailer_is_configured(): bool {
-    if (mailer_use_local()) {
-        return true;
-    }
     $c = mailer_config();
-    return $c['host'] !== '' && $c['from'] !== '';
+    return $c['host'] !== '' && $c['from'] !== '' && $c['pass'] !== '';
 }
 
 function mailer_encode_header(string $text): string {
@@ -393,47 +347,13 @@ function mailer_send(string $to, string $subject, string $html, string $text = '
         '--' . $boundary . "--\n";
     $raw = implode("\n", $headers) . "\n\n" . $body;
 
-    if (mailer_use_local()) {
-        if (mailer_php_mail($to, $subject, $html, $c)) {
-            return ['ok' => true, 'error' => ''];
-        }
-        foreach ([
-            ['host' => '127.0.0.1', 'port' => 25, 'secure' => 'none'],
-            ['host' => '127.0.0.1', 'port' => 587, 'secure' => 'none'],
-            ['host' => 'localhost', 'port' => 25, 'secure' => 'none'],
-        ] as $try) {
-            $local = array_merge($c, $try, ['user' => '', 'pass' => '']);
-            try {
-                mailer_smtp_send($local, $to, $raw, 2);
-                return ['ok' => true, 'error' => ''];
-            } catch (Throwable $e) {
-                error_log('mailer local smtp ' . $try['host'] . ':' . $try['port'] . ': ' . $e->getMessage());
-            }
-        }
-        return ['ok' => false, 'error' => 'E-posta gönderilemedi'];
-    }
-
     try {
         mailer_smtp_send($c, $to, $raw);
         return ['ok' => true, 'error' => ''];
     } catch (Throwable $e) {
         error_log('mailer smtp: ' . $e->getMessage());
+        return ['ok' => false, 'error' => $e->getMessage()];
     }
-    $alt = $c;
-    $alt['port'] = 465;
-    $alt['secure'] = 'ssl';
-    if ((int) $c['port'] !== 465) {
-        try {
-            mailer_smtp_send($alt, $to, $raw);
-            return ['ok' => true, 'error' => ''];
-        } catch (Throwable $e) {
-            error_log('mailer smtp 465: ' . $e->getMessage());
-        }
-    }
-    if (mailer_php_mail($to, $subject, $html, $c)) {
-        return ['ok' => true, 'error' => ''];
-    }
-    return ['ok' => false, 'error' => 'E-posta gönderilemedi'];
 }
 
 function mailer_php_mail(string $to, string $subject, string $html, array $c): bool {

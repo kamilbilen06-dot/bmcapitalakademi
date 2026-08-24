@@ -1136,7 +1136,7 @@
         '"></div>' +
         "</div>" +
         '<h3 style="margin:22px 0 4px;font-size:15px">Öğrenci e-postaları (SMTP)</h3>' +
-        '<p class="hint" style="margin:0 0 12px">Canlı sitede mail cPanel üzerinden gider (noreply@bmcapitalakademi.com), Gmail SMTP kullanılmaz. Bu alanlar yalnızca yerel test içindir. cPanel → Email Deliverability içinde SPF ve DKIM açık olsun.</p>' +
+        '<p class="hint" style="margin:0 0 12px">Kayıt doğrulama ve şifre sıfırlama Gmail SMTP ile gider. Boş şifre alanı kayıtlı şifreyi değiştirmez.</p>' +
         '<div class="form-grid">' +
         fld("smtp_host", "SMTP sunucu") + fld("smtp_port", "Port (587 / 465)") +
         '<div class="field"><label>Şifreleme</label><select name="smtp_secure">' +

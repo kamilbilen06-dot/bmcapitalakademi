@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!empty($res['ok'])) {
                         $sent = true;
                     } else {
-                        $error = 'Sunucu e-postayı gönderemedi. cPanel → Email → Track Delivery kaydına bakın.';
+                        $error = 'E-posta gönderilemedi. Birkaç saniye sonra tekrar deneyin.';
                     }
                 }
             }
