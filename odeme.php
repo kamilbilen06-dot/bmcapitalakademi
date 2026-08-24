@@ -198,6 +198,8 @@ $img = trim((string)($course['image_path'] ?? ''));
                   <p class="ck-note">Kart bilgileriniz iyzico’nun güvenli sayfasında girilir; bu sitede kart numarası tutulmaz. Onayladığınızda 3D Secure adımına yönlendirilirsiniz.</p>
                   <?php if (!iyzico_ready()): ?>
                     <div class="ck-alert warn" style="margin:0;"><i class="fa-solid fa-triangle-exclamation"></i><span>Kart ile ödeme henüz yapılandırılmadı.</span></div>
+                  <?php elseif (iyzico_is_sandbox()): ?>
+                    <div class="ck-alert warn" style="margin:0;"><i class="fa-solid fa-flask"></i><span>Test modu: gerçek para çekilmez, yalnızca iyzico test kartları çalışır.</span></div>
                   <?php endif; ?>
                 </div>
               </div>

@@ -12,8 +12,19 @@
  * Kurulum kontrolü: GET /api/iyzico_status.php
  */
 
+/**
+ * Anahtar kaynağı: canlı/kişisel anahtarlar local dosyadan gelir. O dosya yoksa
+ * Git'teki sandbox anahtarlarına düşülür; böylece test ortamı deploy ile hazır
+ * olur. Local dosya varken sandbox dosyasına hiç bakılmaz.
+ */
 if (is_file(__DIR__ . '/iyzico_config.local.php')) {
     require __DIR__ . '/iyzico_config.local.php';
+    define('IYZICO_KEY_SOURCE', 'local');
+} elseif (is_file(__DIR__ . '/iyzico_config.sandbox.php')) {
+    require __DIR__ . '/iyzico_config.sandbox.php';
+    define('IYZICO_KEY_SOURCE', 'sandbox-file');
+} else {
+    define('IYZICO_KEY_SOURCE', 'none');
 }
 
 if (!defined('IYZICO_API_KEY')) {

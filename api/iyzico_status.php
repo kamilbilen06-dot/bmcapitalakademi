@@ -15,6 +15,7 @@ json_out([
     'ready' => iyzico_ready(),
     'apiKeySet' => $key !== '',
     'secretKeySet' => IYZICO_SECRET_KEY !== '',
+    'keySource' => defined('IYZICO_KEY_SOURCE') ? IYZICO_KEY_SOURCE : 'none',
     'testMode' => iyzico_is_sandbox(),
     'baseUrl' => iyzico_base_url(),
     'callbackUrl' => iyzico_callback_url(),
