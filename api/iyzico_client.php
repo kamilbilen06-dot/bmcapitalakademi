@@ -793,6 +793,40 @@ function iyzico_sub_products_list(int $page = 1, int $count = 50): array {
     return is_array($items) ? $items : [];
 }
 
+/**
+ * Tüm abonelik ürünlerini istek başına bir kez çek, sonra bellekten dön.
+ *
+ * Ödeme sayfası açılırken plan çözümü aynı istek içinde ürün listesini birkaç
+ * kez soruyordu; her GET cPanel'den iyzico'ya 1-4 sn sürdüğü için sayfa geç
+ * geliyordu. Statik önbellek bu tekrar isteklerini tek çağrıya indirir.
+ *
+ * @return array<int, array<string,mixed>>
+ */
+function iyzico_sub_products_all(): array {
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+    $all = [];
+    // Bu hesapta ürün sayısı azdır; 100'lük tek sayfa yeterli, en çok 2 sayfa.
+    for ($page = 1; $page <= 2; $page++) {
+        $items = iyzico_sub_products_list($page, 100);
+        if ($items === []) {
+            break;
+        }
+        foreach ($items as $item) {
+            if (is_array($item)) {
+                $all[] = $item;
+            }
+        }
+        if (count($items) < 100) {
+            break;
+        }
+    }
+    $cache = $all;
+    return $all;
+}
+
 /** Ürün adına göre mevcut abonelik ürününü bul (tam eşleşme, sonra kısmi). */
 function iyzico_sub_product_find_by_name(string $name): ?array {
     $name = trim($name);
@@ -801,25 +835,13 @@ function iyzico_sub_product_find_by_name(string $name): ?array {
     }
     $target = mb_strtolower($name);
     $partial = null;
-    for ($page = 1; $page <= 5; $page++) {
-        $items = iyzico_sub_products_list($page, 50);
-        if ($items === []) {
-            break;
+    foreach (iyzico_sub_products_all() as $item) {
+        $itemName = mb_strtolower(trim((string)($item['name'] ?? '')));
+        if ($itemName === $target) {
+            return $item;
         }
-        foreach ($items as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
-            $itemName = mb_strtolower(trim((string)($item['name'] ?? '')));
-            if ($itemName === $target) {
-                return $item;
-            }
-            if ($partial === null && $itemName !== '' && (str_contains($itemName, $target) || str_contains($target, $itemName))) {
-                $partial = $item;
-            }
-        }
-        if (count($items) < 50) {
-            break;
+        if ($partial === null && $itemName !== '' && (str_contains($itemName, $target) || str_contains($target, $itemName))) {
+            $partial = $item;
         }
     }
     return $partial;

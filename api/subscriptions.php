@@ -338,9 +338,8 @@ function subscription_ensure_iyzico_plan(PDO $pdo, string $excludePlanRef = ''):
         if (!is_array($productRow) || trim((string)($productRow['referenceCode'] ?? '')) !== $productRef) {
             $productRow = iyzico_sub_product_find_by_name($title);
             if (!is_array($productRow) || trim((string)($productRow['referenceCode'] ?? '')) !== $productRef) {
-                $listed = iyzico_sub_products_list(1, 100);
-                foreach ($listed as $item) {
-                    if (is_array($item) && trim((string)($item['referenceCode'] ?? '')) === $productRef) {
+                foreach (iyzico_sub_products_all() as $item) {
+                    if (trim((string)($item['referenceCode'] ?? '')) === $productRef) {
                         $productRow = $item;
                         break;
                     }
@@ -355,9 +354,8 @@ function subscription_ensure_iyzico_plan(PDO $pdo, string $excludePlanRef = ''):
     if ($planRef === '' || $storedInterval !== $interval || $storedPrice !== $price) {
         $plan = iyzico_sub_plan_create($productRef, $planName, $price, $interval);
         if (!$plan['ok']) {
-            $listed = iyzico_sub_products_list(1, 100);
-            foreach ($listed as $item) {
-                if (is_array($item) && trim((string)($item['referenceCode'] ?? '')) === $productRef) {
+            foreach (iyzico_sub_products_all() as $item) {
+                if (trim((string)($item['referenceCode'] ?? '')) === $productRef) {
                     $planRef = iyzico_sub_plan_pick($item, $price, $interval, $excludePlanRef);
                     if ($planRef !== '') {
                         break;

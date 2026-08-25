@@ -102,6 +102,49 @@ try {
     $stuck = [];
 }
 
+// Kurs ödemeleri: "eğitim aldım ama İşlem Listesinde yok" durumunu teşhis için.
+// paid + provider_payment_id dolu ise iyzico gerçekten tahsil etmiştir; o kayit
+// sandbox-merchant İşlem Listesinde de görünmelidir. paid ama payment_id bossa
+// veya status pending/failed ise tahsilat gerceklesmemistir.
+$courseOrders = [];
+$courseSummary = ['paid_with_id' => 0, 'paid_no_id' => 0, 'pending' => 0, 'failed' => 0, 'review' => 0, 'other' => 0];
+try {
+    $st = $pdo->query(
+        "SELECT id, merchant_oid, student_email, amount_kurus, status,
+                provider_payment_id, provider_transaction_id, error_message, created_at, paid_at
+         FROM payment_orders
+         WHERE provider = 'iyzico'
+         ORDER BY id DESC LIMIT 30"
+    );
+    foreach ($st->fetchAll() as $o) {
+        $status = (string)$o['status'];
+        $hasId = trim((string)$o['provider_payment_id']) !== '';
+        if ($status === 'paid' && $hasId) {
+            $courseSummary['paid_with_id']++;
+        } elseif ($status === 'paid') {
+            $courseSummary['paid_no_id']++;
+        } elseif (isset($courseSummary[$status])) {
+            $courseSummary[$status]++;
+        } else {
+            $courseSummary['other']++;
+        }
+        $courseOrders[] = [
+            'id' => (int)$o['id'],
+            'ref' => (string)$o['merchant_oid'],
+            'email' => (string)$o['student_email'],
+            'tutar' => number_format(((int)$o['amount_kurus']) / 100, 2, ',', '.'),
+            'status' => $status,
+            'iyzicoPaymentId' => (string)$o['provider_payment_id'],
+            'iyzicoTxId' => (string)$o['provider_transaction_id'],
+            'hata' => (string)$o['error_message'],
+            'created_at' => (string)$o['created_at'],
+            'paid_at' => (string)($o['paid_at'] ?? ''),
+        ];
+    }
+} catch (Throwable $e) {
+    $courseOrders = [];
+}
+
 $warnings = [];
 if ($activePlan && !$activePlan['tahsilatYapar']) {
     $warnings[] = 'KULLANILAN PLAN TAHSILAT YAPMIYOR: trialPeriodDays=' . $activePlan['trialPeriodDays']
@@ -131,5 +174,9 @@ json_out([
     'warnings' => $warnings,
     'dbStatusCounts' => $counts,
     'dogrulanmamisKayitlar' => $stuck,
-    'note' => 'Tahsilat kaydi https://sandbox-merchant.iyzipay.com/transactions adresinde gorunur.',
+    'kursOdemeOzeti' => $courseSummary,
+    'kursOdemeleri' => $courseOrders,
+    'note' => 'Tahsilat kaydi https://sandbox-merchant.iyzipay.com/transactions adresinde gorunur. '
+        . 'paid_with_id > 0 ise o odemeler iyzico tarafinda tahsil edilmistir ve Islem Listesinde '
+        . 'gorunmelidir; tarih filtresini bugunu kapsayacak sekilde genisletin.',
 ]);
