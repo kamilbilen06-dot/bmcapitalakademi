@@ -416,8 +416,11 @@ function subscription_notify_new(PDO $pdo, array $row): void {
             return;
         }
         require_once __DIR__ . '/mailer.php';
-        mailer_notify_subscription_new($row);
-        mailer_notify_subscription_student_new($row);
+        $rowCopy = $row;
+        mailer_defer(static function () use ($rowCopy) {
+            mailer_notify_subscription_new($rowCopy);
+            mailer_notify_subscription_student_new($rowCopy);
+        });
     } catch (Throwable $e) {
         error_log('abonelik maili: ' . $e->getMessage());
     }

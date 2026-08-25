@@ -206,7 +206,10 @@ function payments_grant_enrollment(PDO $pdo, array $order, string $source): int 
 
     try {
         require_once __DIR__ . '/mailer.php';
-        mailer_notify_order_paid($pdo, $order);
+        $orderCopy = $order;
+        mailer_defer(static function () use ($pdo, $orderCopy) {
+            mailer_notify_order_paid($pdo, $orderCopy);
+        });
     } catch (Throwable $e) {
         error_log('odeme maili: ' . $e->getMessage());
     }
@@ -366,7 +369,10 @@ function payments_log_write(?int $orderId, string $provider, string $direction, 
 function payments_notify_review(array $order): void {
     try {
         require_once __DIR__ . '/mailer.php';
-        mailer_notify_review_order($order);
+        $orderCopy = $order;
+        mailer_defer(static function () use ($orderCopy) {
+            mailer_notify_review_order($orderCopy);
+        });
     } catch (Throwable $e) {
         error_log('inceleme maili: ' . $e->getMessage());
     }

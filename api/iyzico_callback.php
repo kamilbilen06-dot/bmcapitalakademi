@@ -35,6 +35,10 @@ if ($token === '') {
     callback_redirect('odeme-basarisiz.html', '', 'Ödeme bilgisi alınamadı.');
 }
 
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
 try {
     $pdo = db();
     payments_ensure_schema($pdo);

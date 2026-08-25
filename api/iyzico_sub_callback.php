@@ -26,6 +26,10 @@ if ($token === '') {
     sub_callback_redirect('0', 'Ödeme bilgisi alınamadı.');
 }
 
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
 try {
     $pdo = db();
     subscriptions_ensure_schema($pdo);

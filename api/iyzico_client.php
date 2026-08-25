@@ -75,7 +75,8 @@ function iyzico_request(string $uriPath, array $payload): array {
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => $body,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 30,
+        CURLOPT_TIMEOUT => 12,
+        CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_HTTPHEADER => [
             'Authorization: ' . $authHeader,
             'x-iyzi-rnd: ' . $randomKey,
@@ -133,7 +134,8 @@ function iyzico_get(string $uriPath, array $query = []): array {
     curl_setopt_array($ch, [
         CURLOPT_HTTPGET => true,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 30,
+        CURLOPT_TIMEOUT => 12,
+        CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_HTTPHEADER => [
             'Authorization: ' . $authHeader,
             'x-iyzi-rnd: ' . $randomKey,
@@ -705,13 +707,14 @@ function iyzico_sub_checkout_retrieve(string $token, string $conversationId = ''
         return ['ok' => false, 'active' => false, 'error' => 'Jeton yok.', 'reason' => 'config', 'data' => [], 'inner' => []];
     }
 
-    $res = iyzico_get('/v2/subscription/checkoutform/' . rawurlencode($token));
-    if (!$res['ok']) {
-        $body = ['locale' => 'tr', 'token' => $token];
-        if ($conversationId !== '') {
-            $body['conversationId'] = $conversationId;
-        }
-        $res = iyzico_request(IYZICO_PATH_SUB_CF_RETRIEVE, $body);
+    $body = ['locale' => 'tr', 'token' => $token];
+    if ($conversationId !== '') {
+        $body['conversationId'] = $conversationId;
+    }
+    // POST retrieve tek istek — GET başarısız olunca ikinci tur bekletmesin (callback ~15 sn gecikme yapıyordu).
+    $res = iyzico_request(IYZICO_PATH_SUB_CF_RETRIEVE, $body);
+    if (!$res['ok'] && ($res['reason'] ?? '') !== 'api') {
+        $res = iyzico_get('/v2/subscription/checkoutform/' . rawurlencode($token));
     }
     if (!$res['ok']) {
         return [

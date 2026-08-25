@@ -43,4 +43,6 @@ json_out([
         'caFile' => iyzico_ca_file() !== '' ? iyzico_ca_file() : '(bulunamadi)',
     ],
     'note' => 'Sandbox kilitli. Gercek tahsilat yok. Islemler sandbox-merchant.iyzipay.com panelinde gorunur.',
+    'sandboxMerchantUrl' => 'https://sandbox-merchant.iyzipay.com',
+    'sandboxTransactionsUrl' => 'https://sandbox-merchant.iyzipay.com/transactions',
 ]);
