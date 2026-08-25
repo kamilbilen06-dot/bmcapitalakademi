@@ -1136,7 +1136,7 @@
         '"></div>' +
         "</div>" +
         '<h3 style="margin:22px 0 4px;font-size:15px">Kart ödemesi (iyzico sandbox)</h3>' +
-        '<p class="hint" style="margin:0 0 12px">Gerçek tahsilat kapalı. Yerel ve canlı site aynı test ortamını kullanır; para çekilmez. İşlemleri <b>sandbox-merchant.iyzipay.com</b> → İşlemler’de görün; canlı merchant panelinde görünmez.</p>' +
+        '<p class="hint" style="margin:0 0 12px">Gerçek tahsilat kapalı (sandbox). Test ödemeleri yalnızca <b>sandbox-merchant.iyzipay.com</b> → İşlemler’de görünür; canlı merchant panelinde görünmez. Site admin → Ödeme olayları canlı sunucu kayıtlarını gösterir.</p>' +
         '<p class="hint" style="margin:0 0 12px">Durum: ' +
         ((s.iyzico_ready === "1") ? "sandbox açık" : "sandbox kapalı") +
         " · kaynak: " + esc(s.iyzico_key_source || "yok") +

@@ -196,6 +196,47 @@ function subscription_iyzico_env(): string {
     return iyzico_is_sandbox() ? 'sandbox' : 'live';
 }
 
+/** settings’teki iyzico abonelik referans anahtarları */
+function subscription_iyzico_setting_keys(string $env): array {
+    return [
+        'product' => 'sub_iyzico_product_ref_' . $env,
+        'plan' => 'sub_iyzico_plan_ref_' . $env,
+        'interval' => 'sub_iyzico_plan_interval_' . $env,
+        'price' => 'sub_iyzico_plan_price_' . $env,
+    ];
+}
+
+function subscription_save_iyzico_plan_refs(
+    PDO $pdo,
+    string $env,
+    string $productRef,
+    string $planRef,
+    string $interval,
+    string $price
+): void {
+    $keys = subscription_iyzico_setting_keys($env);
+    subscription_set_setting($pdo, $keys['product'], $productRef);
+    subscription_set_setting($pdo, $keys['plan'], $planRef);
+    subscription_set_setting($pdo, $keys['interval'], $interval);
+    subscription_set_setting($pdo, $keys['price'], $price);
+    if ($env === 'live') {
+        subscription_set_setting($pdo, 'sub_iyzico_product_ref', $productRef);
+        subscription_set_setting($pdo, 'sub_iyzico_plan_ref', $planRef);
+        subscription_set_setting($pdo, 'sub_iyzico_plan_interval', $interval);
+        subscription_set_setting($pdo, 'sub_iyzico_plan_price', $price);
+    }
+}
+
+/** Eski tek set ayarlar (yerel DB’den kalan) — sandbox/canlı ayrımı yokken kaydedilmiş olabilir. */
+function subscription_legacy_iyzico_refs(PDO $pdo): array {
+    return [
+        'product' => subscription_setting($pdo, 'sub_iyzico_product_ref', ''),
+        'plan' => subscription_setting($pdo, 'sub_iyzico_plan_ref', ''),
+        'interval' => subscription_setting($pdo, 'sub_iyzico_plan_interval', ''),
+        'price' => subscription_setting($pdo, 'sub_iyzico_plan_price', ''),
+    ];
+}
+
 function subscription_ensure_iyzico_plan(PDO $pdo): array {
     $interval = subscription_interval();
     $kurus = subscription_price_kurus($pdo);
@@ -204,22 +245,27 @@ function subscription_ensure_iyzico_plan(PDO $pdo): array {
     }
     $price = payments_kurus_to_decimal($kurus);
     $env = subscription_iyzico_env();
-    $productKey = 'sub_iyzico_product_ref_' . $env;
-    $planKey = 'sub_iyzico_plan_ref_' . $env;
-    $intervalKey = 'sub_iyzico_plan_interval_' . $env;
-    $priceKey = 'sub_iyzico_plan_price_' . $env;
+    $keys = subscription_iyzico_setting_keys($env);
 
-    $productRef = subscription_setting($pdo, $productKey, '');
-    $planRef = subscription_setting($pdo, $planKey, '');
-    $storedInterval = subscription_setting($pdo, $intervalKey, '');
-    $storedPrice = subscription_setting($pdo, $priceKey, '');
+    $productRef = subscription_setting($pdo, $keys['product'], '');
+    $planRef = subscription_setting($pdo, $keys['plan'], '');
+    $storedInterval = subscription_setting($pdo, $keys['interval'], '');
+    $storedPrice = subscription_setting($pdo, $keys['price'], '');
 
-    // Eski tek set kayıtlar canlı plandı; sandbox'ta kullanılmaz.
-    if ($env === 'live' && $productRef === '') {
-        $productRef = subscription_setting($pdo, 'sub_iyzico_product_ref', '');
-        $planRef = subscription_setting($pdo, 'sub_iyzico_plan_ref', '');
-        $storedInterval = subscription_setting($pdo, 'sub_iyzico_plan_interval', '');
-        $storedPrice = subscription_setting($pdo, 'sub_iyzico_plan_price', '');
+    if ($productRef === '' || $planRef === '') {
+        $legacy = subscription_legacy_iyzico_refs($pdo);
+        if ($productRef === '' && $legacy['product'] !== '') {
+            $productRef = $legacy['product'];
+        }
+        if ($planRef === '' && $legacy['plan'] !== '') {
+            $planRef = $legacy['plan'];
+        }
+        if ($storedInterval === '' && $legacy['interval'] !== '') {
+            $storedInterval = $legacy['interval'];
+        }
+        if ($storedPrice === '' && $legacy['price'] !== '') {
+            $storedPrice = $legacy['price'];
+        }
     }
 
     if ($productRef !== '' && $planRef !== '' && $storedInterval === $interval && $storedPrice === $price) {
@@ -231,39 +277,81 @@ function subscription_ensure_iyzico_plan(PDO $pdo): array {
     }
 
     $title = subscription_title($pdo);
-    if ($productRef === '') {
-        $created = iyzico_sub_product_create($title, subscription_blurb($pdo));
-        if (!$created['ok']) {
-            return ['ok' => false, 'productRef' => '', 'planRef' => '', 'interval' => $interval, 'price' => $price, 'error' => iyzico_sub_addon_hint($created['error'])];
-        }
-        $inner = iyzico_v2_data($created['data']);
-        $productRef = (string)($inner['referenceCode'] ?? $inner['productReferenceCode'] ?? '');
-        if ($productRef === '') {
-            return ['ok' => false, 'productRef' => '', 'planRef' => '', 'interval' => $interval, 'price' => $price, 'error' => 'iyzico ürün referansı dönmedi.'];
-        }
-    }
-
+    $blurb = subscription_blurb($pdo);
     $planName = $interval === 'DAILY' ? ($title . ' (günlük test)') : ($title . ' (aylık)');
-    $plan = iyzico_sub_plan_create($productRef, $planName, $price, $interval);
-    if (!$plan['ok']) {
-        return ['ok' => false, 'productRef' => $productRef, 'planRef' => '', 'interval' => $interval, 'price' => $price, 'error' => iyzico_sub_addon_hint($plan['error'])];
-    }
-    $inner = iyzico_v2_data($plan['data']);
-    $planRef = (string)($inner['referenceCode'] ?? $inner['pricingPlanReferenceCode'] ?? '');
-    if ($planRef === '') {
-        return ['ok' => false, 'productRef' => $productRef, 'planRef' => '', 'interval' => $interval, 'price' => $price, 'error' => 'iyzico plan referansı dönmedi.'];
+    $productRow = null;
+
+    if ($productRef === '') {
+        $productRow = iyzico_sub_product_find_by_name($title);
+        if (is_array($productRow)) {
+            $productRef = trim((string)($productRow['referenceCode'] ?? ''));
+        }
     }
 
-    subscription_set_setting($pdo, $productKey, $productRef);
-    subscription_set_setting($pdo, $planKey, $planRef);
-    subscription_set_setting($pdo, $intervalKey, $interval);
-    subscription_set_setting($pdo, $priceKey, $price);
-    if ($env === 'live') {
-        subscription_set_setting($pdo, 'sub_iyzico_product_ref', $productRef);
-        subscription_set_setting($pdo, 'sub_iyzico_plan_ref', $planRef);
-        subscription_set_setting($pdo, 'sub_iyzico_plan_interval', $interval);
-        subscription_set_setting($pdo, 'sub_iyzico_plan_price', $price);
+    if ($productRef === '') {
+        $created = iyzico_sub_product_create($title, $blurb);
+        if (!$created['ok']) {
+            if (iyzico_sub_error_is_duplicate($created['error'])) {
+                $productRow = iyzico_sub_product_find_by_name($title);
+                $productRef = is_array($productRow)
+                    ? trim((string)($productRow['referenceCode'] ?? ''))
+                    : '';
+            }
+            if ($productRef === '') {
+                return ['ok' => false, 'productRef' => '', 'planRef' => '', 'interval' => $interval, 'price' => $price, 'error' => iyzico_sub_addon_hint($created['error'])];
+            }
+        } else {
+            $inner = iyzico_v2_data($created['data']);
+            $productRef = (string)($inner['referenceCode'] ?? $inner['productReferenceCode'] ?? '');
+            if ($productRef === '') {
+                return ['ok' => false, 'productRef' => '', 'planRef' => '', 'interval' => $interval, 'price' => $price, 'error' => 'iyzico ürün referansı dönmedi.'];
+            }
+        }
     }
+
+    if ($planRef === '' || $storedInterval !== $interval || $storedPrice !== $price) {
+        if (!is_array($productRow) || trim((string)($productRow['referenceCode'] ?? '')) !== $productRef) {
+            $productRow = iyzico_sub_product_find_by_name($title);
+            if (!is_array($productRow) || trim((string)($productRow['referenceCode'] ?? '')) !== $productRef) {
+                $listed = iyzico_sub_products_list(1, 100);
+                foreach ($listed as $item) {
+                    if (is_array($item) && trim((string)($item['referenceCode'] ?? '')) === $productRef) {
+                        $productRow = $item;
+                        break;
+                    }
+                }
+            }
+        }
+        if (is_array($productRow)) {
+            $planRef = iyzico_sub_plan_pick($productRow, $price, $interval);
+        }
+    }
+
+    if ($planRef === '' || $storedInterval !== $interval || $storedPrice !== $price) {
+        $plan = iyzico_sub_plan_create($productRef, $planName, $price, $interval);
+        if (!$plan['ok']) {
+            $listed = iyzico_sub_products_list(1, 100);
+            foreach ($listed as $item) {
+                if (is_array($item) && trim((string)($item['referenceCode'] ?? '')) === $productRef) {
+                    $planRef = iyzico_sub_plan_pick($item, $price, $interval);
+                    if ($planRef !== '') {
+                        break;
+                    }
+                }
+            }
+            if ($planRef === '') {
+                return ['ok' => false, 'productRef' => $productRef, 'planRef' => '', 'interval' => $interval, 'price' => $price, 'error' => iyzico_sub_addon_hint($plan['error'])];
+            }
+        } else {
+            $inner = iyzico_v2_data($plan['data']);
+            $planRef = (string)($inner['referenceCode'] ?? $inner['pricingPlanReferenceCode'] ?? '');
+            if ($planRef === '') {
+                return ['ok' => false, 'productRef' => $productRef, 'planRef' => '', 'interval' => $interval, 'price' => $price, 'error' => 'iyzico plan referansı dönmedi.'];
+            }
+        }
+    }
+
+    subscription_save_iyzico_plan_refs($pdo, $env, $productRef, $planRef, $interval, $price);
 
     return ['ok' => true, 'productRef' => $productRef, 'planRef' => $planRef, 'interval' => $interval, 'price' => $price, 'error' => ''];
 }

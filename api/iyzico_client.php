@@ -752,6 +752,92 @@ function iyzico_sub_product_create(string $name, string $description): array {
     ]);
 }
 
+/** iyzico "ürün/plan zaten var" benzeri hataları yakala */
+function iyzico_sub_error_is_duplicate(string $error): bool {
+    $e = mb_strtolower(trim($error));
+    if ($e === '') {
+        return false;
+    }
+    foreach (['zaten var', 'already exist', 'already exists', 'duplicate'] as $needle) {
+        if (str_contains($e, $needle)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Abonelik ürünlerini listele (sayfalanmış).
+ *
+ * @return array<int, array<string,mixed>>
+ */
+function iyzico_sub_products_list(int $page = 1, int $count = 50): array {
+    $res = iyzico_get(IYZICO_PATH_SUB_PRODUCTS, [
+        'page' => max(1, $page),
+        'count' => max(1, min(100, $count)),
+    ]);
+    if (!$res['ok']) {
+        return [];
+    }
+    $data = iyzico_v2_data($res['data']);
+    $items = $data['items'] ?? $res['data']['items'] ?? [];
+    return is_array($items) ? $items : [];
+}
+
+/** Ürün adına göre mevcut abonelik ürününü bul (tam eşleşme, sonra kısmi). */
+function iyzico_sub_product_find_by_name(string $name): ?array {
+    $name = trim($name);
+    if ($name === '') {
+        return null;
+    }
+    $target = mb_strtolower($name);
+    $partial = null;
+    for ($page = 1; $page <= 5; $page++) {
+        $items = iyzico_sub_products_list($page, 50);
+        if ($items === []) {
+            break;
+        }
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $itemName = mb_strtolower(trim((string)($item['name'] ?? '')));
+            if ($itemName === $target) {
+                return $item;
+            }
+            if ($partial === null && $itemName !== '' && (str_contains($itemName, $target) || str_contains($target, $itemName))) {
+                $partial = $item;
+            }
+        }
+        if (count($items) < 50) {
+            break;
+        }
+    }
+    return $partial;
+}
+
+/** Ürün kaydındaki planlardan fiyat + döneme uyan referansı seç. */
+function iyzico_sub_plan_pick(array $product, string $price, string $interval): string {
+    $priceNorm = iyzico_trailing_zero($price);
+    $interval = strtoupper($interval);
+    $plans = is_array($product['pricingPlans'] ?? null) ? $product['pricingPlans'] : [];
+    foreach ($plans as $plan) {
+        if (!is_array($plan)) {
+            continue;
+        }
+        $planPrice = iyzico_trailing_zero($plan['price'] ?? '');
+        $planInterval = strtoupper((string)($plan['paymentInterval'] ?? ''));
+        $status = strtoupper((string)($plan['status'] ?? 'ACTIVE'));
+        if ($planPrice === $priceNorm && $planInterval === $interval && $status !== 'DELETED') {
+            $ref = trim((string)($plan['referenceCode'] ?? ''));
+            if ($ref !== '') {
+                return $ref;
+            }
+        }
+    }
+    return '';
+}
+
 function iyzico_sub_plan_create(string $productRef, string $name, string $price, string $interval): array {
     $path = IYZICO_PATH_SUB_PRODUCTS . '/' . rawurlencode($productRef) . '/pricing-plans';
     return iyzico_request($path, [
