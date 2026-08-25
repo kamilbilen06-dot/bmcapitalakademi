@@ -466,6 +466,16 @@ try {
             foreach ($pdo->query("SELECT k, v FROM settings") as $r) { $s[$r['k']] = $r['v']; }
             $s['smtp_pass_set'] = !empty($s['smtp_pass']);
             $s['smtp_pass'] = '';
+            $s['iyzico_api_key_set'] = trim((string)($s['iyzico_api_key'] ?? '')) !== '';
+            $s['iyzico_secret_set'] = trim((string)($s['iyzico_secret_key'] ?? '')) !== '';
+            $s['iyzico_api_key'] = '';
+            $s['iyzico_secret_key'] = '';
+            if (!isset($s['iyzico_test_mode']) || trim((string)$s['iyzico_test_mode']) === '') {
+                $s['iyzico_test_mode'] = iyzico_is_sandbox() ? '1' : '0';
+            }
+            $s['iyzico_running_test'] = iyzico_is_sandbox() ? '1' : '0';
+            $s['iyzico_key_source'] = defined('IYZICO_KEY_SOURCE') ? IYZICO_KEY_SOURCE : 'none';
+            $s['iyzico_ready'] = iyzico_ready() ? '1' : '0';
             if (!isset($s['instructor_share_pct']) || trim((string)$s['instructor_share_pct']) === '') {
                 $s['instructor_share_pct'] = '60';
             }
@@ -496,13 +506,30 @@ try {
 
         case 'settings_save': {
             $in = body_json();
-            $allowed = ['marka','sehir','telefon','whatsapp','instagram','twitter','iban','banka','hesap_adi','emailjs_public','emailjs_service','emailjs_template','emailjs_to','smtp_host','smtp_port','smtp_secure','smtp_user','smtp_pass','smtp_from','smtp_from_name','instructor_share_pct','sub_enabled','sub_title','sub_price','sub_blurb','sub_instructor_id','satici_unvan','satici_adres','satici_vergi','satici_mersis','nav_hakkimizda','nav_sss','nav_iletisim','nav_araclar'];
+            $allowed = ['marka','sehir','telefon','whatsapp','instagram','twitter','iban','banka','hesap_adi','emailjs_public','emailjs_service','emailjs_template','emailjs_to','smtp_host','smtp_port','smtp_secure','smtp_user','smtp_pass','smtp_from','smtp_from_name','instructor_share_pct','sub_enabled','sub_title','sub_price','sub_blurb','sub_instructor_id','satici_unvan','satici_adres','satici_vergi','satici_mersis','nav_hakkimizda','nav_sss','nav_iletisim','nav_araclar','iyzico_api_key','iyzico_secret_key','iyzico_test_mode','iyzico_merchant_id'];
             $stmt = $pdo->prepare("INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)");
             foreach ($allowed as $k) {
                 if (!array_key_exists($k, $in)) {
                     continue;
                 }
-                if ($k === 'smtp_pass' && trim((string)$in[$k]) === '') {
+                if (($k === 'smtp_pass' || $k === 'iyzico_api_key' || $k === 'iyzico_secret_key') && trim((string)$in[$k]) === '') {
+                    continue;
+                }
+                if ($k === 'iyzico_test_mode') {
+                    $mode = trim((string)$in[$k]) === '0' ? '0' : '1';
+                    $keyPreview = trim((string)($in['iyzico_api_key'] ?? ''));
+                    if ($keyPreview === '') {
+                        $exist = $pdo->query("SELECT v FROM settings WHERE k = 'iyzico_api_key' LIMIT 1");
+                        $keyPreview = $exist ? (string)$exist->fetchColumn() : '';
+                    }
+                    $looksSandbox = strpos($keyPreview, 'sandbox-') === 0;
+                    if ($keyPreview !== '' && $looksSandbox && $mode === '0') {
+                        json_out(['ok' => false, 'error' => 'Sandbox anahtarı canlıda çalışmaz. merchant.iyzipay.com içindeki canlı anahtarları yazın.'], 422);
+                    }
+                    if ($keyPreview !== '' && !$looksSandbox && $mode === '1') {
+                        json_out(['ok' => false, 'error' => 'Canlı anahtar sandbox’ta çalışmaz. Test için sandbox- ile başlayan anahtar gerekir.'], 422);
+                    }
+                    $stmt->execute([$k, $mode]);
                     continue;
                 }
                 if ($k === 'instructor_share_pct') {

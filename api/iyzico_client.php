@@ -144,6 +144,9 @@ function iyzico_get(string $uriPath, array $query = []): array {
 function iyzico_audit_log(string $method, string $uriPath, array $reqPayload, array $result): void {
     $resp = is_array($result['data'] ?? null) ? $result['data'] : [];
     $orderId = payments_log_resolve_order_id(array_merge($reqPayload, $resp));
+    if (($reqPayload['token'] ?? '') === 'status-ping') {
+        return;
+    }
     payments_log_write($orderId, 'iyzico', 'request', $method . ' ' . $uriPath, $reqPayload);
     if ($resp === []) {
         $resp = [

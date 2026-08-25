@@ -192,6 +192,10 @@ function subscription_blocking_row(PDO $pdo, int $studentId): ?array {
  *
  * @return array{ok:bool, productRef:string, planRef:string, interval:string, price:string, error:string}
  */
+function subscription_iyzico_env(): string {
+    return iyzico_is_sandbox() ? 'sandbox' : 'live';
+}
+
 function subscription_ensure_iyzico_plan(PDO $pdo): array {
     $interval = subscription_interval();
     $kurus = subscription_price_kurus($pdo);
@@ -199,10 +203,24 @@ function subscription_ensure_iyzico_plan(PDO $pdo): array {
         return ['ok' => false, 'productRef' => '', 'planRef' => '', 'interval' => $interval, 'price' => '', 'error' => 'Abonelik fiyatı tanımlı değil.'];
     }
     $price = payments_kurus_to_decimal($kurus);
-    $productRef = subscription_setting($pdo, 'sub_iyzico_product_ref', '');
-    $planRef = subscription_setting($pdo, 'sub_iyzico_plan_ref', '');
-    $storedInterval = subscription_setting($pdo, 'sub_iyzico_plan_interval', '');
-    $storedPrice = subscription_setting($pdo, 'sub_iyzico_plan_price', '');
+    $env = subscription_iyzico_env();
+    $productKey = 'sub_iyzico_product_ref_' . $env;
+    $planKey = 'sub_iyzico_plan_ref_' . $env;
+    $intervalKey = 'sub_iyzico_plan_interval_' . $env;
+    $priceKey = 'sub_iyzico_plan_price_' . $env;
+
+    $productRef = subscription_setting($pdo, $productKey, '');
+    $planRef = subscription_setting($pdo, $planKey, '');
+    $storedInterval = subscription_setting($pdo, $intervalKey, '');
+    $storedPrice = subscription_setting($pdo, $priceKey, '');
+
+    // Eski tek set kayıtlar canlı plandı; sandbox'ta kullanılmaz.
+    if ($env === 'live' && $productRef === '') {
+        $productRef = subscription_setting($pdo, 'sub_iyzico_product_ref', '');
+        $planRef = subscription_setting($pdo, 'sub_iyzico_plan_ref', '');
+        $storedInterval = subscription_setting($pdo, 'sub_iyzico_plan_interval', '');
+        $storedPrice = subscription_setting($pdo, 'sub_iyzico_plan_price', '');
+    }
 
     if ($productRef !== '' && $planRef !== '' && $storedInterval === $interval && $storedPrice === $price) {
         return ['ok' => true, 'productRef' => $productRef, 'planRef' => $planRef, 'interval' => $interval, 'price' => $price, 'error' => ''];
@@ -223,7 +241,6 @@ function subscription_ensure_iyzico_plan(PDO $pdo): array {
         if ($productRef === '') {
             return ['ok' => false, 'productRef' => '', 'planRef' => '', 'interval' => $interval, 'price' => $price, 'error' => 'iyzico ürün referansı dönmedi.'];
         }
-        subscription_set_setting($pdo, 'sub_iyzico_product_ref', $productRef);
     }
 
     $planName = $interval === 'DAILY' ? ($title . ' (günlük test)') : ($title . ' (aylık)');
@@ -237,9 +254,16 @@ function subscription_ensure_iyzico_plan(PDO $pdo): array {
         return ['ok' => false, 'productRef' => $productRef, 'planRef' => '', 'interval' => $interval, 'price' => $price, 'error' => 'iyzico plan referansı dönmedi.'];
     }
 
-    subscription_set_setting($pdo, 'sub_iyzico_plan_ref', $planRef);
-    subscription_set_setting($pdo, 'sub_iyzico_plan_interval', $interval);
-    subscription_set_setting($pdo, 'sub_iyzico_plan_price', $price);
+    subscription_set_setting($pdo, $productKey, $productRef);
+    subscription_set_setting($pdo, $planKey, $planRef);
+    subscription_set_setting($pdo, $intervalKey, $interval);
+    subscription_set_setting($pdo, $priceKey, $price);
+    if ($env === 'live') {
+        subscription_set_setting($pdo, 'sub_iyzico_product_ref', $productRef);
+        subscription_set_setting($pdo, 'sub_iyzico_plan_ref', $planRef);
+        subscription_set_setting($pdo, 'sub_iyzico_plan_interval', $interval);
+        subscription_set_setting($pdo, 'sub_iyzico_plan_price', $price);
+    }
 
     return ['ok' => true, 'productRef' => $productRef, 'planRef' => $planRef, 'interval' => $interval, 'price' => $price, 'error' => ''];
 }

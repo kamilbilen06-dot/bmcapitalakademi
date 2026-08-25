@@ -13,18 +13,76 @@
  */
 
 /**
- * Anahtar kaynağı: canlı/kişisel anahtarlar local dosyadan gelir. O dosya yoksa
- * Git'teki sandbox anahtarlarına düşülür; böylece test ortamı deploy ile hazır
- * olur. Local dosya varken sandbox dosyasına hiç bakılmaz.
+ * Admin panelindeki iyzico ayarlarını oku (dosya yoksa).
+ *
+ * @return array{api:string,secret:string,test:int,merchant:string,installments:string}|array{}
+ */
+function iyzico_read_db_keys(): array {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+    $cached = [];
+    try {
+        if (!function_exists('db')) {
+            require_once __DIR__ . '/db.php';
+        }
+        $pdo = db();
+        $st = $pdo->query(
+            "SELECT k, v FROM settings WHERE k IN (
+                'iyzico_api_key','iyzico_secret_key','iyzico_test_mode','iyzico_merchant_id','iyzico_installments'
+            )"
+        );
+        $map = [];
+        foreach ($st as $r) {
+            $map[(string)$r['k']] = (string)$r['v'];
+        }
+        $api = trim($map['iyzico_api_key'] ?? '');
+        $secret = trim($map['iyzico_secret_key'] ?? '');
+        if ($api === '' || $secret === '') {
+            return $cached;
+        }
+        $cached = [
+            'api' => $api,
+            'secret' => $secret,
+            'test' => array_key_exists('iyzico_test_mode', $map) ? (int)$map['iyzico_test_mode'] : 1,
+            'merchant' => trim($map['iyzico_merchant_id'] ?? ''),
+            'installments' => trim($map['iyzico_installments'] ?? ''),
+        ];
+    } catch (Throwable $e) {
+        $cached = [];
+    }
+    return $cached;
+}
+
+/**
+ * Anahtar kaynağı sırası:
+ *   1) api/iyzico_config.local.php (Git'e girmez; sunucuda elle/yerel)
+ *   2) Yönetim paneli ayarları (canlı anahtarlar buraya yazılır, deploy silmez)
+ *   3) api/iyzico_config.sandbox.php (yalnızca test)
  */
 if (is_file(__DIR__ . '/iyzico_config.local.php')) {
     require __DIR__ . '/iyzico_config.local.php';
     define('IYZICO_KEY_SOURCE', 'local');
-} elseif (is_file(__DIR__ . '/iyzico_config.sandbox.php')) {
-    require __DIR__ . '/iyzico_config.sandbox.php';
-    define('IYZICO_KEY_SOURCE', 'sandbox-file');
 } else {
-    define('IYZICO_KEY_SOURCE', 'none');
+    $iyzicoDb = iyzico_read_db_keys();
+    if ($iyzicoDb) {
+        define('IYZICO_API_KEY', $iyzicoDb['api']);
+        define('IYZICO_SECRET_KEY', $iyzicoDb['secret']);
+        define('IYZICO_TEST_MODE', $iyzicoDb['test'] === 0 ? 0 : 1);
+        if ($iyzicoDb['merchant'] !== '') {
+            define('IYZICO_MERCHANT_ID', $iyzicoDb['merchant']);
+        }
+        if ($iyzicoDb['installments'] !== '') {
+            define('IYZICO_INSTALLMENTS', $iyzicoDb['installments']);
+        }
+        define('IYZICO_KEY_SOURCE', 'settings');
+    } elseif (is_file(__DIR__ . '/iyzico_config.sandbox.php')) {
+        require __DIR__ . '/iyzico_config.sandbox.php';
+        define('IYZICO_KEY_SOURCE', 'sandbox-file');
+    } else {
+        define('IYZICO_KEY_SOURCE', 'none');
+    }
 }
 
 if (!defined('IYZICO_API_KEY')) {
