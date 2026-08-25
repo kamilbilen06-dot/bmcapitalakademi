@@ -547,20 +547,6 @@ try {
             json_out(['ok' => true]);
         }
 
-        case 'review_orders_list': {
-            $items = $pdo->query(
-                "SELECT o.id, o.merchant_oid, o.student_name, o.student_email, o.student_phone,
-                        o.amount_kurus, o.paid_price, o.error_message, o.created_at,
-                        o.provider_payment_id, c.title AS course_title
-                 FROM payment_orders o
-                 LEFT JOIN courses c ON c.id = o.course_id
-                 WHERE o.status = 'review'
-                 ORDER BY o.id DESC
-                 LIMIT 200"
-            )->fetchAll();
-            json_out(['ok' => true, 'items' => $items]);
-        }
-
         case 'admin_grant_access': {
             $in = body_json();
             $courseId = (int)($in['course_id'] ?? 0);
@@ -621,40 +607,6 @@ try {
             }
             $pdo->prepare("UPDATE students SET status = ? WHERE id = ?")->execute([$status, $id]);
             json_out(['ok' => true]);
-        }
-
-        case 'payment_logs_list': {
-            $limit = (int)($_GET['limit'] ?? 150);
-            if ($limit < 1) {
-                $limit = 150;
-            }
-            if ($limit > 300) {
-                $limit = 300;
-            }
-            $orderId = (int)($_GET['order_id'] ?? 0);
-            if ($orderId > 0) {
-                $st = $pdo->prepare(
-                    "SELECT l.id, l.order_id, l.provider, l.direction, l.path, l.payload, l.created_at,
-                            o.merchant_oid, o.status AS order_status
-                     FROM payment_logs l
-                     LEFT JOIN payment_orders o ON o.id = l.order_id
-                     WHERE l.order_id = ?
-                     ORDER BY l.id DESC
-                     LIMIT $limit"
-                );
-                $st->execute([$orderId]);
-            } else {
-                $st = $pdo->query(
-                    "SELECT l.id, l.order_id, l.provider, l.direction, l.path, l.payload, l.created_at,
-                            o.merchant_oid, o.status AS order_status
-                     FROM payment_logs l
-                     LEFT JOIN payment_orders o ON o.id = l.order_id
-                     ORDER BY l.id DESC
-                     LIMIT $limit"
-                );
-            }
-            $items = $st->fetchAll();
-            json_out(['ok' => true, 'items' => $items]);
         }
 
         /**

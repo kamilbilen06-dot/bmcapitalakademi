@@ -27,8 +27,6 @@
     iletisim: "İletişim Mesajları",
     istatistik: "Ziyaretçi İstatistikleri",
     odemeler: "Ödemeler",
-    odeme_olaylari: "Ödeme olayları",
-    inceleme: "İnceleme siparişleri",
     abonelikler: "Abonelikler",
     ayarlar: "Ayarlar",
   };
@@ -821,8 +819,15 @@
         '<div class="stat-card gold"><div class="label">Tahsil edilen</div><div class="num">' + formatTryKurus(s.tahsilEdilenKurus || 0) + "</div></div>" +
         '<div class="stat-card"><div class="label">Başarılı ödeme</div><div class="num">' + (s.tahsilEdilen || 0) + "</div></div>" +
         '<div class="stat-card"><div class="label">İade</div><div class="num">' + (s.iadeEdilen || 0) + "</div></div>" +
+        '<div class="stat-card' + ((s.inceleme || 0) > 0 ? " gold" : "") + '" id="odIncelemeCard"' +
+        ((s.inceleme || 0) > 0 ? ' style="cursor:pointer"' : "") + ">" +
+        '<div class="label">İnceleme gerektiren</div><div class="num">' + (s.inceleme || 0) + "</div></div>" +
         '<div class="stat-card"><div class="label">Aktif abone</div><div class="num">' + (sc.active || 0) + "</div></div>" +
         "</div>" +
+        ((s.inceleme || 0) > 0
+          ? '<p class="page-hint">⚠️ <b>' + (s.inceleme || 0) + ' ödeme inceleme bekliyor:</b> para çekilmiş olabilir ama erişim açılmamış. ' +
+            'Karta tıklayıp listeyi görün; iyzico’da doğrulayıp Öğrenciler sekmesinden elle erişim verin.</p>'
+          : "") +
         '<div class="panel"><div class="panel-body"><div class="filters">' +
         '<div class="field"><label>Ara (referans / ödeme no / e-posta)</label><input type="text" id="odQ" value="' + esc(filters.q || "") + '" placeholder="IYZ2026… veya 37472644"></div>' +
         '<div class="field"><label>Durum</label><select id="odSt">' +
@@ -848,6 +853,10 @@
       document.getElementById("odQ").addEventListener("keydown", function (e) {
         if (e.key === "Enter") document.getElementById("odGo").click();
       });
+      var incCard = document.getElementById("odIncelemeCard");
+      if (incCard && (s.inceleme || 0) > 0) {
+        incCard.onclick = function () { drawOdemeler({ status: "review" }); };
+      }
       el.wrap.querySelectorAll("[data-copy]").forEach(function (b) {
         b.onclick = function () {
           var v = b.getAttribute("data-copy");
@@ -860,108 +869,6 @@
       });
     });
   }
-
-  // ---------- PAYMENT LOGS ----------
-  renderers.inceleme = function () {
-    get("review_orders_list").then(function (d) {
-      if (!d.ok) { el.wrap.innerHTML = '<p class="empty">Yüklenemedi</p>'; return; }
-      var items = d.items || [];
-      var rows = items.length
-        ? items.map(function (r) {
-            return (
-              "<tr>" +
-              "<td class='small'>" + esc(fmtDate(r.created_at)) + "</td>" +
-              "<td>" + esc(r.merchant_oid || "#" + r.id) + "</td>" +
-              "<td>" + esc(r.student_name || r.student_email || "—") + "<div class='small'>" + esc(r.student_email || "") + "</div></td>" +
-              "<td>" + esc(r.course_title || "—") + "</td>" +
-              "<td>" + formatTryKurus(r.amount_kurus) + "</td>" +
-              "<td class='small'>" + esc(r.error_message || "—") + "</td>" +
-              "</tr>"
-            );
-          }).join("")
-        : "<tr><td colspan='6' class='empty'>İnceleme bekleyen sipariş yok.</td></tr>";
-      el.wrap.innerHTML =
-        '<p class="page-hint">Para çekilmiş olabilir ama erişim açılmamış siparişler. iyzico panelinden doğrulayıp Öğrenciler sekmesinden elle erişim verebilirsiniz.</p>' +
-        '<div class="panel"><div class="table-wrap"><table><thead><tr>' +
-        "<th>Tarih</th><th>Sipariş</th><th>Öğrenci</th><th>Kurs</th><th>Tutar</th><th>Not</th>" +
-        "</tr></thead><tbody>" + rows + "</tbody></table></div></div>";
-    });
-  };
-
-  renderers.odeme_olaylari = function () {
-    get("payment_logs_list").then(function (d) {
-      if (!d.ok) { el.wrap.innerHTML = '<p class="empty">Yüklenemedi</p>'; return; }
-      var dirLabel = { request: "İstek", response: "Yanıt", inbound: "Gelen" };
-      var rows = (d.items || []).length
-        ? d.items
-            .map(function (log) {
-              var preview = String(log.payload || "").replace(/\s+/g, " ");
-              if (preview.length > 80) preview = preview.slice(0, 80) + "…";
-              return (
-                "<tr>" +
-                "<td class='small'>" +
-                esc(fmtDate(log.created_at)) +
-                "</td>" +
-                "<td>" +
-                esc(dirLabel[log.direction] || log.direction || "") +
-                "</td>" +
-                "<td><code>" +
-                esc(log.path || "") +
-                "</code></td>" +
-                "<td>" +
-                (log.merchant_oid
-                  ? "<code>" + esc(log.merchant_oid) + "</code>"
-                  : log.order_id
-                    ? "#" + esc(String(log.order_id))
-                    : "—") +
-                "</td>" +
-                "<td class='log-payload'>" +
-                esc(preview) +
-                "</td>" +
-                "<td class='row-actions'><button class='btn tiny' data-log='" +
-                log.id +
-                "'>Gör</button></td>" +
-                "</tr>"
-              );
-            })
-            .join("")
-        : "<tr><td colspan='6' class='empty'>Henüz ödeme olayı yok. İlk iyzico işleminden sonra burada görünür.</td></tr>";
-      el.wrap.innerHTML =
-        '<p class="page-hint">iyzico istek/yanıt ve bildirim kayıtları. Kart numarası ve anahtar yazılmaz. İade yalnızca iyzico panelinden yapılır.</p>' +
-        '<div class="panel"><div class="table-wrap"><table><thead><tr><th>Tarih</th><th>Yön</th><th>Yol</th><th>Sipariş</th><th>Özet</th><th></th></tr></thead><tbody>' +
-        rows +
-        "</tbody></table></div></div>";
-      el.wrap.querySelectorAll("[data-log]").forEach(function (b) {
-        b.onclick = function () {
-          var id = +b.getAttribute("data-log");
-          var log = (d.items || []).filter(function (x) { return +x.id === id; })[0];
-          if (!log) return;
-          var pretty = log.payload || "";
-          try {
-            pretty = JSON.stringify(JSON.parse(log.payload), null, 2);
-          } catch (e) {}
-          openModal(
-            "Ödeme olayı #" + log.id,
-            '<div class="detail-line"><strong>Tarih</strong><span>' +
-              esc(fmtDate(log.created_at)) +
-              "</span></div>" +
-              '<div class="detail-line"><strong>Yön</strong><span>' +
-              esc(dirLabel[log.direction] || log.direction || "") +
-              "</span></div>" +
-              '<div class="detail-line"><strong>Yol</strong><span>' +
-              esc(log.path || "") +
-              "</span></div>" +
-              '<div class="detail-line"><strong>Sipariş</strong><span>' +
-              esc(log.merchant_oid || (log.order_id ? "#" + log.order_id : "—")) +
-              "</span></div>" +
-              '<pre class="pre-block">' +
-              esc(pretty) +
-              "</pre>"
-          );
-        };
-      });
-    });
-  };
 
   // ---------- STUDENTS ----------
   renderers.ogrenciler = function () {
@@ -1118,52 +1025,154 @@
   }
 
   // ---------- SUBSCRIPTIONS (WhatsApp grubu) ----------
+  var SUB_STATUSES = {
+    active: "Aktif",
+    past_due: "Ödeme gecikti",
+    pending: "Ödeme bekliyor",
+    cancelled: "İptal",
+    expired: "Süresi doldu",
+  };
+  var subState = { items: [], q: "", status: "", todo: "" };
+
+  function subWaAdded(r) { return !!Number(r.wa_added); }
+
+  // Yapılacak iş: erişimi var ama grupta değil (ekle) / erişimi yok ama grupta (çıkar)
+  function subTodo(r) {
+    if (r.entitled && !subWaAdded(r)) return "add";
+    if (!r.entitled && subWaAdded(r)) return "remove";
+    return "";
+  }
+
   renderers.abonelikler = function () {
+    subState = { items: [], q: "", status: "", todo: "" };
+    subLoad();
+  };
+
+  function subLoad() {
     get("subscriptions_list").then(function (d) {
       if (!d.ok) { el.wrap.innerHTML = '<p class="empty">Yüklenemedi</p>'; return; }
-      var items = d.items || [];
-      var rows = items.length
-        ? items.map(function (r) {
-            var digits = String(r.wa_digits || "").replace(/\D/g, "");
-            if (digits.length === 10) digits = "90" + digits;
-            if (digits.length === 11 && digits.charAt(0) === "0") digits = "90" + digits.slice(1);
-            var waHref = digits ? "https://wa.me/" + digits : "";
-            var pill = r.status === "active" ? "ok" : (r.status === "past_due" ? "urun" : "off");
-            var waBtn = r.wa_added
-              ? "<button class='btn tiny' data-wa='0' data-id='" + r.id + "'>WP çıkarıldı</button>"
-              : "<button class='btn tiny primary' data-wa='1' data-id='" + r.id + "'>WP eklendi</button>";
-            var need = "";
-            if (r.entitled && !r.wa_added) need = " <span class='pill urun'>gruba ekle</span>";
-            if (!r.entitled && r.wa_added) need = " <span class='pill'>gruptan çıkar</span>";
-            return (
-              "<tr>" +
-              "<td>" + esc(r.student_name || "—") + "<div class='small'>" + esc(r.student_email || "") + "</div></td>" +
-              "<td>" + (waHref ? "<a href='" + esc(waHref) + "' target='_blank' rel='noopener'>" + esc(r.student_phone || digits) + "</a>" : esc(r.student_phone || "—")) + "</td>" +
-              "<td><span class='pill " + pill + "'>" + esc(r.status_label || r.status) + "</span>" + need + "</td>" +
-              "<td class='small'>" + esc(fmtDate(r.current_period_end)) + "</td>" +
-              "<td class='small'>" + esc(fmtDate(r.last_paid_at)) + "</td>" +
-              "<td class='row-actions'>" + waBtn + "</td>" +
-              "</tr>"
-            );
-          }).join("")
-        : "<tr><td colspan='6' class='empty'>Henüz abone yok.</td></tr>";
-      el.wrap.innerHTML =
-        '<div class="panel"><div class="panel-head"><h3>WhatsApp grubu aboneleri</h3></div>' +
-        '<div class="panel-body"><p class="hint">Grup ekleme/çıkarma siteden yapılmaz. WhatsApp’tan elle ekleyip buradan işaretleyin. Kart çekimi iyzico aboneliğidir.</p></div>' +
-        '<div class="table-wrap"><table><thead><tr>' +
-        "<th>Öğrenci</th><th>Telefon</th><th>Durum</th><th>Dönem sonu</th><th>Son ödeme</th><th></th>" +
-        "</tr></thead><tbody>" + rows + "</tbody></table></div></div>";
-      el.wrap.querySelectorAll("[data-wa]").forEach(function (btn) {
-        btn.onclick = function () {
-          post("subscription_wa_set", { id: Number(btn.getAttribute("data-id")), wa_added: Number(btn.getAttribute("data-wa")) })
-            .then(function (r) {
-              if (r.ok) renderers.abonelikler();
-              else toast(r.error || "Hata", "err");
-            });
-        };
-      });
+      subState.items = d.items || [];
+      drawAbonelikler();
     });
-  };
+  }
+
+  function drawAbonelikler() {
+    var all = subState.items;
+    var counts = { active: 0, entitled: 0, add: 0, remove: 0 };
+    all.forEach(function (r) {
+      if (r.status === "active") counts.active++;
+      if (r.entitled) counts.entitled++;
+      var t = subTodo(r);
+      if (t === "add") counts.add++;
+      else if (t === "remove") counts.remove++;
+    });
+
+    var q = subState.q.trim().toLowerCase();
+    var items = all.filter(function (r) {
+      if (subState.status && r.status !== subState.status) return false;
+      if (subState.todo && subTodo(r) !== subState.todo) return false;
+      if (q) {
+        var hay = (
+          (r.student_name || "") + " " + (r.student_email || "") + " " + (r.student_phone || "")
+        ).toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+
+    var rows = items.length
+      ? items.map(function (r) {
+          var digits = String(r.wa_digits || "").replace(/\D/g, "");
+          if (digits.length === 10) digits = "90" + digits;
+          if (digits.length === 11 && digits.charAt(0) === "0") digits = "90" + digits.slice(1);
+          var waHref = digits ? "https://wa.me/" + digits : "";
+          var pill = r.status === "active" ? "ok" : (r.status === "past_due" ? "urun" : "off");
+          var waBtn = subWaAdded(r)
+            ? "<button class='btn tiny' data-wa='0' data-id='" + r.id + "'>WP çıkarıldı</button>"
+            : "<button class='btn tiny primary' data-wa='1' data-id='" + r.id + "'>WP eklendi</button>";
+          var todo = subTodo(r);
+          var need = todo === "add"
+            ? " <span class='pill urun'>gruba ekle</span>"
+            : (todo === "remove" ? " <span class='pill'>gruptan çıkar</span>" : "");
+          return (
+            "<tr>" +
+            "<td>" + esc(r.student_name || "—") + "<div class='small'>" + esc(r.student_email || "") + "</div></td>" +
+            "<td>" + (waHref ? "<a href='" + esc(waHref) + "' target='_blank' rel='noopener'>" + esc(r.student_phone || digits) + "</a>" : esc(r.student_phone || "—")) + "</td>" +
+            "<td><span class='pill " + pill + "'>" + esc(r.status_label || r.status) + "</span>" + need + "</td>" +
+            "<td class='small'>" + esc(fmtDate(r.current_period_end)) + "</td>" +
+            "<td class='small'>" + esc(fmtDate(r.last_paid_at)) + "</td>" +
+            "<td class='row-actions'>" + waBtn + "</td>" +
+            "</tr>"
+          );
+        }).join("")
+      : "<tr><td colspan='6' class='empty'>" +
+        (all.length ? "Bu süzgeçte abone yok." : "Henüz abone yok.") + "</td></tr>";
+
+    var statusOpts = [""].concat(Object.keys(SUB_STATUSES)).map(function (v) {
+      var lbl = v === "" ? "Tümü" : SUB_STATUSES[v];
+      return '<option value="' + v + '"' + (subState.status === v ? " selected" : "") + ">" + lbl + "</option>";
+    }).join("");
+    var todoOpts = [
+      ["", "Tümü"],
+      ["add", "Gruba eklenecek"],
+      ["remove", "Gruptan çıkarılacak"],
+    ].map(function (o) {
+      return '<option value="' + o[0] + '"' + (subState.todo === o[0] ? " selected" : "") + ">" + o[1] + "</option>";
+    }).join("");
+
+    var keepFocus = document.activeElement && document.activeElement.id === "abQ";
+
+    el.wrap.innerHTML =
+      '<div class="stat-grid">' +
+      '<div class="stat-card gold" id="abCardActive" style="cursor:pointer"><div class="label">Aktif abone</div><div class="num">' + counts.active + "</div></div>" +
+      '<div class="stat-card"><div class="label">Erişimi olan</div><div class="num">' + counts.entitled + "</div></div>" +
+      '<div class="stat-card' + (counts.add > 0 ? " gold" : "") + '" id="abCardAdd" style="cursor:pointer"><div class="label">Gruba eklenecek</div><div class="num">' + counts.add + "</div></div>" +
+      '<div class="stat-card" id="abCardRemove" style="cursor:pointer"><div class="label">Gruptan çıkarılacak</div><div class="num">' + counts.remove + "</div></div>" +
+      "</div>" +
+      '<div class="panel"><div class="panel-body"><div class="filters">' +
+      '<div class="field"><label>Ara (isim / e-posta / telefon)</label><input type="text" id="abQ" value="' + esc(subState.q) + '" placeholder="Ad veya e-posta"></div>' +
+      '<div class="field"><label>Durum</label><select id="abSt">' + statusOpts + "</select></div>" +
+      '<div class="field"><label>Yapılacak</label><select id="abTodo">' + todoOpts + "</select></div>" +
+      '<button type="button" class="btn-ghost sm" id="abClear">Temizle</button>' +
+      "</div></div></div>" +
+      '<div class="panel"><div class="panel-head"><h3>WhatsApp grubu aboneleri</h3>' +
+      '<span class="count">' + items.length + " / " + all.length + " kayıt</span></div>" +
+      '<div class="panel-body"><p class="hint">Grup ekleme/çıkarma siteden yapılmaz. WhatsApp’tan elle ekleyip buradan işaretleyin. Kart çekimi iyzico aboneliğidir.</p></div>' +
+      '<div class="table-wrap"><table><thead><tr>' +
+      "<th>Öğrenci</th><th>Telefon</th><th>Durum</th><th>Dönem sonu</th><th>Son ödeme</th><th></th>" +
+      "</tr></thead><tbody>" + rows + "</tbody></table></div></div>";
+
+    var qInput = document.getElementById("abQ");
+    qInput.oninput = function () { subState.q = qInput.value; drawAbonelikler(); };
+    if (keepFocus) {
+      qInput.focus();
+      qInput.setSelectionRange(qInput.value.length, qInput.value.length);
+    }
+    document.getElementById("abSt").onchange = function () { subState.status = this.value; drawAbonelikler(); };
+    document.getElementById("abTodo").onchange = function () { subState.todo = this.value; drawAbonelikler(); };
+    document.getElementById("abClear").onclick = function () {
+      subState.q = ""; subState.status = ""; subState.todo = ""; drawAbonelikler();
+    };
+    document.getElementById("abCardActive").onclick = function () {
+      subState.status = "active"; subState.todo = ""; drawAbonelikler();
+    };
+    document.getElementById("abCardAdd").onclick = function () {
+      subState.todo = "add"; subState.status = ""; drawAbonelikler();
+    };
+    document.getElementById("abCardRemove").onclick = function () {
+      subState.todo = "remove"; subState.status = ""; drawAbonelikler();
+    };
+
+    el.wrap.querySelectorAll("[data-wa]").forEach(function (btn) {
+      btn.onclick = function () {
+        post("subscription_wa_set", { id: Number(btn.getAttribute("data-id")), wa_added: Number(btn.getAttribute("data-wa")) })
+          .then(function (r) {
+            if (r.ok) subLoad();
+            else toast(r.error || "Hata", "err");
+          });
+      };
+    });
+  }
 
   // ---------- SETTINGS ----------
   renderers.ayarlar = function () {
@@ -1229,7 +1238,7 @@
         '"></div>' +
         "</div>" +
         '<h3 style="margin:22px 0 4px;font-size:15px">Kart ödemesi (iyzico sandbox)</h3>' +
-        '<p class="hint" style="margin:0 0 12px">Gerçek tahsilat kapalı (sandbox). Test ödemeleri yalnızca <b>sandbox-merchant.iyzipay.com</b> → İşlemler’de görünür; canlı merchant panelinde görünmez. Site admin → Ödeme olayları canlı sunucu kayıtlarını gösterir.</p>' +
+        '<p class="hint" style="margin:0 0 12px">Gerçek tahsilat kapalı (sandbox). Test ödemeleri yalnızca <b>sandbox-merchant.iyzipay.com</b> → İşlemler’de görünür; canlı merchant panelinde görünmez. Sitedeki tahsilatları <b>Ödemeler</b> sekmesinden görürsünüz.</p>' +
         '<p class="hint" style="margin:0 0 12px">Durum: ' +
         ((s.iyzico_ready === "1") ? "sandbox açık" : "sandbox kapalı") +
         " · kaynak: " + esc(s.iyzico_key_source || "yok") +
