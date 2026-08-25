@@ -38,6 +38,9 @@ json_out([
     'keyEnvMatches' => $key === '' ? null : ($looksSandbox === iyzico_is_sandbox()),
     'apiReachable' => !empty($ping['ok']),
     'apiPing' => $ping,
-    'tls' => ['caBundle' => ini_get('curl.cainfo') ?: '(ayarlanmadi)'],
-    'note' => 'Canli anahtarlari Admin → Ayarlar → iyzico alanina yazin. Sandbox anahtarlari "sandbox-" ile baslar.',
+    'tls' => [
+        'caBundle' => ini_get('curl.cainfo') ?: '(ayarlanmadi)',
+        'caFile' => iyzico_ca_file() !== '' ? iyzico_ca_file() : '(bulunamadi)',
+    ],
+    'note' => 'Sandbox kilitli. Gercek tahsilat yok. Islemler sandbox-merchant.iyzipay.com panelinde gorunur.',
 ]);

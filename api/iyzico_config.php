@@ -13,76 +13,19 @@
  */
 
 /**
- * Admin panelindeki iyzico ayarlarını oku (dosya yoksa).
+ * Sandbox kilitli: gerçek tahsilat yok. Yerel ve canlı site aynı test anahtarını kullanır.
  *
- * @return array{api:string,secret:string,test:int,merchant:string,installments:string}|array{}
- */
-function iyzico_read_db_keys(): array {
-    static $cached = null;
-    if ($cached !== null) {
-        return $cached;
-    }
-    $cached = [];
-    try {
-        if (!function_exists('db')) {
-            require_once __DIR__ . '/db.php';
-        }
-        $pdo = db();
-        $st = $pdo->query(
-            "SELECT k, v FROM settings WHERE k IN (
-                'iyzico_api_key','iyzico_secret_key','iyzico_test_mode','iyzico_merchant_id','iyzico_installments'
-            )"
-        );
-        $map = [];
-        foreach ($st as $r) {
-            $map[(string)$r['k']] = (string)$r['v'];
-        }
-        $api = trim($map['iyzico_api_key'] ?? '');
-        $secret = trim($map['iyzico_secret_key'] ?? '');
-        if ($api === '' || $secret === '') {
-            return $cached;
-        }
-        $cached = [
-            'api' => $api,
-            'secret' => $secret,
-            'test' => array_key_exists('iyzico_test_mode', $map) ? (int)$map['iyzico_test_mode'] : 1,
-            'merchant' => trim($map['iyzico_merchant_id'] ?? ''),
-            'installments' => trim($map['iyzico_installments'] ?? ''),
-        ];
-    } catch (Throwable $e) {
-        $cached = [];
-    }
-    return $cached;
-}
-
-/**
- * Anahtar kaynağı sırası:
- *   1) api/iyzico_config.local.php (Git'e girmez; sunucuda elle/yerel)
- *   2) Yönetim paneli ayarları (canlı anahtarlar buraya yazılır, deploy silmez)
- *   3) api/iyzico_config.sandbox.php (yalnızca test)
+ * local.php varsa (yerel makine) o okunur; yoksa Git'teki sandbox dosyası
+ * canlı sunucuya deploy ile gelir. Yönetim panelinden canlı anahtar yazılmaz.
  */
 if (is_file(__DIR__ . '/iyzico_config.local.php')) {
     require __DIR__ . '/iyzico_config.local.php';
     define('IYZICO_KEY_SOURCE', 'local');
+} elseif (is_file(__DIR__ . '/iyzico_config.sandbox.php')) {
+    require __DIR__ . '/iyzico_config.sandbox.php';
+    define('IYZICO_KEY_SOURCE', 'sandbox-file');
 } else {
-    $iyzicoDb = iyzico_read_db_keys();
-    if ($iyzicoDb) {
-        define('IYZICO_API_KEY', $iyzicoDb['api']);
-        define('IYZICO_SECRET_KEY', $iyzicoDb['secret']);
-        define('IYZICO_TEST_MODE', $iyzicoDb['test'] === 0 ? 0 : 1);
-        if ($iyzicoDb['merchant'] !== '') {
-            define('IYZICO_MERCHANT_ID', $iyzicoDb['merchant']);
-        }
-        if ($iyzicoDb['installments'] !== '') {
-            define('IYZICO_INSTALLMENTS', $iyzicoDb['installments']);
-        }
-        define('IYZICO_KEY_SOURCE', 'settings');
-    } elseif (is_file(__DIR__ . '/iyzico_config.sandbox.php')) {
-        require __DIR__ . '/iyzico_config.sandbox.php';
-        define('IYZICO_KEY_SOURCE', 'sandbox-file');
-    } else {
-        define('IYZICO_KEY_SOURCE', 'none');
-    }
+    define('IYZICO_KEY_SOURCE', 'none');
 }
 
 if (!defined('IYZICO_API_KEY')) {
@@ -121,7 +64,7 @@ const IYZICO_PATH_SUB_CF_INIT = '/v2/subscription/checkoutform/initialize';
 const IYZICO_PATH_SUB_CF_RETRIEVE = '/v2/subscription/checkoutform/retrieve';
 
 function iyzico_base_url(): string {
-    return ((int)IYZICO_TEST_MODE === 1) ? IYZICO_SANDBOX_BASE : IYZICO_PRODUCTION_BASE;
+    return IYZICO_SANDBOX_BASE;
 }
 
 function iyzico_ready(): bool {
@@ -129,7 +72,7 @@ function iyzico_ready(): bool {
 }
 
 function iyzico_is_sandbox(): bool {
-    return (int)IYZICO_TEST_MODE === 1;
+    return true;
 }
 
 /** Taksit listesini tam sayı dizisine çevir */

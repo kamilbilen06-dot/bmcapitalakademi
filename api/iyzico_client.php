@@ -16,6 +16,36 @@
 require_once __DIR__ . '/iyzico_config.php';
 require_once __DIR__ . '/payments_schema.php';
 
+/** cPanel'de curl.cainfo boş olabiliyor; yerelde çalışıp canlıda SSL hatası vermesin. */
+function iyzico_ca_file(): string {
+    $candidates = [
+        (string)ini_get('curl.cainfo'),
+        (string)ini_get('openssl.cafile'),
+        '/etc/pki/tls/certs/ca-bundle.crt',
+        '/etc/ssl/certs/ca-certificates.crt',
+        '/etc/ssl/cert.pem',
+    ];
+    foreach ($candidates as $p) {
+        $p = trim($p);
+        if ($p !== '' && is_file($p)) {
+            return $p;
+        }
+    }
+    return '';
+}
+
+function iyzico_curl_ssl_opts(): array {
+    $opts = [
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+    ];
+    $ca = iyzico_ca_file();
+    if ($ca !== '') {
+        $opts[CURLOPT_CAINFO] = $ca;
+    }
+    return $opts;
+}
+
 /**
  * iyzico'ya imzalı POST isteği.
  *
@@ -46,15 +76,13 @@ function iyzico_request(string $uriPath, array $payload): array {
         CURLOPT_POSTFIELDS => $body,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 30,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_SSL_VERIFYHOST => 2,
         CURLOPT_HTTPHEADER => [
             'Authorization: ' . $authHeader,
             'x-iyzi-rnd: ' . $randomKey,
             'Content-Type: application/json',
             'Accept: application/json',
         ],
-    ]);
+    ] + iyzico_curl_ssl_opts());
 
     $raw = curl_exec($ch);
     $curlError = curl_errno($ch) ? curl_error($ch) : '';
@@ -106,14 +134,12 @@ function iyzico_get(string $uriPath, array $query = []): array {
         CURLOPT_HTTPGET => true,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 30,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_SSL_VERIFYHOST => 2,
         CURLOPT_HTTPHEADER => [
             'Authorization: ' . $authHeader,
             'x-iyzi-rnd: ' . $randomKey,
             'Accept: application/json',
         ],
-    ]);
+    ] + iyzico_curl_ssl_opts());
     $raw = curl_exec($ch);
     $curlError = curl_errno($ch) ? curl_error($ch) : '';
     $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);

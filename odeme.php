@@ -250,7 +250,8 @@ $img = trim((string)($course['image_path'] ?? ''));
               </div>
               <?php if (iyzico_ready() && iyzico_is_sandbox()): ?>
                 <div class="ck-test">
-                  Test modu · kart <b>5528 7900 0000 0008</b> · 12/30 · CVC 123 · SMS 123456
+                  Test (sandbox) · gerçek para yok · kart <b>5528 7900 0000 0008</b> · 12/30 · CVC 123 · SMS 123456<br>
+                  İşlemler yalnızca <b>sandbox-merchant.iyzipay.com</b> panelinde görünür.
                 </div>
               <?php endif; ?>
             </aside>

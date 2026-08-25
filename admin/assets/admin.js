@@ -1135,21 +1135,12 @@
         esc(s.instructor_share_pct || "60") +
         '"></div>' +
         "</div>" +
-        '<h3 style="margin:22px 0 4px;font-size:15px">Kart ödemesi (iyzico)</h3>' +
-        '<p class="hint" style="margin:0 0 12px">Yerelde sandbox çalışır; canlı sitede gerçek tahsilat için <b>merchant.iyzipay.com</b> → Ayarlar → API Anahtarları içindeki canlı anahtarları yazın (sandbox- ile başlamaz). Boş bırakılan anahtar alanı kayıtlı değeri değiştirmez. Kaydettikten sonra ödeme bir sonraki istekte yeni anahtarla gider.</p>' +
-        '<p class="hint" style="margin:0 0 12px">Şu an sitede: ' +
-        ((s.iyzico_ready === "1") ? "anahtar var" : "anahtar yok") +
-        " · " + ((s.iyzico_running_test === "0") ? "CANLI (gerçek para)" : "test / sandbox") +
-        " · kaynak: " + esc(s.iyzico_key_source || "yok") + "</p>" +
-        '<div class="form-grid">' +
-        '<div class="field"><label>Ortam</label><select name="iyzico_test_mode">' +
-          '<option value="1"' + ((s.iyzico_test_mode || "1") !== "0" ? " selected" : "") + ">Test (sandbox, para çekilmez)</option>" +
-          '<option value="0"' + ((s.iyzico_test_mode || "1") === "0" ? " selected" : "") + ">Canlı (gerçek tahsilat)</option>" +
-        "</select></div>" +
-        '<div class="field"><label>API anahtarı</label><input name="iyzico_api_key" value="" autocomplete="off" placeholder="' + (s.iyzico_api_key_set ? "Kayıtlı (değiştirmek için yazın)" : "sandbox-... veya canlı anahtar") + '"></div>' +
-        '<div class="field"><label>Güvenlik anahtarı</label><input type="password" name="iyzico_secret_key" value="" autocomplete="new-password" placeholder="' + (s.iyzico_secret_set ? "Kayıtlı (değiştirmek için yazın)" : "") + '"></div>' +
-        fld("iyzico_merchant_id", "İşyeri no (opsiyonel)") +
-        "</div>" +
+        '<h3 style="margin:22px 0 4px;font-size:15px">Kart ödemesi (iyzico sandbox)</h3>' +
+        '<p class="hint" style="margin:0 0 12px">Gerçek tahsilat kapalı. Yerel ve canlı site aynı test ortamını kullanır; para çekilmez. İşlemleri <b>sandbox-merchant.iyzipay.com</b> → İşlemler’de görün; canlı merchant panelinde görünmez.</p>' +
+        '<p class="hint" style="margin:0 0 12px">Durum: ' +
+        ((s.iyzico_ready === "1") ? "sandbox açık" : "sandbox kapalı") +
+        " · kaynak: " + esc(s.iyzico_key_source || "yok") +
+        ". Test kartı: 5528 7900 0000 0008 · 12/30 · CVC 123 · SMS 123456</p>" +
         '<h3 style="margin:22px 0 4px;font-size:15px">Öğrenci e-postaları (SMTP)</h3>' +
         '<p class="hint" style="margin:0 0 12px">Kayıt doğrulama ve şifre sıfırlama Gmail SMTP ile gider. Boş şifre alanı kayıtlı şifreyi değiştirmez.</p>' +
         '<div class="form-grid">' +
@@ -1180,7 +1171,7 @@
       document.getElementById("setForm").onsubmit = function (e) {
         e.preventDefault();
         var f = e.target, out = {};
-        ["marka", "sehir", "telefon", "whatsapp", "instagram", "twitter", "banka", "hesap_adi", "iban", "instructor_share_pct", "emailjs_public", "emailjs_service", "emailjs_template", "emailjs_to", "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from", "smtp_from_name", "sub_enabled", "sub_title", "sub_price", "sub_blurb", "sub_instructor_id", "satici_unvan", "satici_adres", "satici_vergi", "satici_mersis", "nav_hakkimizda", "nav_sss", "nav_iletisim", "nav_araclar", "iyzico_api_key", "iyzico_secret_key", "iyzico_test_mode", "iyzico_merchant_id"].forEach(function (k) { if (f[k]) out[k] = f[k].value; });
+        ["marka", "sehir", "telefon", "whatsapp", "instagram", "twitter", "banka", "hesap_adi", "iban", "instructor_share_pct", "emailjs_public", "emailjs_service", "emailjs_template", "emailjs_to", "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from", "smtp_from_name", "sub_enabled", "sub_title", "sub_price", "sub_blurb", "sub_instructor_id", "satici_unvan", "satici_adres", "satici_vergi", "satici_mersis", "nav_hakkimizda", "nav_sss", "nav_iletisim", "nav_araclar"].forEach(function (k) { if (f[k]) out[k] = f[k].value; });
         post("settings_save", out).then(function (r) { toast(r.ok ? "Ayarlar kaydedildi" : (r.error || "Hata"), r.ok ? "ok" : "err"); });
       };
       document.getElementById("pwForm").onsubmit = function (e) {
