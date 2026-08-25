@@ -227,6 +227,23 @@ function subscription_save_iyzico_plan_refs(
     }
 }
 
+/**
+ * Kayıtlı plan referansını sil.
+ *
+ * iyzico ödeme başlatmayı reddederse (silinmiş/bozuk plan) referans ayarlarda
+ * kalıyor ve sonraki her deneme aynı hatayı alıyordu. Referans temizlenince
+ * bir sonraki denemede plan yeniden kurulur.
+ */
+function subscription_forget_iyzico_plan_refs(PDO $pdo, string $env): void {
+    $keys = subscription_iyzico_setting_keys($env);
+    foreach ($keys as $key) {
+        subscription_set_setting($pdo, $key, '');
+    }
+    foreach (['sub_iyzico_product_ref', 'sub_iyzico_plan_ref', 'sub_iyzico_plan_interval', 'sub_iyzico_plan_price'] as $legacy) {
+        subscription_set_setting($pdo, $legacy, '');
+    }
+}
+
 /** Eski tek set ayarlar (yerel DB’den kalan) — sandbox/canlı ayrımı yokken kaydedilmiş olabilir. */
 function subscription_legacy_iyzico_refs(PDO $pdo): array {
     return [
@@ -237,7 +254,10 @@ function subscription_legacy_iyzico_refs(PDO $pdo): array {
     ];
 }
 
-function subscription_ensure_iyzico_plan(PDO $pdo): array {
+/**
+ * @param string $excludePlanRef iyzico'nun reddettiği plan; yeniden seçilmez.
+ */
+function subscription_ensure_iyzico_plan(PDO $pdo, string $excludePlanRef = ''): array {
     $interval = subscription_interval();
     $kurus = subscription_price_kurus($pdo);
     if ($kurus < 100) {
@@ -266,6 +286,11 @@ function subscription_ensure_iyzico_plan(PDO $pdo): array {
         if ($storedPrice === '' && $legacy['price'] !== '') {
             $storedPrice = $legacy['price'];
         }
+    }
+
+    $excludePlanRef = trim($excludePlanRef);
+    if ($excludePlanRef !== '' && $planRef === $excludePlanRef) {
+        $planRef = '';
     }
 
     if ($productRef !== '' && $planRef !== '' && $storedInterval === $interval && $storedPrice === $price) {
@@ -323,7 +348,7 @@ function subscription_ensure_iyzico_plan(PDO $pdo): array {
             }
         }
         if (is_array($productRow)) {
-            $planRef = iyzico_sub_plan_pick($productRow, $price, $interval);
+            $planRef = iyzico_sub_plan_pick($productRow, $price, $interval, $excludePlanRef);
         }
     }
 
@@ -333,7 +358,7 @@ function subscription_ensure_iyzico_plan(PDO $pdo): array {
             $listed = iyzico_sub_products_list(1, 100);
             foreach ($listed as $item) {
                 if (is_array($item) && trim((string)($item['referenceCode'] ?? '')) === $productRef) {
-                    $planRef = iyzico_sub_plan_pick($item, $price, $interval);
+                    $planRef = iyzico_sub_plan_pick($item, $price, $interval, $excludePlanRef);
                     if ($planRef !== '') {
                         break;
                     }
@@ -383,6 +408,7 @@ function subscription_mark_active(PDO $pdo, array $row, array $inner, string $in
              current_period_end = ?,
              last_paid_at = NOW(),
              error_message = '',
+             cancelled_at = NULL,
              updated_at = NOW()
          WHERE id = ?"
     )->execute([$ref, $cust, $end, $id]);
@@ -434,6 +460,93 @@ function subscription_activate_from_retrieve(PDO $pdo, array $row, array $inner)
         $orderRef = (string)($inner['orderReferenceCode'] ?? $inner['parentReferenceCode'] ?? ('first-' . $row['conversation_id']));
         subscription_record_invoice($pdo, (int)$row['id'], $orderRef, (int)$row['amount_kurus'], 'paid');
         subscription_notify_new($pdo, $row);
+    }
+}
+
+/**
+ * Ödeme sonrası doğrulanamamış kaydı iyzico'dan tekrar sorup eşitle.
+ *
+ * Callback anında iyzico doğrulaması patlarsa (ağ/geçici API hatası) kayıt
+ * pending kalır ama iyzico tarafında abonelik aktif olabilir. Bu durumda
+ * sayfada "Ödeme bekliyor" donup kalıyordu. Aynı şekilde hatayla iptal edilmiş
+ * ama iyzico'da aktif olan kayıtlar da buradan kurtarılır.
+ *
+ * @return bool Kayıt güncellendiyse true.
+ */
+function subscription_reconcile_row(PDO $pdo, array $row): bool {
+    $token = trim((string)($row['provider_token'] ?? ''));
+    if ($token === '' || !iyzico_ready()) {
+        return false;
+    }
+
+    $res = iyzico_sub_checkout_retrieve($token, (string)($row['conversation_id'] ?? ''));
+    if (!$res['ok']) {
+        subscription_touch($pdo, (int)$row['id']);
+        return false;
+    }
+
+    if ($res['active']) {
+        subscription_activate_from_retrieve($pdo, $row, $res['inner']);
+        return true;
+    }
+
+    // iyzico kesin olarak "aktif değil" dedi; ancak zaten iptalse dokunmuyoruz.
+    if ((string)$row['status'] === 'pending') {
+        $st = strtoupper((string)($res['inner']['subscriptionStatus'] ?? $res['inner']['status'] ?? ''));
+        $pdo->prepare(
+            "UPDATE subscriptions
+             SET status = 'cancelled', cancelled_at = NOW(), error_message = ?, updated_at = NOW()
+             WHERE id = ? AND status = 'pending'"
+        )->execute(['Abonelik onaylanmadı (' . $st . ')', (int)$row['id']]);
+        return true;
+    }
+
+    subscription_touch($pdo, (int)$row['id']);
+    return false;
+}
+
+/**
+ * Öğrencinin son aboneliği doğrulanmayı bekliyorsa iyzico'dan eşitle.
+ *
+ * Sayfayı yavaşlatmamak için yalnızca son 3 gün içinde açılmış, jetonu olan ve
+ * iyzico referansı henüz yazılmamış kayıtlar denenir. $force, kullanıcı ödeme
+ * dönüşünden geldiğinde (callback redirect) bekleme süresini atlar.
+ */
+function subscription_reconcile_for_student(PDO $pdo, int $studentId, bool $force = false): bool {
+    if ($studentId <= 0) {
+        return false;
+    }
+    try {
+        $st = $pdo->prepare(
+            "SELECT * FROM subscriptions
+             WHERE student_id = ?
+               AND provider_token <> ''
+               AND iyzico_subscription_ref = ''
+               AND status IN ('pending', 'cancelled')
+               AND created_at > (NOW() - INTERVAL 3 DAY)
+             ORDER BY id DESC
+             LIMIT 1"
+        );
+        $st->execute([$studentId]);
+        $row = $st->fetch();
+        if (!$row) {
+            return false;
+        }
+        // Hatasız iptal edilmiş kayıt kullanıcının kendi iptalidir; kurcalamayız.
+        if ((string)$row['status'] === 'cancelled' && trim((string)$row['error_message']) === '') {
+            return false;
+        }
+        if (!$force) {
+            $last = (string)($row['updated_at'] ?? '');
+            $lastTs = $last !== '' ? strtotime($last) : false;
+            if ($lastTs !== false && (time() - $lastTs) < 20) {
+                return false;
+            }
+        }
+        return subscription_reconcile_row($pdo, $row);
+    } catch (Throwable $e) {
+        error_log('abonelik esitleme: ' . $e->getMessage());
+        return false;
     }
 }
 

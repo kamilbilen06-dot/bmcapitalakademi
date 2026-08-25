@@ -33,7 +33,17 @@ try {
         }
     }
 
+    // Ödeme dönüşünde (ok/err) beklemeden, diğer açılışlarda kısa aralıkla
+    // iyzico'ya sorup doğrulanamamış kaydı eşitle.
+    $justReturned = isset($_GET['ok']) || isset($_GET['err']);
+    $synced = subscription_reconcile_for_student($pdo, (int)$student['id'], $justReturned);
+
     $row = subscription_find_current($pdo, (int)$student['id']);
+
+    if ($synced && $row && (string)$row['status'] === 'active') {
+        $error = '';
+        $notice = 'Aboneliğiniz aktif. Yönetici sizi WhatsApp grubuna ekleyecektir.';
+    }
 } catch (Throwable $e) {
     if ($loadError === '') {
         $loadError = 'Abonelik bilgileri yüklenemedi.';

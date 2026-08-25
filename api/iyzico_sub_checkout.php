@@ -57,9 +57,13 @@ try {
         exit;
     }
 
+    // Doğrulanamamış kayıt varsa önce iyzico'ya sor: aktifse kullanıcıyı boşuna
+    // "açık ödeme oturumu var" diye bekletmeyelim.
+    subscription_reconcile_for_student($pdo, (int)$student['id'], true);
+
     $block = subscription_blocking_row($pdo, (int)$student['id']);
     if ($block) {
-        if ($block['status'] === 'pending' && strtotime((string)$block['created_at']) < time() - 1800) {
+        if ($block['status'] === 'pending' && strtotime((string)$block['created_at']) < time() - 600) {
             $pdo->prepare(
                 "UPDATE subscriptions SET status = 'cancelled', cancelled_at = NOW(), error_message = ?, updated_at = NOW() WHERE id = ?"
             )->execute(['Ödeme tamamlanmadı', (int)$block['id']]);
@@ -145,9 +149,23 @@ try {
 
     $res = iyzico_sub_checkout_initialize($payload);
     if (!$res['ok']) {
+        // Kayıtlı plan referansı iyzico'da silinmiş/kullanılamaz olabilir ("Sistem hatası").
+        // Referansı bırakıp planı yeniden kurup bir kez daha deniyoruz; aksi halde
+        // her deneme aynı bozuk referansla ölür.
+        error_log('iyzico sub initialize: ' . $res['error'] . ' — plan yeniden kurulacak');
+        subscription_forget_iyzico_plan_refs($pdo, subscription_iyzico_env());
+        $retryPlan = subscription_ensure_iyzico_plan($pdo, (string)$plan['planRef']);
+        if ($retryPlan['ok'] && $retryPlan['planRef'] !== '' && $retryPlan['planRef'] !== $plan['planRef']) {
+            $payload['pricingPlanReferenceCode'] = $retryPlan['planRef'];
+            $pdo->prepare("UPDATE subscriptions SET iyzico_plan_ref = ?, updated_at = NOW() WHERE id = ?")
+                ->execute([$retryPlan['planRef'], $subId]);
+            $res = iyzico_sub_checkout_initialize($payload);
+        }
+    }
+    if (!$res['ok']) {
         $pdo->prepare("UPDATE subscriptions SET status = 'cancelled', cancelled_at = NOW(), error_message = ?, updated_at = NOW() WHERE id = ?")
             ->execute([mb_substr($res['error'], 0, 255), $subId]);
-        error_log('iyzico sub initialize: ' . $res['error']);
+        error_log('iyzico sub initialize (2. deneme): ' . $res['error']);
         sub_checkout_fail('Ödeme başlatılamadı: ' . $res['error']);
     }
 

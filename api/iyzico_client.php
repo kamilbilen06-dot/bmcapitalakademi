@@ -707,14 +707,20 @@ function iyzico_sub_checkout_retrieve(string $token, string $conversationId = ''
         return ['ok' => false, 'active' => false, 'error' => 'Jeton yok.', 'reason' => 'config', 'data' => [], 'inner' => []];
     }
 
-    $body = ['locale' => 'tr', 'token' => $token];
-    if ($conversationId !== '') {
-        $body['conversationId'] = $conversationId;
-    }
-    // POST retrieve tek istek — GET başarısız olunca ikinci tur bekletmesin (callback ~15 sn gecikme yapıyordu).
-    $res = iyzico_request(IYZICO_PATH_SUB_CF_RETRIEVE, $body);
-    if (!$res['ok'] && ($res['reason'] ?? '') !== 'api') {
-        $res = iyzico_get('/v2/subscription/checkoutform/' . rawurlencode($token));
+    // Belgelenen uç GET /v2/subscription/checkoutform/{token}. POST retrieve bazı
+    // hesaplarda "Sistem hatası" döndürüyor; bu yüzden GET birincil, POST yedektir.
+    // İki uçtan biri başarılıysa sonuç ondan okunur; 'api' hatası tek başına
+    // aboneliğin başarısız olduğu anlamına gelmez.
+    $res = iyzico_get('/v2/subscription/checkoutform/' . rawurlencode($token));
+    if (!$res['ok']) {
+        $body = ['locale' => 'tr', 'token' => $token];
+        if ($conversationId !== '') {
+            $body['conversationId'] = $conversationId;
+        }
+        $alt = iyzico_request(IYZICO_PATH_SUB_CF_RETRIEVE, $body);
+        if ($alt['ok']) {
+            $res = $alt;
+        }
     }
     if (!$res['ok']) {
         return [
@@ -819,23 +825,50 @@ function iyzico_sub_product_find_by_name(string $name): ?array {
     return $partial;
 }
 
-/** Ürün kaydındaki planlardan fiyat + döneme uyan referansı seç. */
-function iyzico_sub_plan_pick(array $product, string $price, string $interval): string {
+/**
+ * Ürün kaydındaki planlardan fiyat + döneme uyan referansı seç.
+ *
+ * Deneme süreli (trialPeriodDays > 0) plan KABUL EDİLMEZ: abonelik "aktif"
+ * görünür ama ilk tahsilat yapılmaz, iyzico İşlem Listesi'nde kayıt oluşmaz.
+ * Aynı sebeple yalnızca RECURRING + TRY planlar kullanılır. Uygun plan
+ * bulunamazsa boş döner ve çağıran yeni plan oluşturur.
+ *
+ * $excludeRef, ödeme başlatmayı reddetmiş planın tekrar seçilmesini engeller.
+ */
+function iyzico_sub_plan_pick(array $product, string $price, string $interval, string $excludeRef = ''): string {
     $priceNorm = iyzico_trailing_zero($price);
     $interval = strtoupper($interval);
+    $excludeRef = trim($excludeRef);
     $plans = is_array($product['pricingPlans'] ?? null) ? $product['pricingPlans'] : [];
     foreach ($plans as $plan) {
         if (!is_array($plan)) {
             continue;
         }
+        if ($excludeRef !== '' && trim((string)($plan['referenceCode'] ?? '')) === $excludeRef) {
+            continue;
+        }
         $planPrice = iyzico_trailing_zero($plan['price'] ?? '');
         $planInterval = strtoupper((string)($plan['paymentInterval'] ?? ''));
         $status = strtoupper((string)($plan['status'] ?? 'ACTIVE'));
-        if ($planPrice === $priceNorm && $planInterval === $interval && $status !== 'DELETED') {
-            $ref = trim((string)($plan['referenceCode'] ?? ''));
-            if ($ref !== '') {
-                return $ref;
-            }
+        $trial = (int)($plan['trialPeriodDays'] ?? 0);
+        $payType = strtoupper((string)($plan['planPaymentType'] ?? 'RECURRING'));
+        $currency = strtoupper((string)($plan['currencyCode'] ?? 'TRY'));
+        $intervalCount = (int)($plan['paymentIntervalCount'] ?? 1);
+        if ($planPrice !== $priceNorm || $planInterval !== $interval) {
+            continue;
+        }
+        if ($status === 'DELETED' || $status === 'PASSIVE') {
+            continue;
+        }
+        if ($trial > 0 || $payType !== 'RECURRING' || $currency !== 'TRY') {
+            continue;
+        }
+        if ($intervalCount > 1) {
+            continue;
+        }
+        $ref = trim((string)($plan['referenceCode'] ?? ''));
+        if ($ref !== '') {
+            return $ref;
         }
     }
     return '';

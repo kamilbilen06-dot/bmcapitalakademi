@@ -60,15 +60,13 @@ try {
 
     $res = iyzico_sub_checkout_retrieve($token, (string)$row['conversation_id']);
     if (!$res['ok']) {
-        if ($res['reason'] === 'api') {
-            $pdo->prepare("UPDATE subscriptions SET status = 'cancelled', error_message = ?, cancelled_at = NOW(), updated_at = NOW() WHERE id = ? AND status = 'pending'")
-                ->execute([mb_substr($res['error'], 0, 255), (int)$row['id']]);
-            sub_callback_redirect('0', $res['error']);
-        }
+        // Doğrulama isteğinin patlaması aboneliğin başarısız olduğunu GÖSTERMEZ.
+        // iyzico tarafında abonelik açılmış olabilir; kaydı iptal etmek yerine
+        // pending bırakıyoruz, aboneliklerim sayfası iyzico'dan tekrar sorup eşitler.
         $pdo->prepare("UPDATE subscriptions SET error_message = ?, updated_at = NOW() WHERE id = ?")
             ->execute([mb_substr($res['error'], 0, 255), (int)$row['id']]);
-        error_log('IYZICO SUB INCELEME ref=' . $row['conversation_id'] . ' ' . $res['error']);
-        sub_callback_redirect('0', 'Aboneliğinizin sonucu doğrulanamadı. Ekibimiz kontrol edecek.');
+        error_log('IYZICO SUB DOGRULANAMADI ref=' . $row['conversation_id'] . ' ' . $res['error']);
+        sub_callback_redirect('0', 'Aboneliğiniz doğrulanıyor. Sayfayı birkaç saniye sonra yenileyin.');
     }
 
     if (!$res['active']) {
