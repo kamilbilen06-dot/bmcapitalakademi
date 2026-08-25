@@ -504,23 +504,49 @@ function subscription_reconcile_row(PDO $pdo, array $row): bool {
 }
 
 /**
+ * Ödemeye hiç başlanmadan bırakılmış kayıtların kendi işaretlerimiz.
+ * Bunlar için iyzico'ya sormak gereksizdir; sorulunca her sayfa açılışına
+ * boşuna API gecikmesi ekleniyordu.
+ */
+function subscription_error_needs_verify(string $error): bool {
+    $e = mb_strtolower(trim($error));
+    if ($e === '') {
+        return false;
+    }
+    foreach (['ödeme tamamlanmadı', 'ödeme tamamlanmadan', 'abonelik onaylanmadı'] as $skip) {
+        if (str_contains($e, $skip)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
  * Öğrencinin son aboneliği doğrulanmayı bekliyorsa iyzico'dan eşitle.
  *
  * Sayfayı yavaşlatmamak için yalnızca son 3 gün içinde açılmış, jetonu olan ve
  * iyzico referansı henüz yazılmamış kayıtlar denenir. $force, kullanıcı ödeme
  * dönüşünden geldiğinde (callback redirect) bekleme süresini atlar.
+ * $pendingOnly, abone olma akışında kullanılır: yalnızca yeni ödemeyi engelleyen
+ * pending kayıt sorulur, iptal kayıtları için API isteği atılmaz.
  */
-function subscription_reconcile_for_student(PDO $pdo, int $studentId, bool $force = false): bool {
+function subscription_reconcile_for_student(
+    PDO $pdo,
+    int $studentId,
+    bool $force = false,
+    bool $pendingOnly = false
+): bool {
     if ($studentId <= 0) {
         return false;
     }
     try {
+        $statusFilter = $pendingOnly ? "status = 'pending'" : "status IN ('pending', 'cancelled')";
         $st = $pdo->prepare(
             "SELECT * FROM subscriptions
              WHERE student_id = ?
                AND provider_token <> ''
                AND iyzico_subscription_ref = ''
-               AND status IN ('pending', 'cancelled')
+               AND $statusFilter
                AND created_at > (NOW() - INTERVAL 3 DAY)
              ORDER BY id DESC
              LIMIT 1"
@@ -530,8 +556,9 @@ function subscription_reconcile_for_student(PDO $pdo, int $studentId, bool $forc
         if (!$row) {
             return false;
         }
-        // Hatasız iptal edilmiş kayıt kullanıcının kendi iptalidir; kurcalamayız.
-        if ((string)$row['status'] === 'cancelled' && trim((string)$row['error_message']) === '') {
+        // İptal kaydı yalnızca doğrulama hatası yüzünden kapandıysa sorulur;
+        // kullanıcının kendi iptali veya yarım bırakılmış ödeme sorulmaz.
+        if ((string)$row['status'] === 'cancelled' && !subscription_error_needs_verify((string)$row['error_message'])) {
             return false;
         }
         if (!$force) {

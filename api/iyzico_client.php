@@ -896,6 +896,56 @@ function iyzico_sub_plan_pick(array $product, string $price, string $interval, s
     return '';
 }
 
+/**
+ * Kayıtlı plan referansı iyzico'da hâlâ kullanılabilir mi?
+ *
+ * Ödeme başlatma hata verdiğinde plan referansını körü körüne silmek, sağlam
+ * referansları da siliyor ve sonraki her abonelikte plan sıfırdan kurulduğu
+ * için ödeme sayfası geç açılıyordu. Bu kontrol sayesinde referans yalnızca
+ * gerçekten bozuksa bırakılır.
+ *
+ * @return bool|null true = kullanılabilir, false = bozuk/yok,
+ *                   null = doğrulanamadı (liste alınamadı; dokunma).
+ */
+function iyzico_sub_plan_is_usable(string $planRef, string $price = '', string $interval = ''): ?bool {
+    $planRef = trim($planRef);
+    if ($planRef === '') {
+        return false;
+    }
+    $products = iyzico_sub_products_all();
+    if ($products === []) {
+        return null;
+    }
+    $priceNorm = $price !== '' ? iyzico_trailing_zero($price) : '';
+    $interval = strtoupper(trim($interval));
+    foreach ($products as $product) {
+        $plans = is_array($product['pricingPlans'] ?? null) ? $product['pricingPlans'] : [];
+        foreach ($plans as $plan) {
+            if (!is_array($plan) || trim((string)($plan['referenceCode'] ?? '')) !== $planRef) {
+                continue;
+            }
+            $status = strtoupper((string)($plan['status'] ?? 'ACTIVE'));
+            if ($status === 'DELETED' || $status === 'PASSIVE') {
+                return false;
+            }
+            if ((int)($plan['trialPeriodDays'] ?? 0) > 0) {
+                return false;
+            }
+            if (strtoupper((string)($plan['planPaymentType'] ?? 'RECURRING')) !== 'RECURRING') {
+                return false;
+            }
+            if ($priceNorm !== '' && iyzico_trailing_zero($plan['price'] ?? '') !== $priceNorm) {
+                return false;
+            }
+            if ($interval !== '' && strtoupper((string)($plan['paymentInterval'] ?? '')) !== $interval) {
+                return false;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 function iyzico_sub_plan_create(string $productRef, string $name, string $price, string $interval): array {
     $path = IYZICO_PATH_SUB_PRODUCTS . '/' . rawurlencode($productRef) . '/pricing-plans';
     return iyzico_request($path, [

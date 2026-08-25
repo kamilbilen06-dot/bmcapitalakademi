@@ -26,6 +26,7 @@
     sss: "S.S.S.",
     iletisim: "İletişim Mesajları",
     istatistik: "Ziyaretçi İstatistikleri",
+    odemeler: "Ödemeler",
     odeme_olaylari: "Ödeme olayları",
     inceleme: "İnceleme siparişleri",
     abonelikler: "Abonelikler",
@@ -767,6 +768,98 @@
         '<div class="panel"><div class="panel-head"><h3>Gün Gün Detay</h3></div><div class="table-wrap"><table><thead><tr><th>Tarih</th><th style="text-align:right">Görüntüleme</th><th style="text-align:right">Tekil</th></tr></thead><tbody>' + tableRows + "</tbody></table></div></div>";
     });
   };
+
+  // ---------- PAYMENTS (iyzico işlem listesi) ----------
+  function copyBtn(value) {
+    if (!value) return "—";
+    return (
+      "<code>" + esc(value) + "</code>" +
+      " <button class='btn tiny' data-copy='" + esc(value) + "' title='iyzico’da aramak için kopyala'>kopyala</button>"
+    );
+  }
+
+  renderers.odemeler = function () {
+    drawOdemeler({});
+  };
+  function drawOdemeler(filters) {
+    get("payments_overview", filters).then(function (d) {
+      if (!d.ok) { el.wrap.innerHTML = '<p class="empty">Yüklenemedi</p>'; return; }
+      var s = d.summary || {};
+      var sc = d.subCounts || {};
+      var items = d.items || [];
+
+      var rows = items.length
+        ? items.map(function (r) {
+            var okMark = r.tahsilEdildi
+              ? "<span class='pill ok'>tahsil edildi</span>"
+              : "<span class='pill off'>tahsilat yok</span>";
+            var searchRef = r.aramaRef || r.ref;
+            return (
+              "<tr>" +
+              "<td class='small'>" + esc(fmtDate(r.paid_at || r.created_at)) + "</td>" +
+              "<td>" + esc(r.tur) + "</td>" +
+              "<td class='small'>" + copyBtn(searchRef) + "</td>" +
+              "<td class='small'>" + copyBtn(r.iyzicoPaymentId) + "</td>" +
+              "<td>" + esc(r.student_name || r.student_email || "—") +
+              "<div class='small'>" + esc(r.student_email || "") + "</div></td>" +
+              "<td class='small'>" + esc(r.aciklama || "—") + "</td>" +
+              "<td>" + formatTryKurus(r.amount_kurus) + "</td>" +
+              "<td>" + payPill(r.status) + "<div class='small'>" + okMark + "</div>" +
+              (r.error_message ? "<div class='small'>" + esc(r.error_message) + "</div>" : "") +
+              "</td>" +
+              "</tr>"
+            );
+          }).join("")
+        : "<tr><td colspan='8' class='empty'>Bu filtrede ödeme yok.</td></tr>";
+
+      el.wrap.innerHTML =
+        '<p class="page-hint">Kurs tahsilatları ve abonelik çekimleri. <b>tahsil edildi</b> etiketi, iyzico’nun parayı gerçekten çektiğini gösterir. ' +
+        'iyzico panelinde doğrulamak için <b>Referans</b> veya <b>Ödeme No</b>’yu kopyalayıp ' +
+        '<a href="' + esc(d.transactionsUrl || "#") + '" target="_blank" rel="noopener">İşlem Listesi</a> ' +
+        'arama kutusuna yapıştırın — tarih filtresine takılmadan bulunur.</p>' +
+        '<div class="stat-grid">' +
+        '<div class="stat-card gold"><div class="label">Tahsil edilen</div><div class="num">' + formatTryKurus(s.tahsilEdilenKurus || 0) + "</div></div>" +
+        '<div class="stat-card"><div class="label">Başarılı ödeme</div><div class="num">' + (s.tahsilEdilen || 0) + "</div></div>" +
+        '<div class="stat-card"><div class="label">İade</div><div class="num">' + (s.iadeEdilen || 0) + "</div></div>" +
+        '<div class="stat-card"><div class="label">Aktif abone</div><div class="num">' + (sc.active || 0) + "</div></div>" +
+        "</div>" +
+        '<div class="panel"><div class="panel-body"><div class="filters">' +
+        '<div class="field"><label>Ara (referans / ödeme no / e-posta)</label><input type="text" id="odQ" value="' + esc(filters.q || "") + '" placeholder="IYZ2026… veya 37472644"></div>' +
+        '<div class="field"><label>Durum</label><select id="odSt">' +
+        ['', 'paid', 'refunded', 'review', 'cancelled', 'failed', 'pending'].map(function (v) {
+          var lbl = { '': 'Tümü', paid: 'Ödendi', refunded: 'İade', review: 'İnceleme', cancelled: 'İptal', failed: 'Başarısız', pending: 'Bekliyor' }[v];
+          return '<option value="' + v + '"' + ((filters.status || "") === v ? " selected" : "") + ">" + lbl + "</option>";
+        }).join("") +
+        "</select></div>" +
+        '<button type="button" class="btn-primary sm" id="odGo">Uygula</button>' +
+        '<button type="button" class="btn-ghost sm" id="odClear">Temizle</button>' +
+        "</div></div></div>" +
+        '<div class="panel"><div class="panel-head"><h3>İşlem listesi</h3></div><div class="table-wrap"><table><thead><tr>' +
+        "<th>Tarih</th><th>Tür</th><th>Referans</th><th>iyzico Ödeme No</th><th>Öğrenci</th><th>Açıklama</th><th>Tutar</th><th>Durum</th>" +
+        "</tr></thead><tbody>" + rows + "</tbody></table></div></div>";
+
+      document.getElementById("odGo").onclick = function () {
+        drawOdemeler({
+          q: document.getElementById("odQ").value.trim(),
+          status: document.getElementById("odSt").value,
+        });
+      };
+      document.getElementById("odClear").onclick = function () { drawOdemeler({}); };
+      document.getElementById("odQ").addEventListener("keydown", function (e) {
+        if (e.key === "Enter") document.getElementById("odGo").click();
+      });
+      el.wrap.querySelectorAll("[data-copy]").forEach(function (b) {
+        b.onclick = function () {
+          var v = b.getAttribute("data-copy");
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(v).then(function () { toast("Kopyalandı: " + v); });
+          } else {
+            toast(v);
+          }
+        };
+      });
+    });
+  }
 
   // ---------- PAYMENT LOGS ----------
   renderers.inceleme = function () {

@@ -57,9 +57,10 @@ try {
         exit;
     }
 
-    // Doğrulanamamış kayıt varsa önce iyzico'ya sor: aktifse kullanıcıyı boşuna
-    // "açık ödeme oturumu var" diye bekletmeyelim.
-    subscription_reconcile_for_student($pdo, (int)$student['id'], true);
+    // Yeni ödemeyi engelleyen pending kayıt varsa iyzico'ya sor: aktifse kullanıcıyı
+    // boşuna "açık ödeme oturumu var" diye bekletmeyelim. İptal kayıtları burada
+    // sorulmaz; ödeme sayfasına gereksiz gecikme eklemesin.
+    subscription_reconcile_for_student($pdo, (int)$student['id'], true, true);
 
     $block = subscription_blocking_row($pdo, (int)$student['id']);
     if ($block) {
@@ -149,17 +150,22 @@ try {
 
     $res = iyzico_sub_checkout_initialize($payload);
     if (!$res['ok']) {
-        // Kayıtlı plan referansı iyzico'da silinmiş/kullanılamaz olabilir ("Sistem hatası").
-        // Referansı bırakıp planı yeniden kurup bir kez daha deniyoruz; aksi halde
-        // her deneme aynı bozuk referansla ölür.
-        error_log('iyzico sub initialize: ' . $res['error'] . ' — plan yeniden kurulacak');
-        subscription_forget_iyzico_plan_refs($pdo, subscription_iyzico_env());
-        $retryPlan = subscription_ensure_iyzico_plan($pdo, (string)$plan['planRef']);
-        if ($retryPlan['ok'] && $retryPlan['planRef'] !== '' && $retryPlan['planRef'] !== $plan['planRef']) {
-            $payload['pricingPlanReferenceCode'] = $retryPlan['planRef'];
-            $pdo->prepare("UPDATE subscriptions SET iyzico_plan_ref = ?, updated_at = NOW() WHERE id = ?")
-                ->execute([$retryPlan['planRef'], $subId]);
-            $res = iyzico_sub_checkout_initialize($payload);
+        // Referansı yalnızca plan gerçekten bozuksa bırak. Koşulsuz silmek sağlam
+        // referansı da siliyor, sonraki her abonelikte plan sıfırdan kurulduğu için
+        // ödeme sayfası geç açılıyordu.
+        $usable = iyzico_sub_plan_is_usable((string)$plan['planRef'], (string)$plan['price'], (string)$plan['interval']);
+        if ($usable === false) {
+            error_log('iyzico sub initialize: ' . $res['error'] . ' — plan bozuk, yeniden kurulacak');
+            subscription_forget_iyzico_plan_refs($pdo, subscription_iyzico_env());
+            $retryPlan = subscription_ensure_iyzico_plan($pdo, (string)$plan['planRef']);
+            if ($retryPlan['ok'] && $retryPlan['planRef'] !== '' && $retryPlan['planRef'] !== $plan['planRef']) {
+                $payload['pricingPlanReferenceCode'] = $retryPlan['planRef'];
+                $pdo->prepare("UPDATE subscriptions SET iyzico_plan_ref = ?, updated_at = NOW() WHERE id = ?")
+                    ->execute([$retryPlan['planRef'], $subId]);
+                $res = iyzico_sub_checkout_initialize($payload);
+            }
+        } else {
+            error_log('iyzico sub initialize: ' . $res['error'] . ' — plan gecerli, referans korunuyor');
         }
     }
     if (!$res['ok']) {

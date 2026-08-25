@@ -657,6 +657,166 @@ try {
             json_out(['ok' => true, 'items' => $items]);
         }
 
+        /**
+         * Ödemeler ekranı: kurs tahsilatları + abonelik çekimleri tek listede.
+         *
+         * Her satırda iyzico'da aranacak referans (`ref`) ve ödeme numarası
+         * (`iyzicoPaymentId`) döner; İşlem Listesi'nde tarih filtresine
+         * takılmadan arama yapılabilsin.
+         */
+        case 'payments_overview': {
+            $q = trim((string)($_GET['q'] ?? ''));
+            $status = trim((string)($_GET['status'] ?? ''));
+            $like = '%' . $q . '%';
+
+            $params = [];
+            $where = "o.provider = 'iyzico'";
+            if ($status !== '') {
+                $where .= " AND o.status = ?";
+                $params[] = $status;
+            }
+            if ($q !== '') {
+                $where .= " AND (o.merchant_oid LIKE ? OR o.provider_payment_id LIKE ?"
+                    . " OR o.student_email LIKE ? OR o.student_name LIKE ?)";
+                array_push($params, $like, $like, $like, $like);
+            }
+            $st = $pdo->prepare(
+                "SELECT o.id, o.merchant_oid, o.status, o.amount_kurus, o.paid_price,
+                        o.provider_payment_id, o.provider_transaction_id, o.error_message,
+                        o.created_at, o.paid_at, o.student_name, o.student_email,
+                        c.title AS course_title
+                 FROM payment_orders o
+                 LEFT JOIN courses c ON c.id = o.course_id
+                 WHERE $where
+                 ORDER BY COALESCE(o.paid_at, o.created_at) DESC, o.id DESC
+                 LIMIT 300"
+            );
+            $st->execute($params);
+
+            $items = [];
+            foreach ($st->fetchAll() as $o) {
+                $items[] = [
+                    'tur' => 'Kurs',
+                    'ref' => (string)$o['merchant_oid'],
+                    'iyzicoPaymentId' => (string)$o['provider_payment_id'],
+                    'student_name' => (string)$o['student_name'],
+                    'student_email' => (string)$o['student_email'],
+                    'aciklama' => (string)($o['course_title'] ?? ''),
+                    'amount_kurus' => (int)$o['amount_kurus'],
+                    'status' => (string)$o['status'],
+                    'error_message' => (string)$o['error_message'],
+                    'created_at' => (string)$o['created_at'],
+                    'paid_at' => (string)($o['paid_at'] ?? ''),
+                    'tahsilEdildi' => (string)$o['status'] === 'paid'
+                        && trim((string)$o['provider_payment_id']) !== '',
+                ];
+            }
+
+            // Abonelik çekimleri (iyzico'da SUB... referansıyla görünür)
+            $sparams = [];
+            $swhere = '1=1';
+            if ($status !== '') {
+                $swhere .= " AND i.status = ?";
+                $sparams[] = $status;
+            }
+            if ($q !== '') {
+                $swhere .= " AND (i.order_reference LIKE ? OR s.conversation_id LIKE ?"
+                    . " OR s.student_email LIKE ? OR s.student_name LIKE ?)";
+                array_push($sparams, $like, $like, $like, $like);
+            }
+            try {
+                $sst = $pdo->prepare(
+                    "SELECT i.id, i.order_reference, i.amount_kurus, i.status, i.created_at,
+                            s.student_name, s.student_email, s.conversation_id, s.interval_unit
+                     FROM subscription_invoices i
+                     LEFT JOIN subscriptions s ON s.id = i.subscription_id
+                     WHERE $swhere
+                     ORDER BY i.id DESC
+                     LIMIT 300"
+                );
+                $sst->execute($sparams);
+                foreach ($sst->fetchAll() as $inv) {
+                    $ref = trim((string)$inv['order_reference']);
+                    $conv = trim((string)($inv['conversation_id'] ?? ''));
+                    $items[] = [
+                        'tur' => 'Abonelik',
+                        'ref' => $ref !== '' ? $ref : $conv,
+                        'aramaRef' => $conv,
+                        'iyzicoPaymentId' => '',
+                        'student_name' => (string)($inv['student_name'] ?? ''),
+                        'student_email' => (string)($inv['student_email'] ?? ''),
+                        'aciklama' => 'WhatsApp grubu ('
+                            . ((string)($inv['interval_unit'] ?? '') === 'DAILY' ? 'günlük' : 'aylık') . ')',
+                        'amount_kurus' => (int)$inv['amount_kurus'],
+                        'status' => (string)$inv['status'],
+                        'error_message' => '',
+                        'created_at' => (string)$inv['created_at'],
+                        'paid_at' => (string)$inv['status'] === 'paid' ? (string)$inv['created_at'] : '',
+                        'tahsilEdildi' => (string)$inv['status'] === 'paid',
+                    ];
+                }
+            } catch (Throwable $e) {
+                // subscription_invoices henüz yoksa sessiz geç
+            }
+
+            usort($items, static function ($a, $b) {
+                $ta = strtotime($a['paid_at'] !== '' ? $a['paid_at'] : $a['created_at']) ?: 0;
+                $tb = strtotime($b['paid_at'] !== '' ? $b['paid_at'] : $b['created_at']) ?: 0;
+                return $tb <=> $ta;
+            });
+
+            $summary = [
+                'tahsilEdilen' => 0,
+                'tahsilEdilenKurus' => 0,
+                'iadeEdilen' => 0,
+                'bekleyen' => 0,
+                'basarisiz' => 0,
+                'inceleme' => 0,
+            ];
+            foreach ($pdo->query(
+                "SELECT status, COUNT(*) c, COALESCE(SUM(amount_kurus),0) t
+                 FROM payment_orders WHERE provider = 'iyzico' GROUP BY status"
+            )->fetchAll() as $r) {
+                $s = (string)$r['status'];
+                $c = (int)$r['c'];
+                if ($s === 'paid') {
+                    $summary['tahsilEdilen'] += $c;
+                    $summary['tahsilEdilenKurus'] += (int)$r['t'];
+                } elseif ($s === 'refunded') {
+                    $summary['iadeEdilen'] += $c;
+                } elseif ($s === 'pending') {
+                    $summary['bekleyen'] += $c;
+                } elseif ($s === 'review') {
+                    $summary['inceleme'] += $c;
+                } elseif ($s === 'failed' || $s === 'cancelled') {
+                    $summary['basarisiz'] += $c;
+                }
+            }
+
+            $subCounts = [];
+            try {
+                foreach ($pdo->query(
+                    "SELECT status, COUNT(*) c FROM subscriptions GROUP BY status"
+                )->fetchAll() as $r) {
+                    $subCounts[(string)$r['status']] = (int)$r['c'];
+                }
+            } catch (Throwable $e) {
+                $subCounts = [];
+            }
+
+            json_out([
+                'ok' => true,
+                'items' => $items,
+                'summary' => $summary,
+                'subCounts' => $subCounts,
+                'sandbox' => iyzico_is_sandbox(),
+                'keySource' => defined('IYZICO_KEY_SOURCE') ? IYZICO_KEY_SOURCE : 'none',
+                'transactionsUrl' => iyzico_is_sandbox()
+                    ? 'https://sandbox-merchant.iyzipay.com/transactions'
+                    : 'https://merchant.iyzipay.com/transactions',
+            ]);
+        }
+
         case 'subscriptions_list': {
             json_out(['ok' => true, 'items' => subscription_admin_list($pdo)]);
         }

@@ -27,6 +27,7 @@ $csrfToken = admin_csrf_token();
         <a href="#" class="nav-item" data-view="sss"><span class="ic">❓</span> S.S.S.</a>
         <a href="#" class="nav-item" data-view="iletisim"><span class="ic">✉️</span> İletişim <span class="badge" id="unreadBadge" hidden>0</span></a>
         <a href="#" class="nav-item" data-view="istatistik"><span class="ic">📈</span> İstatistik</a>
+        <a href="#" class="nav-item" data-view="odemeler"><span class="ic">🧾</span> Ödemeler</a>
         <a href="#" class="nav-item" data-view="inceleme"><span class="ic">⚠️</span> İnceleme</a>
         <a href="#" class="nav-item" data-view="odeme_olaylari"><span class="ic">💳</span> Ödeme olayları</a>
         <a href="#" class="nav-item" data-view="abonelikler"><span class="ic">💬</span> Abonelikler</a>
@@ -67,6 +68,6 @@ $csrfToken = admin_csrf_token();
 
   <script src="../assets/js/photo-crop.js"></script>
   <script>window.BM_ADMIN_CSRF = <?= json_encode($csrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_SLASHES) ?>;</script>
-  <script src="assets/admin.js?v=20260825c"></script>
+  <script src="assets/admin.js?v=20260825d"></script>
 </body>
 </html>
