@@ -26,7 +26,11 @@ try {
     $blurb = subscription_blurb($pdo);
     $priceLabel = subscription_price_label($pdo);
     $enabled = subscription_enabled($pdo) && subscription_price_kurus($pdo) >= 100 && iyzico_ready();
+    subscription_abandon_unpaid_pending($pdo, (int)$student['id']);
     $already = subscription_blocking_row($pdo, (int)$student['id']);
+    if (!$already) {
+        $already = subscription_find_current($pdo, (int)$student['id']);
+    }
     $needPhone = preg_replace('/\D/', '', $phone) === '';
 } catch (Throwable $e) {
     if ($loadError === '') {
@@ -34,7 +38,7 @@ try {
     }
 }
 
-if ($already && in_array($already['status'], ['active', 'past_due'], true)) {
+if ($already && (in_array($already['status'], ['active', 'past_due'], true) || subscription_is_entitled($already))) {
     header('Location: aboneliklerim.php', true, 302);
     exit;
 }

@@ -169,7 +169,7 @@ function ogrenci_sub_card(array $s): void {
     $period = strtoupper((string)($s['interval_unit'] ?? '')) === 'DAILY' ? 'günlük' : 'aylık';
     $badgeClass = 'wait';
     $badgeIcon = 'fa-clock';
-    $badgeText = subscription_status_label($status);
+    $badgeText = subscription_status_label($status, $status === 'cancelled' && !empty($s['current_period_end']) && strtotime((string)$s['current_period_end']) > time());
     if ($status === 'active') {
         $badgeClass = 'ok';
         $badgeIcon = 'fa-check';

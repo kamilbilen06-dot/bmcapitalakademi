@@ -83,7 +83,10 @@ function subscription_add_period(string $interval, string $fromSql = ''): string
     return date('Y-m-d H:i:s', strtotime('+1 month', $t));
 }
 
-function subscription_status_label(string $status): string {
+function subscription_status_label(string $status, bool $entitled = false): string {
+    if ($status === 'cancelled' && $entitled) {
+        return 'Aktif · iptal edildi';
+    }
     $map = [
         'pending' => 'Ödeme bekliyor',
         'active' => 'Aktif',
@@ -167,12 +170,45 @@ function subscription_find_current(PDO $pdo, int $studentId): ?array {
     $st = $pdo->prepare(
         "SELECT * FROM subscriptions
          WHERE student_id = ?
-         ORDER BY FIELD(status, 'active', 'past_due', 'pending', 'cancelled', 'expired'), id DESC
+           AND (
+             status IN ('active', 'past_due')
+             OR (status = 'cancelled'
+                 AND current_period_end IS NOT NULL
+                 AND current_period_end > NOW())
+           )
+         ORDER BY FIELD(status, 'active', 'past_due', 'cancelled'), id DESC
          LIMIT 1"
     );
     $st->execute([$studentId]);
     $row = $st->fetch();
     return $row ?: null;
+}
+
+/**
+ * Ödeme sayfasında bırakılmış / iptal edilmiş denemeyi kapat.
+ *
+ * iyzico referansı yok ve hiç tahsilat yoksa bu bir abonelik değildir;
+ * Aboneliklerim'de "Ödeme bekliyor" görünmesin, yeni deneme de engellenmesin.
+ */
+function subscription_abandon_unpaid_pending(PDO $pdo, int $studentId): int {
+    if ($studentId <= 0) {
+        return 0;
+    }
+    try {
+        $st = $pdo->prepare(
+            "UPDATE subscriptions
+             SET status = 'cancelled', cancelled_at = NOW(),
+                 error_message = 'Ödeme tamamlanmadı', updated_at = NOW()
+             WHERE student_id = ?
+               AND status = 'pending'
+               AND iyzico_subscription_ref = ''
+               AND last_paid_at IS NULL"
+        );
+        $st->execute([$studentId]);
+        return (int)$st->rowCount();
+    } catch (Throwable $e) {
+        return 0;
+    }
 }
 
 function subscription_blocking_row(PDO $pdo, int $studentId): ?array {
@@ -711,7 +747,7 @@ function subscription_admin_list(PDO $pdo): array {
     $out = [];
     foreach ($rows as $r) {
         $r['entitled'] = subscription_is_entitled($r);
-        $r['status_label'] = subscription_status_label((string)$r['status']);
+        $r['status_label'] = subscription_status_label((string)$r['status'], $r['entitled']);
         $r['wa_digits'] = preg_replace('/\D/', '', (string)$r['student_phone']);
         $out[] = $r;
     }
@@ -733,7 +769,7 @@ function subscription_list_for_instructor(PDO $pdo, int $instructorId): array {
     $out = [];
     foreach ($st->fetchAll() as $r) {
         $r['entitled'] = subscription_is_entitled($r);
-        $r['status_label'] = subscription_status_label((string)$r['status']);
+        $r['status_label'] = subscription_status_label((string)$r['status'], $r['entitled']);
         $r['wa_digits'] = preg_replace('/\D/', '', (string)$r['student_phone']);
         $out[] = $r;
     }

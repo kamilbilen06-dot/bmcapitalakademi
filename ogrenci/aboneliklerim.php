@@ -38,11 +38,19 @@ try {
     $justReturned = isset($_GET['ok']) || isset($_GET['err']);
     $synced = subscription_reconcile_for_student($pdo, (int)$student['id'], $justReturned);
 
+    // Ödeme ekranında geri / iptal: tahsilatsız pending kaydı yok say.
+    if (!isset($_GET['ok'])) {
+        subscription_abandon_unpaid_pending($pdo, (int)$student['id']);
+    }
+
     $row = subscription_find_current($pdo, (int)$student['id']);
 
     if ($synced && $row && (string)$row['status'] === 'active') {
         $error = '';
         $notice = 'Aboneliğiniz aktif. Yönetici sizi WhatsApp grubuna ekleyecektir.';
+    } elseif (!$row && $justReturned && !isset($_GET['ok'])) {
+        // Ödeme iptal / geri: boş durum; hata bandı göstermeyelim.
+        $error = '';
     }
 } catch (Throwable $e) {
     if ($loadError === '') {
@@ -89,10 +97,11 @@ ogrenci_panel_start($student, 'abonelikler', 'Aboneliklerim', 'WhatsApp analiz g
 <?php else: ?>
   <?php
     $badge = 'wait';
+    $statusLabel = subscription_status_label((string)$row['status'], $entitled);
     if ($row['status'] === 'active' && $entitled) {
         $badge = 'ok';
     } elseif ($row['status'] === 'cancelled' && $entitled) {
-        $badge = 'wait';
+        $badge = 'ok';
     } elseif (in_array($row['status'], ['cancelled', 'expired'], true)) {
         $badge = 'cancel';
     } elseif ($row['status'] === 'past_due') {
@@ -110,14 +119,16 @@ ogrenci_panel_start($student, 'abonelikler', 'Aboneliklerim', 'WhatsApp analiz g
     <ul class="panel-meta">
       <li>
         <span>Durum</span>
-        <b><span class="order-badge <?= ogrenci_e($badge) ?>"><?= ogrenci_e(subscription_status_label((string)$row['status'])) ?></span></b>
+        <b><span class="order-badge <?= ogrenci_e($badge) ?>"><?= ogrenci_e($statusLabel) ?></span></b>
       </li>
       <li><span>Tutar</span><b><?= ogrenci_e(number_format(((int)$row['amount_kurus']) / 100, 2, ',', '.')) ?> TL / <?= ogrenci_e($row['interval_unit'] === 'DAILY' ? 'gün' : 'ay') ?></b></li>
       <li><span><?= $row['status'] === 'cancelled' ? 'Üyelik bitişi' : 'Sonraki dönem' ?></span><b><?= ogrenci_e(sub_fmt_dt($row['current_period_end'])) ?></b></li>
       <li><span>Son ödeme</span><b><?= ogrenci_e(sub_fmt_dt($row['last_paid_at'])) ?></b></li>
     </ul>
 
-    <?php if ($entitled): ?>
+    <?php if ($entitled && $row['status'] === 'cancelled'): ?>
+      <p class="hint" style="margin-top:16px">Aboneliğiniz iptal edildi; yeni çekim yapılmaz. Üyeliğiniz <?= ogrenci_e(sub_fmt_dt($row['current_period_end'])) ?> tarihine kadar açıktır. Grup daveti siteden gönderilmez.</p>
+    <?php elseif ($entitled): ?>
       <p class="hint" style="margin-top:16px">Grup daveti siteden gönderilmez. Ödemeniz görünür görünmez yönetici sizi WhatsApp grubuna ekler.</p>
     <?php endif; ?>
 

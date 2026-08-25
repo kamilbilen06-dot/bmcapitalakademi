@@ -619,7 +619,32 @@ try {
         case 'payments_overview': {
             $q = trim((string)($_GET['q'] ?? ''));
             $status = trim((string)($_GET['status'] ?? ''));
+            $tur = trim((string)($_GET['tur'] ?? ''));
+            $from = trim((string)($_GET['from'] ?? ''));
+            $to = trim((string)($_GET['to'] ?? ''));
+            if ($from !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) {
+                $from = '';
+            }
+            if ($to !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+                $to = '';
+            }
             $like = '%' . $q . '%';
+            $loadKurs = $tur !== 'abonelik';
+            $loadSub = $tur !== 'kurs';
+
+            $dateSql = static function (string $col) use ($from, $to): array {
+                $sql = '';
+                $params = [];
+                if ($from !== '') {
+                    $sql .= " AND DATE($col) >= ?";
+                    $params[] = $from;
+                }
+                if ($to !== '') {
+                    $sql .= " AND DATE($col) <= ?";
+                    $params[] = $to;
+                }
+                return [$sql, $params];
+            };
 
             $params = [];
             $where = "o.provider = 'iyzico'";
@@ -632,6 +657,12 @@ try {
                     . " OR o.student_email LIKE ? OR o.student_name LIKE ?)";
                 array_push($params, $like, $like, $like, $like);
             }
+            list($datePart, $dateParams) = $dateSql('COALESCE(o.paid_at, o.created_at)');
+            $where .= $datePart;
+            $params = array_merge($params, $dateParams);
+
+            $items = [];
+            if ($loadKurs) {
             $st = $pdo->prepare(
                 "SELECT o.id, o.merchant_oid, o.status, o.amount_kurus, o.paid_price,
                         o.provider_payment_id, o.provider_transaction_id, o.error_message,
@@ -645,7 +676,6 @@ try {
             );
             $st->execute($params);
 
-            $items = [];
             foreach ($st->fetchAll() as $o) {
                 $items[] = [
                     'tur' => 'Kurs',
@@ -663,6 +693,7 @@ try {
                         && trim((string)$o['provider_payment_id']) !== '',
                 ];
             }
+            }
 
             // Abonelik çekimleri (iyzico'da SUB... referansıyla görünür)
             $sparams = [];
@@ -676,6 +707,10 @@ try {
                     . " OR s.student_email LIKE ? OR s.student_name LIKE ?)";
                 array_push($sparams, $like, $like, $like, $like);
             }
+            list($sDatePart, $sDateParams) = $dateSql('i.created_at');
+            $swhere .= $sDatePart;
+            $sparams = array_merge($sparams, $sDateParams);
+            if ($loadSub) {
             try {
                 $sst = $pdo->prepare(
                     "SELECT i.id, i.order_reference, i.amount_kurus, i.status, i.created_at,
@@ -710,6 +745,7 @@ try {
             } catch (Throwable $e) {
                 // subscription_invoices henüz yoksa sessiz geç
             }
+            }
 
             usort($items, static function ($a, $b) {
                 $ta = strtotime($a['paid_at'] !== '' ? $a['paid_at'] : $a['created_at']) ?: 0;
@@ -725,23 +761,19 @@ try {
                 'basarisiz' => 0,
                 'inceleme' => 0,
             ];
-            foreach ($pdo->query(
-                "SELECT status, COUNT(*) c, COALESCE(SUM(amount_kurus),0) t
-                 FROM payment_orders WHERE provider = 'iyzico' GROUP BY status"
-            )->fetchAll() as $r) {
-                $s = (string)$r['status'];
-                $c = (int)$r['c'];
-                if ($s === 'paid') {
-                    $summary['tahsilEdilen'] += $c;
-                    $summary['tahsilEdilenKurus'] += (int)$r['t'];
-                } elseif ($s === 'refunded') {
-                    $summary['iadeEdilen'] += $c;
-                } elseif ($s === 'pending') {
-                    $summary['bekleyen'] += $c;
-                } elseif ($s === 'review') {
-                    $summary['inceleme'] += $c;
-                } elseif ($s === 'failed' || $s === 'cancelled') {
-                    $summary['basarisiz'] += $c;
+            foreach ($items as $it) {
+                $stt = (string)$it['status'];
+                if (!empty($it['tahsilEdildi'])) {
+                    $summary['tahsilEdilen']++;
+                    $summary['tahsilEdilenKurus'] += (int)$it['amount_kurus'];
+                } elseif ($stt === 'refunded') {
+                    $summary['iadeEdilen']++;
+                } elseif ($stt === 'pending') {
+                    $summary['bekleyen']++;
+                } elseif ($stt === 'review') {
+                    $summary['inceleme']++;
+                } elseif ($stt === 'failed' || $stt === 'cancelled') {
+                    $summary['basarisiz']++;
                 }
             }
 
@@ -761,6 +793,9 @@ try {
                 'items' => $items,
                 'summary' => $summary,
                 'subCounts' => $subCounts,
+                'from' => $from,
+                'to' => $to,
+                'tur' => $tur,
                 'sandbox' => iyzico_is_sandbox(),
                 'keySource' => defined('IYZICO_KEY_SOURCE') ? IYZICO_KEY_SOURCE : 'none',
                 'transactionsUrl' => iyzico_is_sandbox()

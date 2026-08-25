@@ -60,20 +60,22 @@ try {
     // Yeni ödemeyi engelleyen pending kayıt varsa iyzico'ya sor: aktifse kullanıcıyı
     // boşuna "açık ödeme oturumu var" diye bekletmeyelim. İptal kayıtları burada
     // sorulmaz; ödeme sayfasına gereksiz gecikme eklemesin.
+    subscription_abandon_unpaid_pending($pdo, (int)$student['id']);
     subscription_reconcile_for_student($pdo, (int)$student['id'], true, true);
 
     $block = subscription_blocking_row($pdo, (int)$student['id']);
     if ($block) {
-        if ($block['status'] === 'pending' && strtotime((string)$block['created_at']) < time() - 600) {
-            $pdo->prepare(
-                "UPDATE subscriptions SET status = 'cancelled', cancelled_at = NOW(), error_message = ?, updated_at = NOW() WHERE id = ?"
-            )->execute(['Ödeme tamamlanmadı', (int)$block['id']]);
+        if ($block['status'] === 'pending') {
+            subscription_abandon_unpaid_pending($pdo, (int)$student['id']);
         } elseif (in_array($block['status'], ['active', 'past_due'], true)) {
             header('Location: /ogrenci/aboneliklerim.php', true, 302);
             exit;
-        } elseif ($block['status'] === 'pending') {
-            sub_checkout_fail('Açık bir ödeme oturumunuz var. Birkaç dakika sonra tekrar deneyin veya Aboneliklerim’den iptal edin.');
         }
+    }
+    $currentOpen = subscription_find_current($pdo, (int)$student['id']);
+    if ($currentOpen && subscription_is_entitled($currentOpen)) {
+        header('Location: /ogrenci/aboneliklerim.php', true, 302);
+        exit;
     }
 
     $plan = subscription_ensure_iyzico_plan($pdo);

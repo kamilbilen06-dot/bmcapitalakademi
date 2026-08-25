@@ -24,8 +24,6 @@
     satislar: "Satışlar",
     urunler: "Ürünler",
     sss: "S.S.S.",
-    iletisim: "İletişim Mesajları",
-    istatistik: "Ziyaretçi İstatistikleri",
     odemeler: "Ödemeler",
     abonelikler: "Abonelikler",
     ayarlar: "Ayarlar",
@@ -219,7 +217,6 @@
         card("Bugün", c.today, c.uniqueToday + " tekil ziyaretçi", true) +
         card("Son 7 Gün", c.week, "sayfa görüntüleme") +
         card("Toplam", c.total, "tüm zamanlar") +
-        card("Okunmamış Mesaj", c.unread, "iletişim talebi") +
         card("İçerik", c.modules, c.faqs + " S.S.S.") +
         "</div>" +
         '<div class="panel"><div class="panel-head"><h3>Son 30 Gün · Günlük Görüntüleme</h3></div><div class="panel-body">' +
@@ -235,6 +232,7 @@
     return '<div class="stat-card' + (gold ? " gold" : "") + '"><div class="label">' + label + '</div><div class="num">' + num + '</div><div class="sub">' + sub + "</div></div>";
   }
   function updateUnread(n) {
+    if (!el.unreadBadge) return;
     if (n > 0) { el.unreadBadge.hidden = false; el.unreadBadge.textContent = n; }
     else el.unreadBadge.hidden = true;
   }
@@ -777,7 +775,7 @@
   }
 
   renderers.odemeler = function () {
-    drawOdemeler({});
+    drawOdemeler(lastDays(7));
   };
   function drawOdemeler(filters) {
     get("payments_overview", filters).then(function (d) {
@@ -785,6 +783,9 @@
       var s = d.summary || {};
       var sc = d.subCounts || {};
       var items = d.items || [];
+      filters = filters || {};
+      if (filters.from === undefined) filters.from = d.from || "";
+      if (filters.to === undefined) filters.to = d.to || "";
 
       var rows = items.length
         ? items.map(function (r) {
@@ -810,8 +811,12 @@
           }).join("")
         : "<tr><td colspan='8' class='empty'>Bu filtrede ödeme yok.</td></tr>";
 
+      var turOpts = [["", "Tümü"], ["kurs", "Kurs"], ["abonelik", "Abonelik"]].map(function (o) {
+        return '<option value="' + o[0] + '"' + ((filters.tur || "") === o[0] ? " selected" : "") + ">" + o[1] + "</option>";
+      }).join("");
+
       el.wrap.innerHTML =
-        '<p class="page-hint">Kurs tahsilatları ve abonelik çekimleri. <b>tahsil edildi</b> etiketi, iyzico’nun parayı gerçekten çektiğini gösterir. ' +
+        '<p class="page-hint">Kurs tahsilatları ve abonelik çekimleri. Varsayılan aralık son 7 gün. <b>tahsil edildi</b> etiketi, iyzico’nun parayı gerçekten çektiğini gösterir. ' +
         'iyzico panelinde doğrulamak için <b>Referans</b> veya <b>Ödeme No</b>’yu kopyalayıp ' +
         '<a href="' + esc(d.transactionsUrl || "#") + '" target="_blank" rel="noopener">İşlem Listesi</a> ' +
         'arama kutusuna yapıştırın — tarih filtresine takılmadan bulunur.</p>' +
@@ -829,6 +834,9 @@
             'Karta tıklayıp listeyi görün; iyzico’da doğrulayıp Öğrenciler sekmesinden elle erişim verin.</p>'
           : "") +
         '<div class="panel"><div class="panel-body"><div class="filters">' +
+        '<div class="field"><label>Başlangıç</label><input type="date" id="odFrom" value="' + esc(filters.from || "") + '"></div>' +
+        '<div class="field"><label>Bitiş</label><input type="date" id="odTo" value="' + esc(filters.to || "") + '"></div>' +
+        '<div class="field"><label>Tür</label><select id="odTur">' + turOpts + "</select></div>" +
         '<div class="field"><label>Ara (referans / ödeme no / e-posta)</label><input type="text" id="odQ" value="' + esc(filters.q || "") + '" placeholder="IYZ2026… veya 37472644"></div>' +
         '<div class="field"><label>Durum</label><select id="odSt">' +
         ['', 'paid', 'refunded', 'review', 'cancelled', 'failed', 'pending'].map(function (v) {
@@ -837,25 +845,37 @@
         }).join("") +
         "</select></div>" +
         '<button type="button" class="btn-primary sm" id="odGo">Uygula</button>' +
-        '<button type="button" class="btn-ghost sm" id="odClear">Temizle</button>' +
+        '<button type="button" class="btn-ghost sm" id="odWeek">Son 7 gün</button>' +
+        '<button type="button" class="btn-ghost sm" id="odAll">Tüm zamanlar</button>' +
         "</div></div></div>" +
         '<div class="panel"><div class="panel-head"><h3>İşlem listesi</h3></div><div class="table-wrap"><table><thead><tr>' +
         "<th>Tarih</th><th>Tür</th><th>Referans</th><th>iyzico Ödeme No</th><th>Öğrenci</th><th>Açıklama</th><th>Tutar</th><th>Durum</th>" +
         "</tr></thead><tbody>" + rows + "</tbody></table></div></div>";
 
-      document.getElementById("odGo").onclick = function () {
-        drawOdemeler({
-          q: document.getElementById("odQ").value.trim(),
-          status: document.getElementById("odSt").value,
-        });
+      function odFilters(extra) {
+        extra = extra || {};
+        return {
+          q: extra.q !== undefined ? extra.q : document.getElementById("odQ").value.trim(),
+          status: extra.status !== undefined ? extra.status : document.getElementById("odSt").value,
+          tur: extra.tur !== undefined ? extra.tur : document.getElementById("odTur").value,
+          from: extra.from !== undefined ? extra.from : document.getElementById("odFrom").value,
+          to: extra.to !== undefined ? extra.to : document.getElementById("odTo").value,
+        };
+      }
+      document.getElementById("odGo").onclick = function () { drawOdemeler(odFilters()); };
+      document.getElementById("odWeek").onclick = function () {
+        var w = lastDays(7);
+        drawOdemeler(odFilters({ from: w.from, to: w.to }));
       };
-      document.getElementById("odClear").onclick = function () { drawOdemeler({}); };
+      document.getElementById("odAll").onclick = function () {
+        drawOdemeler(odFilters({ from: "", to: "" }));
+      };
       document.getElementById("odQ").addEventListener("keydown", function (e) {
         if (e.key === "Enter") document.getElementById("odGo").click();
       });
       var incCard = document.getElementById("odIncelemeCard");
       if (incCard && (s.inceleme || 0) > 0) {
-        incCard.onclick = function () { drawOdemeler({ status: "review" }); };
+        incCard.onclick = function () { drawOdemeler(odFilters({ status: "review" })); };
       }
       el.wrap.querySelectorAll("[data-copy]").forEach(function (b) {
         b.onclick = function () {
@@ -1060,7 +1080,7 @@
     var all = subState.items;
     var counts = { active: 0, entitled: 0, add: 0, remove: 0 };
     all.forEach(function (r) {
-      if (r.status === "active") counts.active++;
+      if (r.status === "active" || (r.status === "cancelled" && r.entitled)) counts.active++;
       if (r.entitled) counts.entitled++;
       var t = subTodo(r);
       if (t === "add") counts.add++;
@@ -1069,7 +1089,9 @@
 
     var q = subState.q.trim().toLowerCase();
     var items = all.filter(function (r) {
-      if (subState.status && r.status !== subState.status) return false;
+      if (subState.status === "active") {
+        if (!(r.status === "active" || (r.status === "cancelled" && r.entitled))) return false;
+      } else if (subState.status && r.status !== subState.status) return false;
       if (subState.todo && subTodo(r) !== subState.todo) return false;
       if (q) {
         var hay = (
@@ -1086,14 +1108,16 @@
           if (digits.length === 10) digits = "90" + digits;
           if (digits.length === 11 && digits.charAt(0) === "0") digits = "90" + digits.slice(1);
           var waHref = digits ? "https://wa.me/" + digits : "";
-          var pill = r.status === "active" ? "ok" : (r.status === "past_due" ? "urun" : "off");
+          var pill = (r.status === "active" || (r.status === "cancelled" && r.entitled)) ? "ok"
+            : (r.status === "past_due" ? "urun" : "off");
           var waBtn = subWaAdded(r)
             ? "<button class='btn tiny' data-wa='0' data-id='" + r.id + "'>WP çıkarıldı</button>"
             : "<button class='btn tiny primary' data-wa='1' data-id='" + r.id + "'>WP eklendi</button>";
           var todo = subTodo(r);
-          var need = todo === "add"
-            ? " <span class='pill urun'>gruba ekle</span>"
-            : (todo === "remove" ? " <span class='pill'>gruptan çıkar</span>" : "");
+          var need = "";
+          if (r.status === "cancelled" && r.entitled) need += " <span class='pill'>iptal</span>";
+          if (todo === "add") need += " <span class='pill urun'>gruba ekle</span>";
+          else if (todo === "remove") need += " <span class='pill'>gruptan çıkar</span>";
           return (
             "<tr>" +
             "<td>" + esc(r.student_name || "—") + "<div class='small'>" + esc(r.student_email || "") + "</div></td>" +
