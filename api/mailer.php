@@ -163,42 +163,24 @@ function mailer_smtp_available(): bool {
 }
 
 /**
- * SMTP varsa yalnız SMTP. cPanel Exim / GoDaddy HOSTING RELAY kullanılmaz
- * (Gmail o rölede ~1 dk bekletiyor). Exim yalnızca SMTP tanımlı değilse.
+ * Denenecek gönderim yolları. Canlıda (Linux) önce sunucu, sonra SMTP.
+ * Windows'ta sendmail yok, o yüzden yerel testte SMTP başa alınır.
  *
  * @return string[]
  */
 function mailer_transport_order(): array {
-    if (mailer_smtp_available()) {
-        return ['smtp'];
+    $order = mailer_is_windows() ? ['smtp', 'server'] : ['server', 'smtp'];
+    if (defined('MAIL_TRANSPORT')) {
+        $t = strtolower(trim((string) MAIL_TRANSPORT));
+        if ($t === 'smtp') {
+            $order = ['smtp', 'server'];
+        } elseif (in_array($t, ['server', 'mail', 'sendmail'], true)) {
+            $order = ['server', 'smtp'];
+        }
     }
-    $forced = defined('MAIL_TRANSPORT') ? strtolower(trim((string) MAIL_TRANSPORT)) : '';
-    if (in_array($forced, ['server', 'mail', 'sendmail'], true) && mailer_server_available()) {
-        return ['server'];
-    }
-    return [];
-}
-
-/**
- * Gmail 587 (STARTTLS) veya 465 (SSL). Hosting 587'yi keserse 465 denenir.
- *
- * @param array{host:string,port:int,secure:string,user:string,pass:string,from:string,from_name:string} $c
- * @return list<array{host:string,port:int,secure:string,user:string,pass:string,from:string,from_name:string}>
- */
-function mailer_smtp_attempts(array $c): array {
-    $attempts = [$c];
-    $host = strtolower((string) ($c['host'] ?? ''));
-    if (!str_contains($host, 'gmail.com') && !str_contains($host, 'googlemail.com')) {
-        return $attempts;
-    }
-    $port = (int) ($c['port'] ?? 0);
-    $altPort = $port === 465 ? 587 : 465;
-    $altSecure = $altPort === 465 ? 'ssl' : 'tls';
-    $alt = $c;
-    $alt['port'] = $altPort;
-    $alt['secure'] = $altSecure;
-    $attempts[] = $alt;
-    return $attempts;
+    return array_values(array_filter($order, static function (string $t): bool {
+        return $t === 'server' ? mailer_server_available() : mailer_smtp_available();
+    }));
 }
 
 /**
@@ -387,16 +369,12 @@ function mailer_send(string $to, string $subject, string $html, string $text = '
             continue;
         }
 
-        $smtpErr = [];
-        foreach (mailer_smtp_attempts(mailer_config()) as $cfg) {
-            try {
-                mailer_smtp_send($cfg, $to, $msg['raw']);
-                return ['ok' => true, 'error' => '', 'transport' => 'smtp'];
-            } catch (Throwable $e) {
-                $smtpErr[] = $cfg['host'] . ':' . (int) $cfg['port'] . ' ' . $e->getMessage();
-            }
+        try {
+            mailer_smtp_send(mailer_config(), $to, $msg['raw']);
+            return ['ok' => true, 'error' => '', 'transport' => 'smtp'];
+        } catch (Throwable $e) {
+            $errors[] = 'smtp: ' . $e->getMessage();
         }
-        $errors[] = 'smtp: ' . implode(' | ', $smtpErr);
     }
 
     $err = implode(' | ', $errors);

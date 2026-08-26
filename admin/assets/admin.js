@@ -1290,7 +1290,7 @@
         " · kaynak: " + esc(s.iyzico_key_source || "yok") +
         ". Test kartı: 5528 7900 0000 0008 · 12/30 · CVC 123 · SMS 123456</p>" +
         '<h3 style="margin:22px 0 4px;font-size:15px">Öğrenci e-postaları (SMTP)</h3>' +
-        '<p class="hint" style="margin:0 0 12px">Kayıt doğrulama ve şifre sıfırlama doğrudan <b>Gmail SMTP</b> ile gider (cPanel / GoDaddy rölesi yok). Boş şifre alanı kayıtlı şifreyi değiştirmez.</p>' +
+        '<p class="hint" style="margin:0 0 12px">Kayıt doğrulama ve şifre sıfırlama Gmail SMTP ile gider. Boş şifre alanı kayıtlı şifreyi değiştirmez.</p>' +
         '<div class="form-grid">' +
         fld("smtp_host", "SMTP sunucu") + fld("smtp_port", "Port (587 / 465)") +
         '<div class="field"><label>Şifreleme</label><select name="smtp_secure">' +
