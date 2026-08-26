@@ -802,13 +802,12 @@
             var okMark = r.tahsilEdildi
               ? "<span class='pill ok'>tahsil edildi</span>"
               : "<span class='pill off'>tahsilat yok</span>";
-            var searchRef = r.iyzicoPaymentId || r.aramaRef || r.ref;
+            var payNo = r.iyzicoPaymentId || r.aramaRef || r.ref;
             return (
               "<tr>" +
               "<td class='small'>" + esc(fmtDate(r.paid_at || r.created_at)) + "</td>" +
               "<td>" + esc(r.tur) + "</td>" +
-              "<td class='small'>" + copyBtn(searchRef) + "</td>" +
-              "<td class='small'>" + copyBtn(r.iyzicoPaymentId) + "</td>" +
+              "<td class='small'>" + copyBtn(payNo) + "</td>" +
               "<td>" + esc(r.student_name || r.student_email || "—") +
               "<div class='small'>" + esc(r.student_email || "") + "</div></td>" +
               "<td class='small'>" + esc(r.aciklama || "—") + "</td>" +
@@ -819,7 +818,7 @@
               "</tr>"
             );
           }).join("")
-        : "<tr><td colspan='8' class='empty'>Bu filtrede ödeme yok.</td></tr>";
+        : "<tr><td colspan='7' class='empty'>Bu filtrede ödeme yok.</td></tr>";
 
       var turOpts = [["", "Tümü"], ["kurs", "Kurs"], ["abonelik", "Abonelik"]].map(function (o) {
         return '<option value="' + o[0] + '"' + ((filters.tur || "") === o[0] ? " selected" : "") + ">" + o[1] + "</option>";
@@ -858,7 +857,7 @@
         '<button type="button" class="btn-ghost sm" id="odAll">Tüm zamanlar</button>' +
         "</div></div></div>" +
         '<div class="panel"><div class="panel-head"><h3>İşlem listesi</h3></div><div class="table-wrap"><table><thead><tr>' +
-        "<th>Tarih</th><th>Tür</th><th>Ödeme No</th><th>iyzico Ödeme No</th><th>Öğrenci</th><th>Açıklama</th><th>Tutar</th><th>Durum</th>" +
+        "<th>Tarih</th><th>Tür</th><th>Ödeme No</th><th>Öğrenci</th><th>Açıklama</th><th>Tutar</th><th>Durum</th>" +
         "</tr></thead><tbody>" + rows + "</tbody></table></div></div>";
 
       function odFilters(extra) {
@@ -1109,6 +1108,20 @@
         if (hay.indexOf(q) === -1) return false;
       }
       return true;
+    });
+
+    items.sort(function (a, b) {
+      function rank(r) {
+        if (r.status === "active") return 0;
+        if (r.status === "past_due") return 1;
+        if (r.status === "pending") return 2;
+        if (r.status === "cancelled" && r.entitled) return 3;
+        if (r.status === "cancelled") return 4;
+        return 5;
+      }
+      var c = rank(a) - rank(b);
+      if (c !== 0) return c;
+      return (Number(b.id) || 0) - (Number(a.id) || 0);
     });
 
     var rows = items.length

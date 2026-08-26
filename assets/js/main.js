@@ -398,47 +398,55 @@
     } catch (e) {}
   }
 
-  function boot() {
-    // Header/footer/floaters — güncel site bilgileriyle
+  function paintChrome() {
     S = (window.BM_DATA && window.BM_DATA.site) || {};
     waLink = "https://wa.me/" + (S.whatsapp || "");
     if (window.BM_HELPERS) window.BM_HELPERS.waLink = waLink;
-
     inject("site-header", buildHeader());
     inject("site-footer", buildFooter());
     var floaters = document.getElementById("site-floaters");
     if (floaters) floaters.outerHTML = buildFloaters();
-
-    function afterCart() {
-      if (window.BM_CATALOG) window.BM_CATALOG.init();
-      initMenu();
-      initStudentNav();
-      initAccordions();
-      initCopy();
-      initEmail();
-      initForms();
-      initReveal();
-      fillLegalSeller();
-      initCookieBanner();
-      injectOrgSchema();
-      injectBreadcrumb();
-    }
-
-    if (window.BM_CART) {
-      afterCart();
-      return;
-    }
-    var cs = document.createElement("script");
-    cs.src = base + "assets/js/cart.js";
-    cs.onload = afterCart;
-    cs.onerror = afterCart;
-    document.head.appendChild(cs);
   }
 
-  document.addEventListener("DOMContentLoaded", function () {
-    loadContent(boot);
+  function bindUi() {
+    initMenu();
+    initAccordions();
+    initCopy();
+    initEmail();
+    initForms();
+    initReveal();
+    fillLegalSeller();
+    initCookieBanner();
+  }
+
+  function start() {
+    paintChrome();
+    if (window.BM_CATALOG) window.BM_CATALOG.init();
+    bindUi();
+    injectOrgSchema();
+    injectBreadcrumb();
+
+    if (window.BM_CART) {
+      initStudentNav();
+    } else {
+      var cs = document.createElement("script");
+      cs.src = base + "assets/js/cart.js";
+      cs.onload = function () { initStudentNav(); };
+      cs.onerror = function () { initStudentNav(); };
+      document.head.appendChild(cs);
+    }
+
+    loadContent(function () {
+      if (window.BM_CATALOG) window.BM_CATALOG.init();
+    });
     trackVisit();
-  });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
 
   // --- SEO/GEO: Kuruluş yapısal verisi (her sayfada) ---
   function addJsonLd(obj) {

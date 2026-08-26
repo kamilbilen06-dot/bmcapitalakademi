@@ -124,6 +124,10 @@ img { max-width: 100%; display: block; }
 .btn-lg { padding: 16px 34px; font-size: 16px; }
 
 /* ---------- Header / Navbar ---------- */
+#site-header {
+  min-height: var(--nav-h);
+  background: rgba(31, 45, 61, 0.92);
+}
 .site-header {
   position: sticky;
   top: 0;

@@ -554,6 +554,141 @@ function subscription_fill_invoice_payment_id(PDO $pdo, array $inv): string {
     return $id;
 }
 
+/**
+ * Ödemeler listesindeki boş abonelik ödeme nolarını iyzico İşlemler'den doldur.
+ * Gün raporunu tarihe göre bir kez çeker, conversation / tutar ile eşler.
+ *
+ * @param array<int, array<string,mixed>> $invoices
+ * @return array<int, string> invoice id => payment id
+ */
+function subscription_backfill_missing_payment_ids(PDO $pdo, array $invoices): array {
+    $filled = [];
+    if (!function_exists('iyzico_ready') || !iyzico_ready()) {
+        return $filled;
+    }
+    $need = [];
+    foreach ($invoices as $inv) {
+        if (iyzico_normalize_payment_id($inv['provider_payment_id'] ?? '') !== '') {
+            continue;
+        }
+        if ((string)($inv['status'] ?? '') !== 'paid') {
+            continue;
+        }
+        $need[] = $inv;
+    }
+    if ($need === []) {
+        return $filled;
+    }
+
+    $used = [];
+    try {
+        foreach ($pdo->query("SELECT provider_payment_id FROM subscription_invoices WHERE provider_payment_id <> ''") ?: [] as $r) {
+            $id = iyzico_normalize_payment_id($r['provider_payment_id'] ?? '');
+            if ($id !== '') {
+                $used[$id] = true;
+            }
+        }
+        foreach ($pdo->query("SELECT provider_payment_id FROM payment_orders WHERE provider_payment_id <> ''") ?: [] as $r) {
+            $id = iyzico_normalize_payment_id($r['provider_payment_id'] ?? '');
+            if ($id !== '') {
+                $used[$id] = true;
+            }
+        }
+    } catch (Throwable $e) {
+    }
+
+    $dates = [];
+    foreach ($need as $inv) {
+        $d = substr((string)($inv['created_at'] ?? ''), 0, 10);
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
+            continue;
+        }
+        $dates[$d] = true;
+        $ts = strtotime($d . ' 12:00:00');
+        if ($ts) {
+            $dates[date('Y-m-d', $ts - 86400)] = true;
+            $dates[date('Y-m-d', $ts + 86400)] = true;
+        }
+    }
+
+    $byConv = [];
+    $byAmountDay = [];
+    foreach (array_keys($dates) as $ymd) {
+        foreach (iyzico_payment_transactions_by_date($ymd) as $t) {
+            $type = strtoupper((string)($t['transactionType'] ?? 'PAYMENT'));
+            if ($type !== '' && $type !== 'PAYMENT') {
+                continue;
+            }
+            $pid = iyzico_normalize_payment_id($t['paymentId'] ?? '');
+            if ($pid === '' || isset($used[$pid])) {
+                continue;
+            }
+            foreach (['conversationId', 'paymentConversationId'] as $k) {
+                $c = trim((string)($t[$k] ?? ''));
+                if ($c !== '') {
+                    $byConv[$c] = $pid;
+                }
+            }
+            $kurus = (int)round(((float)($t['paidPrice'] ?? $t['price'] ?? 0)) * 100);
+            $day = substr((string)($t['transactionDate'] ?? $ymd), 0, 10);
+            if ($kurus > 0 && preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
+                $byAmountDay[$day . ':' . $kurus][] = $pid;
+            }
+        }
+    }
+
+    $upd = $pdo->prepare(
+        "UPDATE subscription_invoices SET provider_payment_id = ? WHERE id = ? AND provider_payment_id = ''"
+    );
+    foreach ($need as $inv) {
+        $invId = (int)($inv['id'] ?? 0);
+        $pid = '';
+        foreach ([
+            $inv['iyzico_subscription_ref'] ?? '',
+            $inv['order_reference'] ?? '',
+            $inv['conversation_id'] ?? '',
+        ] as $c) {
+            $c = trim((string)$c);
+            if ($c !== '' && isset($byConv[$c]) && !isset($used[$byConv[$c]])) {
+                $pid = $byConv[$c];
+                break;
+            }
+        }
+        if ($pid === '') {
+            $day = substr((string)($inv['created_at'] ?? ''), 0, 10);
+            $kurus = (int)($inv['amount_kurus'] ?? 0);
+            $pool = [];
+            $days = [$day];
+            $ts = strtotime($day . ' 12:00:00');
+            if ($ts) {
+                $days[] = date('Y-m-d', $ts - 86400);
+                $days[] = date('Y-m-d', $ts + 86400);
+            }
+            foreach ($days as $d) {
+                foreach ($byAmountDay[$d . ':' . $kurus] ?? [] as $p) {
+                    if (!isset($used[$p])) {
+                        $pool[$p] = true;
+                    }
+                }
+            }
+            $cands = array_keys($pool);
+            if (count($cands) === 1) {
+                $pid = $cands[0];
+            }
+        }
+        if ($pid === '' || $invId <= 0 || isset($used[$pid])) {
+            continue;
+        }
+        try {
+            $upd->execute([$pid, $invId]);
+            $used[$pid] = true;
+            $filled[$invId] = $pid;
+        } catch (Throwable $e) {
+        }
+    }
+    return $filled;
+}
+
 function subscription_notify_new(PDO $pdo, array $row): void {
     $id = (int)($row['id'] ?? 0);
     if ($id <= 0) {
@@ -843,6 +978,36 @@ function subscription_admin_list(PDO $pdo): array {
         $r['wa_digits'] = preg_replace('/\D/', '', (string)$r['student_phone']);
         $out[] = $r;
     }
+    return subscription_sort_admin_rows($out);
+}
+
+function subscription_sort_admin_rows(array $out): array {
+    usort($out, static function ($a, $b) {
+        $rank = static function (array $r): int {
+            $st = (string)($r['status'] ?? '');
+            if ($st === 'active') {
+                return 0;
+            }
+            if ($st === 'past_due') {
+                return 1;
+            }
+            if ($st === 'pending') {
+                return 2;
+            }
+            if ($st === 'cancelled' && !empty($r['entitled'])) {
+                return 3;
+            }
+            if ($st === 'cancelled') {
+                return 4;
+            }
+            return 5;
+        };
+        $c = $rank($a) <=> $rank($b);
+        if ($c !== 0) {
+            return $c;
+        }
+        return ((int)($b['id'] ?? 0)) <=> ((int)($a['id'] ?? 0));
+    });
     return $out;
 }
 
@@ -865,7 +1030,7 @@ function subscription_list_for_instructor(PDO $pdo, int $instructorId): array {
         $r['wa_digits'] = preg_replace('/\D/', '', (string)$r['student_phone']);
         $out[] = $r;
     }
-    return $out;
+    return subscription_sort_admin_rows($out);
 }
 
 function subscription_notify_cancelled(PDO $pdo, int $id): void {

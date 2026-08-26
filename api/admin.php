@@ -727,12 +727,17 @@ try {
                      LIMIT 300"
                 );
                 $sst->execute($sparams);
-                $backfillLeft = 2;
-                foreach ($sst->fetchAll() as $inv) {
+                $subRows = $sst->fetchAll();
+                $filledIds = subscription_backfill_missing_payment_ids($pdo, $subRows);
+                $lookupLeft = 2;
+                foreach ($subRows as $inv) {
                     $payId = iyzico_normalize_payment_id($inv['provider_payment_id'] ?? '');
-                    if ($payId === '' && $backfillLeft > 0 && (string)$inv['status'] === 'paid') {
+                    if ($payId === '') {
+                        $payId = $filledIds[(int)$inv['id']] ?? '';
+                    }
+                    if ($payId === '' && $lookupLeft > 0 && (string)$inv['status'] === 'paid') {
                         $payId = subscription_fill_invoice_payment_id($pdo, $inv);
-                        $backfillLeft--;
+                        $lookupLeft--;
                     }
                     $items[] = [
                         'tur' => 'Abonelik',

@@ -541,6 +541,48 @@ function iyzico_find_payment_id_by_conversation(string $conversationId): string 
     return iyzico_extract_payment_id($res['data']);
 }
 
+/**
+ * Belirli günde iyzico İşlemler listesi (sayfalanmış, istek içi önbellek).
+ *
+ * @return array<int, array<string,mixed>>
+ */
+function iyzico_payment_transactions_by_date(string $ymd): array {
+    static $cache = [];
+    $ymd = substr(trim($ymd), 0, 10);
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $ymd)) {
+        return [];
+    }
+    if (isset($cache[$ymd])) {
+        return $cache[$ymd];
+    }
+    $all = [];
+    for ($page = 1; $page <= 8; $page++) {
+        $res = iyzico_get('/v2/reporting/payment/transactions', [
+            'transactionDate' => $ymd,
+            'page' => $page,
+        ]);
+        if (!$res['ok']) {
+            break;
+        }
+        $inner = iyzico_v2_data($res['data']);
+        $items = $inner['transactions'] ?? $res['data']['transactions'] ?? [];
+        if (!is_array($items) || $items === []) {
+            break;
+        }
+        foreach ($items as $t) {
+            if (is_array($t)) {
+                $all[] = $t;
+            }
+        }
+        $pages = (int)($inner['totalPageCount'] ?? $res['data']['totalPageCount'] ?? 1);
+        if ($page >= max(1, $pages)) {
+            break;
+        }
+    }
+    $cache[$ymd] = $all;
+    return $all;
+}
+
 function iyzico_report_looks_refunded(array $report): bool {
     foreach (is_array($report['payments'] ?? null) ? $report['payments'] : [] as $p) {
         if (!is_array($p)) {
