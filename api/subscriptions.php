@@ -424,14 +424,13 @@ function subscription_mark_active(PDO $pdo, array $row, array $inner, string $in
     $ref = (string)($inner['subscriptionReferenceCode'] ?? $inner['referenceCode'] ?? $row['iyzico_subscription_ref']);
     $cust = (string)($inner['customerReferenceCode'] ?? $row['iyzico_customer_ref']);
     $endRaw = (string)($inner['endDate'] ?? $inner['subscriptionEndDate'] ?? $inner['nextPaymentDate'] ?? '');
-    $endTs = $endRaw !== '' ? strtotime($endRaw) : false;
-    $end = $endTs ? date('Y-m-d H:i:s', $endTs) : '';
+    $end = site_from_iyzico_dt($endRaw);
     if ($end === '') {
         $base = (string)($row['current_period_end'] ?? '');
         if ($base !== '' && strtotime($base) > time()) {
             $end = subscription_add_period($interval, $base);
         } else {
-            $end = subscription_add_period($interval, date('Y-m-d H:i:s'));
+            $end = subscription_add_period($interval, site_now());
         }
     }
     $pdo->prepare(
@@ -440,28 +439,119 @@ function subscription_mark_active(PDO $pdo, array $row, array $inner, string $in
              iyzico_subscription_ref = ?,
              iyzico_customer_ref = ?,
              current_period_end = ?,
-             last_paid_at = NOW(),
+             last_paid_at = ?,
              error_message = '',
              cancelled_at = NULL,
-             updated_at = NOW()
+             updated_at = ?
          WHERE id = ?"
-    )->execute([$ref, $cust, $end, $id]);
+    )->execute([$ref, $cust, $end, site_now(), site_now(), $id]);
 }
 
-function subscription_record_invoice(PDO $pdo, int $subscriptionId, string $orderRef, int $amountKurus, string $status): bool {
+/**
+ * iyzico ödeme numarasını iç yanıt, webhook veya rapor API'sinden bul.
+ *
+ * @param array<string,mixed> $row
+ * @param array<string,mixed> $inner
+ * @param array<string,mixed> $payload
+ */
+function subscription_resolve_payment_id(array $row, array $inner = [], array $payload = [], int $maxLookups = 2): string {
+    foreach ([$payload, $inner] as $src) {
+        if ($src !== []) {
+            $id = iyzico_extract_payment_id($src);
+            if ($id !== '') {
+                return $id;
+            }
+        }
+    }
+    $seen = [];
+    $lookups = 0;
+    foreach ([
+        $payload['iyziPaymentId'] ?? '',
+        $payload['paymentId'] ?? '',
+        $payload['orderReferenceCode'] ?? '',
+        $inner['orderReferenceCode'] ?? '',
+        $row['iyzico_subscription_ref'] ?? '',
+        $inner['subscriptionReferenceCode'] ?? '',
+        $payload['subscriptionReferenceCode'] ?? '',
+        $payload['iyziReferenceCode'] ?? '',
+        $row['conversation_id'] ?? '',
+        $inner['parentReferenceCode'] ?? '',
+    ] as $cand) {
+        $cand = trim((string)$cand);
+        if ($cand === '' || isset($seen[$cand])) {
+            continue;
+        }
+        $seen[$cand] = true;
+        $direct = iyzico_normalize_payment_id($cand);
+        if ($direct !== '') {
+            return $direct;
+        }
+        if ($lookups >= $maxLookups) {
+            continue;
+        }
+        $lookups++;
+        $id = iyzico_find_payment_id_by_conversation($cand);
+        if ($id !== '') {
+            return $id;
+        }
+    }
+    return '';
+}
+
+function subscription_record_invoice(
+    PDO $pdo,
+    int $subscriptionId,
+    string $orderRef,
+    int $amountKurus,
+    string $status,
+    string $paymentId = ''
+): bool {
     $orderRef = mb_substr(trim($orderRef), 0, 80);
+    $paymentId = iyzico_normalize_payment_id($paymentId);
     if ($orderRef === '') {
         $orderRef = 'inv-' . $subscriptionId . '-' . date('YmdHis') . '-' . bin2hex(random_bytes(2));
     }
     try {
         $pdo->prepare(
-            "INSERT INTO subscription_invoices (subscription_id, order_reference, amount_kurus, status, created_at)
-             VALUES (?, ?, ?, ?, NOW())"
-        )->execute([$subscriptionId, $orderRef, $amountKurus, $status]);
+            "INSERT INTO subscription_invoices
+                (subscription_id, order_reference, provider_payment_id, amount_kurus, status, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                status = VALUES(status),
+                provider_payment_id = IF(VALUES(provider_payment_id) = '', provider_payment_id, VALUES(provider_payment_id))"
+        )->execute([$subscriptionId, $orderRef, $paymentId, $amountKurus, $status, site_now()]);
         return true;
     } catch (Throwable $e) {
         return false;
     }
+}
+
+function subscription_fill_invoice_payment_id(PDO $pdo, array $inv): string {
+    $have = iyzico_normalize_payment_id($inv['provider_payment_id'] ?? '');
+    if ($have !== '') {
+        return $have;
+    }
+    if (!function_exists('iyzico_ready') || !iyzico_ready()) {
+        return '';
+    }
+    $id = subscription_resolve_payment_id(
+        [
+            'conversation_id' => (string)($inv['conversation_id'] ?? ''),
+            'iyzico_subscription_ref' => (string)($inv['iyzico_subscription_ref'] ?? ''),
+        ],
+        [],
+        ['orderReferenceCode' => (string)($inv['order_reference'] ?? '')]
+    );
+    $invId = (int)($inv['id'] ?? 0);
+    if ($id !== '' && $invId > 0) {
+        try {
+            $pdo->prepare(
+                "UPDATE subscription_invoices SET provider_payment_id = ? WHERE id = ? AND provider_payment_id = ''"
+            )->execute([$id, $invId]);
+        } catch (Throwable $e) {
+        }
+    }
+    return $id;
 }
 
 function subscription_notify_new(PDO $pdo, array $row): void {
@@ -492,7 +582,8 @@ function subscription_activate_from_retrieve(PDO $pdo, array $row, array $inner)
     subscription_mark_active($pdo, $row, $inner, $interval);
     if ($wasNew) {
         $orderRef = (string)($inner['orderReferenceCode'] ?? $inner['parentReferenceCode'] ?? ('first-' . $row['conversation_id']));
-        subscription_record_invoice($pdo, (int)$row['id'], $orderRef, (int)$row['amount_kurus'], 'paid');
+        $payId = subscription_resolve_payment_id($row, $inner);
+        subscription_record_invoice($pdo, (int)$row['id'], $orderRef, (int)$row['amount_kurus'], 'paid', $payId);
         subscription_notify_new($pdo, $row);
     }
 }
@@ -643,6 +734,7 @@ function subscription_handle_webhook(PDO $pdo, array $payload): void {
 
     if ($success) {
         $fresh = false;
+        $inner = [];
         if ($row['iyzico_subscription_ref'] !== '') {
             $det = iyzico_sub_detail((string)$row['iyzico_subscription_ref']);
             $fresh = $det['ok'];
@@ -654,7 +746,7 @@ function subscription_handle_webhook(PDO $pdo, array $payload): void {
         if (!$fresh) {
             subscription_mark_active($pdo, $row, $payload, (string)$row['interval_unit']);
         }
-        subscription_record_invoice($pdo, (int)$row['id'], $orderRef, (int)$row['amount_kurus'], 'paid');
+        subscription_record_invoice($pdo, (int)$row['id'], $orderRef, (int)$row['amount_kurus'], 'paid', subscription_resolve_payment_id($row, $inner, $payload));
         subscription_notify_new($pdo, $row);
         return;
     }

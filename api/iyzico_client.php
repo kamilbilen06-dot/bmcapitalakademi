@@ -464,8 +464,81 @@ function iyzico_payment_retrieve(string $paymentId, string $conversationId = '')
  * Ödeme raporu — panel iptal/iadesi burada görünür.
  * /payment/detail iptalden sonra bile SUCCESS dönebiliyor.
  */
-function iyzico_payment_report(string $paymentId): array {
-    return iyzico_get('/v2/reporting/payment/details', ['paymentId' => $paymentId]);
+function iyzico_payment_report(string $paymentId, string $conversationId = ''): array {
+    $q = [];
+    $paymentId = trim($paymentId);
+    $conversationId = trim($conversationId);
+    if ($paymentId !== '') {
+        $q['paymentId'] = $paymentId;
+    }
+    if ($conversationId !== '') {
+        $q['paymentConversationId'] = $conversationId;
+    }
+    if ($q === []) {
+        return ['ok' => false, 'status' => 0, 'data' => [], 'error' => 'Ödeme no veya konuşma kodu yok.', 'reason' => 'config'];
+    }
+    return iyzico_get('/v2/reporting/payment/details', $q);
+}
+
+/** iyzico ödeme numarası (yalnızca rakam, örn. 37475570). */
+function iyzico_normalize_payment_id($value): string {
+    $s = trim((string)$value);
+    return preg_match('/^\d{6,14}$/', $s) ? $s : '';
+}
+
+/**
+ * Yanıt ağacından iyzico ödeme numarasını çek.
+ *
+ * @param array<string,mixed> $data
+ */
+function iyzico_extract_payment_id(array $data, int $depth = 0): string {
+    if ($depth > 6) {
+        return '';
+    }
+    foreach (['paymentId', 'iyziPaymentId', 'payment_id'] as $k) {
+        if (!isset($data[$k])) {
+            continue;
+        }
+        $id = iyzico_normalize_payment_id($data[$k]);
+        if ($id !== '') {
+            return $id;
+        }
+    }
+    foreach (['payments', 'items', 'orders', 'subscriptionOrders'] as $listKey) {
+        if (!isset($data[$listKey]) || !is_array($data[$listKey])) {
+            continue;
+        }
+        foreach ($data[$listKey] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $id = iyzico_extract_payment_id($item, $depth + 1);
+            if ($id !== '') {
+                return $id;
+            }
+        }
+    }
+    foreach ($data as $v) {
+        if (is_array($v)) {
+            $id = iyzico_extract_payment_id($v, $depth + 1);
+            if ($id !== '') {
+                return $id;
+            }
+        }
+    }
+    return '';
+}
+
+function iyzico_find_payment_id_by_conversation(string $conversationId): string {
+    $conversationId = trim($conversationId);
+    if ($conversationId === '') {
+        return '';
+    }
+    $res = iyzico_payment_report('', $conversationId);
+    if (!$res['ok']) {
+        return '';
+    }
+    return iyzico_extract_payment_id($res['data']);
 }
 
 function iyzico_report_looks_refunded(array $report): bool {

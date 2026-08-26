@@ -7,6 +7,14 @@ require_once __DIR__ . '/../api/payments_schema.php';
 require_once __DIR__ . '/../api/subscriptions_schema.php';
 require_once __DIR__ . '/../api/iyzico_config.php';
 
+function satin_fmt_dt($v, string $fmt = 'd.m.Y H:i'): string {
+    if (function_exists('site_format_dt')) {
+        return site_format_dt($v, $fmt);
+    }
+    $t = strtotime((string)$v);
+    return $t ? date($fmt, $t) : '';
+}
+
 list($student, $loadError) = ogrenci_panel_student('satin-alma-gecmisi.php');
 
 $orders = [];
@@ -31,7 +39,10 @@ try {
 
     $stSub = $pdo->prepare(
         "SELECT s.id, s.conversation_id, s.status, s.amount_kurus, s.interval_unit,
-                s.created_at, s.last_paid_at, s.current_period_end, s.cancelled_at
+                s.created_at, s.last_paid_at, s.current_period_end, s.cancelled_at,
+                (SELECT i.provider_payment_id FROM subscription_invoices i
+                  WHERE i.subscription_id = s.id AND i.provider_payment_id <> ''
+                  ORDER BY i.id DESC LIMIT 1) AS provider_payment_id
          FROM subscriptions s
          WHERE s.student_id = ?
            AND s.status NOT IN ('pending')
@@ -89,7 +100,7 @@ function ogrenci_order_card(array $o): void {
     $status = (string)($o['status'] ?? '');
     $idLabel = (string)$o['id'];
     $when = $o['paid_at'] ?: $o['created_at'];
-    $date = $when ? date('d.m.Y', strtotime((string)$when)) : '';
+    $date = $when ? satin_fmt_dt($when, 'd.m.Y') : '';
     $kurus = (int)$o['amount_kurus'];
     $price = '₺' . number_format($kurus / 100, 2, ',', '.');
     $provider = (string)($o['provider'] ?? '');
@@ -148,10 +159,10 @@ function ogrenci_order_card(array $o): void {
             <li><span>Ödeme no</span><b><?= ogrenci_e((string)$o['provider_payment_id']) ?></b></li>
           <?php endif; ?>
           <?php if (!empty($o['paid_at'])): ?>
-            <li><span>Ödeme zamanı</span><b><?= ogrenci_e(date('d.m.Y H:i', strtotime((string)$o['paid_at']))) ?></b></li>
+            <li><span>Ödeme zamanı</span><b><?= ogrenci_e(satin_fmt_dt($o['paid_at'])) ?></b></li>
           <?php endif; ?>
           <?php if ($status === 'refunded' && !empty($o['refunded_at'])): ?>
-            <li><span>İade</span><b><?= ogrenci_e(date('d.m.Y H:i', strtotime((string)$o['refunded_at']))) ?></b></li>
+            <li><span>İade</span><b><?= ogrenci_e(satin_fmt_dt($o['refunded_at'])) ?></b></li>
           <?php endif; ?>
         </ul>
       </details>
@@ -163,7 +174,7 @@ function ogrenci_sub_card(array $s): void {
     require_once __DIR__ . '/../api/subscriptions.php';
     $status = (string)($s['status'] ?? '');
     $when = $s['last_paid_at'] ?: $s['created_at'];
-    $date = $when ? date('d.m.Y', strtotime((string)$when)) : '';
+    $date = $when ? satin_fmt_dt($when, 'd.m.Y') : '';
     $kurus = (int)$s['amount_kurus'];
     $price = '₺' . number_format($kurus / 100, 2, ',', '.');
     $period = strtoupper((string)($s['interval_unit'] ?? '')) === 'DAILY' ? 'günlük' : 'aylık';
@@ -198,9 +209,9 @@ function ogrenci_sub_card(array $s): void {
       <details class="order-more">
         <summary><i class="fa-solid fa-chevron-down"></i> Daha Fazla</summary>
         <ul>
-          <li><span>Referans</span><b><?= ogrenci_e((string)$s['conversation_id']) ?></b></li>
+          <li><span>Ödeme no</span><b><?= ogrenci_e((string)($s['provider_payment_id'] ?: $s['conversation_id'])) ?></b></li>
           <?php if (!empty($s['last_paid_at'])): ?>
-            <li><span>Son ödeme</span><b><?= ogrenci_e(date('d.m.Y H:i', strtotime((string)$s['last_paid_at']))) ?></b></li>
+            <li><span>Son ödeme</span><b><?= ogrenci_e(satin_fmt_dt($s['last_paid_at'])) ?></b></li>
           <?php endif; ?>
         </ul>
       </details>

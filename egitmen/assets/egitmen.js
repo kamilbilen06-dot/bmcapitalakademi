@@ -2143,6 +2143,7 @@
     var d = new Date(String(s).replace(" ", "T"));
     if (isNaN(d.getTime())) return String(s);
     return d.toLocaleString("tr-TR", {
+      timeZone: "Europe/Istanbul",
       day: "2-digit",
       month: "2-digit",
       year: "numeric",

@@ -74,6 +74,13 @@ function subscriptions_ensure_schema(PDO $pdo): void {
         INDEX idx_inv_sub (subscription_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    egitmen_add_column_if_missing(
+        $pdo,
+        'subscription_invoices',
+        'provider_payment_id',
+        "VARCHAR(32) NOT NULL DEFAULT '' AFTER order_reference"
+    );
+
     subscriptions_seed_settings($pdo);
 }
 

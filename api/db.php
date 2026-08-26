@@ -18,7 +18,9 @@ function db() {
             PDO::ATTR_TIMEOUT            => 5,
         ];
         $pdo = new PDO($dsn, DB_USER, DB_PASS, $opt);
+        site_db_apply_timezone($pdo);
         site_bootstrap($pdo);
+        site_migrate_datetimes_to_istanbul($pdo);
     }
     return $pdo;
 }

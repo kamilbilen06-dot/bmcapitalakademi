@@ -677,10 +677,13 @@ try {
             $st->execute($params);
 
             foreach ($st->fetchAll() as $o) {
+                $payId = trim((string)$o['provider_payment_id']);
+                $oid = (string)$o['merchant_oid'];
                 $items[] = [
                     'tur' => 'Kurs',
-                    'ref' => (string)$o['merchant_oid'],
-                    'iyzicoPaymentId' => (string)$o['provider_payment_id'],
+                    'ref' => $payId !== '' ? $payId : $oid,
+                    'aramaRef' => $payId !== '' ? $payId : $oid,
+                    'iyzicoPaymentId' => $payId,
                     'student_name' => (string)$o['student_name'],
                     'student_email' => (string)$o['student_email'],
                     'aciklama' => (string)($o['course_title'] ?? ''),
@@ -690,12 +693,12 @@ try {
                     'created_at' => (string)$o['created_at'],
                     'paid_at' => (string)($o['paid_at'] ?? ''),
                     'tahsilEdildi' => (string)$o['status'] === 'paid'
-                        && trim((string)$o['provider_payment_id']) !== '',
+                        && $payId !== '',
                 ];
             }
             }
 
-            // Abonelik çekimleri (iyzico'da SUB... referansıyla görünür)
+            // Abonelik çekimleri — listede iyzico ödeme numarası gösterilir
             $sparams = [];
             $swhere = '1=1';
             if ($status !== '') {
@@ -703,9 +706,10 @@ try {
                 $sparams[] = $status;
             }
             if ($q !== '') {
-                $swhere .= " AND (i.order_reference LIKE ? OR s.conversation_id LIKE ?"
+                $swhere .= " AND (i.order_reference LIKE ? OR i.provider_payment_id LIKE ?"
+                    . " OR s.conversation_id LIKE ? OR s.iyzico_subscription_ref LIKE ?"
                     . " OR s.student_email LIKE ? OR s.student_name LIKE ?)";
-                array_push($sparams, $like, $like, $like, $like);
+                array_push($sparams, $like, $like, $like, $like, $like, $like);
             }
             list($sDatePart, $sDateParams) = $dateSql('i.created_at');
             $swhere .= $sDatePart;
@@ -713,8 +717,9 @@ try {
             if ($loadSub) {
             try {
                 $sst = $pdo->prepare(
-                    "SELECT i.id, i.order_reference, i.amount_kurus, i.status, i.created_at,
-                            s.student_name, s.student_email, s.conversation_id, s.interval_unit
+                    "SELECT i.id, i.order_reference, i.provider_payment_id, i.amount_kurus, i.status, i.created_at,
+                            s.student_name, s.student_email, s.conversation_id, s.interval_unit,
+                            s.iyzico_subscription_ref
                      FROM subscription_invoices i
                      LEFT JOIN subscriptions s ON s.id = i.subscription_id
                      WHERE $swhere
@@ -722,14 +727,18 @@ try {
                      LIMIT 300"
                 );
                 $sst->execute($sparams);
+                $backfillLeft = 2;
                 foreach ($sst->fetchAll() as $inv) {
-                    $ref = trim((string)$inv['order_reference']);
-                    $conv = trim((string)($inv['conversation_id'] ?? ''));
+                    $payId = iyzico_normalize_payment_id($inv['provider_payment_id'] ?? '');
+                    if ($payId === '' && $backfillLeft > 0 && (string)$inv['status'] === 'paid') {
+                        $payId = subscription_fill_invoice_payment_id($pdo, $inv);
+                        $backfillLeft--;
+                    }
                     $items[] = [
                         'tur' => 'Abonelik',
-                        'ref' => $ref !== '' ? $ref : $conv,
-                        'aramaRef' => $conv,
-                        'iyzicoPaymentId' => '',
+                        'ref' => $payId,
+                        'aramaRef' => $payId,
+                        'iyzicoPaymentId' => $payId,
                         'student_name' => (string)($inv['student_name'] ?? ''),
                         'student_email' => (string)($inv['student_email'] ?? ''),
                         'aciklama' => 'WhatsApp grubu ('

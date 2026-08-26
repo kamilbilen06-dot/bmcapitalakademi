@@ -63,6 +63,10 @@ $canCancel = $row && in_array($row['status'], ['active', 'past_due', 'pending'],
 $canSubscribe = !$row || (!$entitled && !in_array($row['status'], ['active', 'past_due', 'pending'], true));
 
 function sub_fmt_dt($v): string {
+    if (function_exists('site_format_dt')) {
+        $out = site_format_dt($v);
+        return $out !== '' ? $out : '—';
+    }
     if (!$v) {
         return '—';
     }

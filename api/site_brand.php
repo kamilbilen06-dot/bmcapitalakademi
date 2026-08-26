@@ -14,6 +14,10 @@ if (is_file(__DIR__ . '/site_brand.local.php')) {
     require __DIR__ . '/site_brand.local.php';
 }
 
+if (function_exists('date_default_timezone_set')) {
+    date_default_timezone_set(defined('SITE_TIMEZONE') ? SITE_TIMEZONE : 'Europe/Istanbul');
+}
+
 /** Marka tam adı (header/SEO) */
 if (!defined('BRAND_NAME')) {
     define('BRAND_NAME', 'BM Capital Akademi');

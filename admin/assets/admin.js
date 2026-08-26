@@ -132,9 +132,19 @@
 
   function fmtDate(s) {
     if (!s) return "";
-    var d = new Date(s.replace(" ", "T"));
+    if (/^\d{2}\.\d{2}\.\d{4}/.test(String(s))) return s;
+    var raw = String(s).trim().replace(" ", "T");
+    if (!/[zZ]|[+\-]\d{2}:?\d{2}$/.test(raw)) raw += "+03:00";
+    var d = new Date(raw);
     if (isNaN(d)) return s;
-    return d.toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleString("tr-TR", {
+      timeZone: "Europe/Istanbul",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
   function formatTryKurus(k) {
     k = parseInt(k, 10) || 0;
@@ -792,7 +802,7 @@
             var okMark = r.tahsilEdildi
               ? "<span class='pill ok'>tahsil edildi</span>"
               : "<span class='pill off'>tahsilat yok</span>";
-            var searchRef = r.aramaRef || r.ref;
+            var searchRef = r.iyzicoPaymentId || r.aramaRef || r.ref;
             return (
               "<tr>" +
               "<td class='small'>" + esc(fmtDate(r.paid_at || r.created_at)) + "</td>" +
@@ -816,10 +826,9 @@
       }).join("");
 
       el.wrap.innerHTML =
-        '<p class="page-hint">Kurs tahsilatları ve abonelik çekimleri. Varsayılan aralık son 7 gün. <b>tahsil edildi</b> etiketi, iyzico’nun parayı gerçekten çektiğini gösterir. ' +
-        'iyzico panelinde doğrulamak için <b>Referans</b> veya <b>Ödeme No</b>’yu kopyalayıp ' +
+        '<p class="page-hint">Kurs tahsilatları ve abonelik çekimleri. Saatler Türkiye (Istanbul). iyzico’da aramak için <b>ödeme numarasını</b> kopyalayıp ' +
         '<a href="' + esc(d.transactionsUrl || "#") + '" target="_blank" rel="noopener">İşlem Listesi</a> ' +
-        'arama kutusuna yapıştırın — tarih filtresine takılmadan bulunur.</p>' +
+        'arama kutusuna yapıştırın (ör. 37475570).</p>' +
         '<div class="stat-grid">' +
         '<div class="stat-card gold"><div class="label">Tahsil edilen</div><div class="num">' + formatTryKurus(s.tahsilEdilenKurus || 0) + "</div></div>" +
         '<div class="stat-card"><div class="label">Başarılı ödeme</div><div class="num">' + (s.tahsilEdilen || 0) + "</div></div>" +
@@ -837,7 +846,7 @@
         '<div class="field"><label>Başlangıç</label><input type="date" id="odFrom" value="' + esc(filters.from || "") + '"></div>' +
         '<div class="field"><label>Bitiş</label><input type="date" id="odTo" value="' + esc(filters.to || "") + '"></div>' +
         '<div class="field"><label>Tür</label><select id="odTur">' + turOpts + "</select></div>" +
-        '<div class="field"><label>Ara (referans / ödeme no / e-posta)</label><input type="text" id="odQ" value="' + esc(filters.q || "") + '" placeholder="IYZ2026… veya 37472644"></div>' +
+        '<div class="field"><label>Ara (ödeme no / e-posta)</label><input type="text" id="odQ" value="' + esc(filters.q || "") + '" placeholder="37475570 veya e-posta"></div>' +
         '<div class="field"><label>Durum</label><select id="odSt">' +
         ['', 'paid', 'refunded', 'review', 'cancelled', 'failed', 'pending'].map(function (v) {
           var lbl = { '': 'Tümü', paid: 'Ödendi', refunded: 'İade', review: 'İnceleme', cancelled: 'İptal', failed: 'Başarısız', pending: 'Bekliyor' }[v];
@@ -849,7 +858,7 @@
         '<button type="button" class="btn-ghost sm" id="odAll">Tüm zamanlar</button>' +
         "</div></div></div>" +
         '<div class="panel"><div class="panel-head"><h3>İşlem listesi</h3></div><div class="table-wrap"><table><thead><tr>' +
-        "<th>Tarih</th><th>Tür</th><th>Referans</th><th>iyzico Ödeme No</th><th>Öğrenci</th><th>Açıklama</th><th>Tutar</th><th>Durum</th>" +
+        "<th>Tarih</th><th>Tür</th><th>Ödeme No</th><th>iyzico Ödeme No</th><th>Öğrenci</th><th>Açıklama</th><th>Tutar</th><th>Durum</th>" +
         "</tr></thead><tbody>" + rows + "</tbody></table></div></div>";
 
       function odFilters(extra) {

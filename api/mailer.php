@@ -808,7 +808,7 @@ function mailer_notify_subscription_cancelled(array $row): void {
     $name = trim((string)($row['student_name'] ?? ''));
     $title = mailer_subscription_title($row);
     $end = trim((string)($row['current_period_end'] ?? ''));
-    $endLabel = $end !== '' ? date('d.m.Y H:i', strtotime($end)) : 'dönem sonu';
+    $endLabel = $end !== '' ? (function_exists('site_format_dt') ? site_format_dt($end) : date('d.m.Y H:i', strtotime($end))) : 'dönem sonu';
     $panel = rtrim(site_public_url(), '/') . '/ogrenci/aboneliklerim.php';
     $inner = '<h1 style="margin:0 0 16px;font-size:24px;color:#111;">Abonelik iptal edildi</h1>'
         . '<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#5b6572;">'

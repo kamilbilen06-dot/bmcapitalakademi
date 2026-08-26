@@ -49,6 +49,11 @@ if (!defined('SITE_URL')) {
     define('SITE_URL', '');
 }
 
+if (!defined('SITE_TIMEZONE')) {
+    define('SITE_TIMEZONE', 'Europe/Istanbul');
+}
+date_default_timezone_set(SITE_TIMEZONE);
+
 require_once __DIR__ . '/site_brand.php';
 
 if (SITE_URL === '' && PUBLIC_SITE_URL !== '') {
