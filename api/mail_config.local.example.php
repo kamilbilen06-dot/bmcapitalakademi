@@ -3,16 +3,11 @@
  * ÖRNEK — kopyalayın: api/mail_config.local.php
  * Bu dosya (local) Git'e girmez.
  *
- * CANLI (cPanel/Linux): mail sunucunun kendi servisiyle (Exim) gider.
- * Gönderen adres domain olmalı; Gmail adresiyle sunucudan göndermek
- * DMARC'ı bozar ve spam'e düşürür.
+ * Mail Gmail SMTP ile gider (smtp.gmail.com). cPanel Exim / GoDaddy
+ * HOSTING RELAY kullanılmaz; o kuyruk Gmail'de ~1 dk bekletir.
  *
- * cPanel'de bir kez yapılacaklar:
- *   1) Email Accounts → noreply@bmcapitalakademi.com oluşturun
- *   2) Email Deliverability → SPF ve DKIM "Enable"
- *
- * YEREL (Windows): sendmail yok, o yüzden otomatik olarak SMTP denenir.
- * Aşağıdaki Gmail bilgileri yalnızca yerel test için gereklidir.
+ * SMTP_PASS: Google hesap → 2 adımlı doğrulama → Uygulama şifreleri.
+ * cPanel "SMTP Restrictions" 587'yi keserse 465/SSL otomatik denenir.
  */
 
 /** Sunucudan gönderirken kullanılacak adres */
@@ -30,9 +25,4 @@ define('SMTP_PASS', '');
 define('SMTP_FROM', 'bmcapitalakademi@gmail.com');
 define('SMTP_FROM_NAME', 'BM Capital Akademi');
 
-/**
- * Gönderim yolu: 'smtp' (Gmail, hızlı) veya 'server' (cPanel Exim).
- * Tanımlamazsanız api/mail_config.php varsayılanı ('smtp') geçerlidir.
- * SPF ve DKIM açıldıktan sonra 'server' yapıp noreply@ ile gönderebilirsiniz.
- */
-// define('MAIL_TRANSPORT', 'server');
+define('MAIL_TRANSPORT', 'smtp');
