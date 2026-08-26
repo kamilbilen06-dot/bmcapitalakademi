@@ -3,6 +3,8 @@
  * WhatsApp grubu aboneliği — iş kuralları.
  *
  * Kartı biz saklamayız; iyzico Subscription ürünü çeker.
+ * Süre dönem saatinde kapanmaz: Türkiye 24:00’te iyzico’ya bakılır.
+ * Çekildiyse aynı satır uzar (yeni abonelik açılmaz); çekilmediyse expired.
  * Gruba ekleme/çıkarma siteden yapılmaz (admin WhatsApp'tan elle).
  */
 require_once __DIR__ . '/subscriptions_schema.php';
@@ -98,44 +100,231 @@ function subscription_status_label(string $status, bool $entitled = false): stri
 }
 
 /**
- * Dönem henüz açıksa (aktif, iptal ama bitmemiş, kısa geçmiş-due) grup üyesi sayılır.
+ * Dönem saati Türkiye takvim gününün dışına çıktıysa (o gün 24:00 geçtiyse) true.
+ * Çekim iyzico’da dönem saatinden sonra gelir; gece yarısından önce süre doldurulmaz.
+ */
+function subscription_calendar_day_ended(string $periodEnd): bool {
+    $endTs = strtotime($periodEnd);
+    if ($endTs === false) {
+        return false;
+    }
+    return date('Y-m-d', $endTs) < date('Y-m-d');
+}
+
+/**
+ * Aktif / kart reddi: süre, iyzico kontrolünden sonra expired yazılana kadar açıktır.
+ * İptal: dönem günü bitene kadar (Türkiye 24:00) grupta kalır.
  */
 function subscription_is_entitled(array $row): bool {
     $st = (string)($row['status'] ?? '');
     $end = (string)($row['current_period_end'] ?? '');
-    $endTs = $end !== '' ? strtotime($end) : false;
-    $periodOpen = $endTs === false || $endTs > time();
-    if ($st === 'active') {
-        return $periodOpen;
-    }
-    if ($st === 'cancelled' && $endTs && $endTs > time()) {
+    if ($st === 'active' || $st === 'past_due') {
         return true;
     }
-    if ($st === 'past_due') {
-        if ($endTs && $endTs > time()) {
-            return true;
-        }
-        $fail = (string)($row['last_failure_at'] ?? '');
-        $failTs = $fail !== '' ? strtotime($fail) : false;
-        return $failTs !== false && (time() - $failTs) < (3 * 86400);
+    if ($st === 'cancelled' && $end !== '') {
+        return !subscription_calendar_day_ended($end);
     }
     return false;
 }
 
-/** Dönemi bitmiş aktif kayıtları expired yap. Cron ve panel okumasında çağrılır. */
-function subscription_expire_overdue(PDO $pdo): int {
+function subscription_iyzico_row_status(array $inner): string {
+    return strtoupper(trim((string)($inner['subscriptionStatus'] ?? $inner['status'] ?? '')));
+}
+
+function subscription_mark_expired_row(PDO $pdo, int $id): bool {
+    if ($id <= 0) {
+        return false;
+    }
     try {
-        $n = $pdo->exec(
+        $st = $pdo->prepare(
             "UPDATE subscriptions
              SET status = 'expired', updated_at = NOW()
+             WHERE id = ? AND status IN ('active', 'past_due')"
+        );
+        $st->execute([$id]);
+        return $st->rowCount() > 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function subscription_has_paid_invoice_on_day(PDO $pdo, int $subscriptionId, string $ymd): bool {
+    if ($subscriptionId <= 0 || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $ymd)) {
+        return false;
+    }
+    try {
+        $st = $pdo->prepare(
+            "SELECT 1 FROM subscription_invoices
+             WHERE subscription_id = ? AND status = 'paid' AND DATE(created_at) = ?
+             LIMIT 1"
+        );
+        $st->execute([$subscriptionId, $ymd]);
+        return (bool)$st->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * Yenilemede fatura satırı (aynı gün ikinci satır açılmaz).
+ */
+function subscription_record_renewal_invoice(PDO $pdo, array $row, array $inner): void {
+    $id = (int)($row['id'] ?? 0);
+    if ($id <= 0) {
+        return;
+    }
+    $today = date('Y-m-d');
+    if (subscription_has_paid_invoice_on_day($pdo, $id, $today)) {
+        return;
+    }
+    $orderRef = trim((string)($inner['orderReferenceCode'] ?? $inner['parentReferenceCode'] ?? ''));
+    if ($orderRef === '') {
+        $orderRef = 'renew-' . $today . '-' . $id;
+    }
+    $payId = subscription_resolve_payment_id($row, $inner, [], 1);
+    subscription_record_invoice($pdo, $id, $orderRef, (int)$row['amount_kurus'], 'paid', $payId);
+}
+
+/**
+ * 24:00 sonrası iyzico: ACTIVE ise dönemi uzat (yeni satır yok), değilse expired.
+ *
+ * @return 'renewed'|'expired'|'kept'|'skipped'
+ */
+function subscription_sync_row_with_iyzico(PDO $pdo, array $row): string {
+    $id = (int)($row['id'] ?? 0);
+    $st = (string)($row['status'] ?? '');
+    if ($id <= 0) {
+        return 'skipped';
+    }
+    if (!in_array($st, ['active', 'past_due', 'expired'], true)) {
+        return 'skipped';
+    }
+
+    $ref = trim((string)($row['iyzico_subscription_ref'] ?? ''));
+    if ($ref === '') {
+        if (in_array($st, ['active', 'past_due'], true) && subscription_calendar_day_ended((string)($row['current_period_end'] ?? ''))) {
+            return subscription_mark_expired_row($pdo, $id) ? 'expired' : 'skipped';
+        }
+        return 'skipped';
+    }
+    if (!function_exists('iyzico_ready') || !iyzico_ready()) {
+        return 'skipped';
+    }
+
+    $det = iyzico_sub_detail($ref);
+    if (empty($det['ok'])) {
+        error_log('abonelik iyzico kontrol: ' . (string)($det['error'] ?? ''));
+        return 'skipped';
+    }
+
+    $inner = iyzico_v2_data($det['data'] ?? []);
+    if (subscription_iyzico_row_status($inner) === 'ACTIVE') {
+        $interval = (string)($row['interval_unit'] ?: subscription_interval());
+        $endRaw = (string)($inner['endDate'] ?? $inner['subscriptionEndDate'] ?? $inner['nextPaymentDate'] ?? '');
+        $end = site_from_iyzico_dt($endRaw);
+        if ($end === '' || subscription_calendar_day_ended($end)) {
+            $inner['endDate'] = subscription_add_period($interval, site_now());
+        }
+        subscription_mark_active($pdo, $row, $inner, $interval);
+        subscription_record_renewal_invoice($pdo, $row, $inner);
+        return 'renewed';
+    }
+
+    if (in_array($st, ['active', 'past_due'], true)) {
+        return subscription_mark_expired_row($pdo, $id) ? 'expired' : 'skipped';
+    }
+    subscription_touch($pdo, $id);
+    return 'skipped';
+}
+
+/**
+ * Yanlışlıkla süresi doldurulmuş (iyzico hâlâ ACTIVE) kaydı geri alır.
+ *
+ * @return 'renewed'|'skipped'
+ */
+function subscription_revive_expired_if_iyzico_active(PDO $pdo, array $row): string {
+    if ((string)($row['status'] ?? '') !== 'expired') {
+        return 'skipped';
+    }
+    $got = subscription_sync_row_with_iyzico($pdo, $row);
+    return $got === 'renewed' ? 'renewed' : 'skipped';
+}
+
+/**
+ * Gece 24:00 (Türkiye) geçmeden süre doldurma.
+ * Sonra iyzico’ya sor: çekildiyse / ACTIVE ise aynı satırı uzat; değilse expired.
+ *
+ * @return array{expired:int, renewed:int}
+ */
+function subscription_reconcile_due_periods(PDO $pdo, ?int $studentId = null): array {
+    $out = ['expired' => 0, 'renewed' => 0];
+    $limit = $studentId !== null && $studentId > 0 ? 8 : 40;
+    $calls = 0;
+
+    $fetch = static function (PDO $pdo, string $sql, array $params) {
+        $st = $pdo->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll();
+    };
+
+    try {
+        $params = [];
+        $studentSql = '';
+        if ($studentId !== null && $studentId > 0) {
+            $studentSql = ' AND student_id = ?';
+            $params[] = $studentId;
+        }
+
+        $reviveSql = "SELECT * FROM subscriptions
+             WHERE status = 'expired'
+               AND iyzico_subscription_ref <> ''
+               AND updated_at < (NOW() - INTERVAL 15 MINUTE)
+               AND (
+                 DATE(updated_at) >= (CURDATE() - INTERVAL 1 DAY)
+                 OR DATE(current_period_end) >= (CURDATE() - INTERVAL 2 DAY)
+               )
+               $studentSql
+             ORDER BY id DESC
+             LIMIT 25";
+        foreach ($fetch($pdo, $reviveSql, $params) as $row) {
+            if ($calls >= $limit) {
+                break;
+            }
+            $calls++;
+            if (subscription_revive_expired_if_iyzico_active($pdo, $row) === 'renewed') {
+                $out['renewed']++;
+            }
+        }
+
+        $dueSql = "SELECT * FROM subscriptions
              WHERE status IN ('active', 'past_due')
                AND current_period_end IS NOT NULL
-               AND current_period_end < NOW()"
-        );
-        return (int)$n;
+               AND DATE(current_period_end) < CURDATE()
+               $studentSql
+             ORDER BY id ASC
+             LIMIT 40";
+        foreach ($fetch($pdo, $dueSql, $params) as $row) {
+            if ($calls >= $limit) {
+                break;
+            }
+            $calls++;
+            $got = subscription_sync_row_with_iyzico($pdo, $row);
+            if ($got === 'renewed') {
+                $out['renewed']++;
+            } elseif ($got === 'expired') {
+                $out['expired']++;
+            }
+        }
     } catch (Throwable $e) {
-        return 0;
+        error_log('abonelik gece esitligi: ' . $e->getMessage());
     }
+
+    return $out;
+}
+
+/** Cron / panel: süresi dolacakları iyzico ile eşitle. Dönüş: expired sayısı. */
+function subscription_expire_overdue(PDO $pdo, ?int $studentId = null): int {
+    return subscription_reconcile_due_periods($pdo, $studentId)['expired'];
 }
 
 function subscription_find_by_id(PDO $pdo, int $id): ?array {
@@ -166,7 +355,7 @@ function subscription_find_by_iyzico_ref(PDO $pdo, string $ref): ?array {
 }
 
 function subscription_find_current(PDO $pdo, int $studentId): ?array {
-    subscription_expire_overdue($pdo);
+    subscription_reconcile_due_periods($pdo, $studentId);
     $st = $pdo->prepare(
         "SELECT * FROM subscriptions
          WHERE student_id = ?
@@ -174,7 +363,7 @@ function subscription_find_current(PDO $pdo, int $studentId): ?array {
              status IN ('active', 'past_due')
              OR (status = 'cancelled'
                  AND current_period_end IS NOT NULL
-                 AND current_period_end > NOW())
+                 AND DATE(current_period_end) >= CURDATE())
            )
          ORDER BY FIELD(status, 'active', 'past_due', 'cancelled'), id DESC
          LIMIT 1"
@@ -967,7 +1156,7 @@ function subscription_instructor_id(PDO $pdo): int {
 }
 
 function subscription_admin_list(PDO $pdo): array {
-    subscription_expire_overdue($pdo);
+    subscription_reconcile_due_periods($pdo);
     $rows = $pdo->query(
         "SELECT * FROM subscriptions ORDER BY FIELD(status, 'active', 'past_due', 'pending', 'cancelled', 'expired'), id DESC LIMIT 500"
     )->fetchAll();
@@ -1012,7 +1201,7 @@ function subscription_sort_admin_rows(array $out): array {
 }
 
 function subscription_list_for_instructor(PDO $pdo, int $instructorId): array {
-    subscription_expire_overdue($pdo);
+    subscription_reconcile_due_periods($pdo);
     if ($instructorId <= 0) {
         return [];
     }

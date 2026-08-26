@@ -1,6 +1,9 @@
 <?php
 /**
- * Operasyon cron — iyzico iade senkronu, abonelik süresi, eski jetonlar.
+ * Operasyon cron — iyzico iade senkronu, abonelik gece eşitlemesi, eski jetonlar.
+ *
+ * Abonelik: dönem saatinde süre doldurulmaz. Türkiye 24:00 sonrası iyzico’ya
+ * bakılır; çekildiyse / ACTIVE ise aynı kayıt uzar, değilse expired olur.
  *
  * Hosting cron örneği (her 15 dk):
  *   php /home/.../public_html/api/cron.php KEY
@@ -42,7 +45,7 @@ if ($key === '') {
 }
 
 header('Content-Type: application/json; charset=utf-8');
-$out = ['ok' => true, 'expired' => 0, 'refunds' => 0, 'tokens' => 0];
+$out = ['ok' => true, 'expired' => 0, 'renewed' => 0, 'refunds' => 0, 'tokens' => 0];
 
 try {
     $pdo = db();
@@ -50,7 +53,9 @@ try {
     subscriptions_ensure_schema($pdo);
     students_ensure_schema($pdo);
 
-    $out['expired'] = subscription_expire_overdue($pdo);
+    $rec = subscription_reconcile_due_periods($pdo);
+    $out['expired'] = $rec['expired'];
+    $out['renewed'] = $rec['renewed'];
     $out['refunds'] = payments_sync_iyzico_refunds_all($pdo, 40);
 
     try {
