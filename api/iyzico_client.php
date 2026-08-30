@@ -130,12 +130,13 @@ function iyzico_get(string $uriPath, array $query = []): array {
     if ($query) {
         $url .= '?' . http_build_query($query);
     }
+    $isReport = str_contains($uriPath, '/v2/reporting/');
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_HTTPGET => true,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 12,
-        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => $isReport ? 5 : 12,
+        CURLOPT_CONNECTTIMEOUT => $isReport ? 3 : 5,
         CURLOPT_HTTPHEADER => [
             'Authorization: ' . $authHeader,
             'x-iyzi-rnd: ' . $randomKey,
@@ -159,7 +160,9 @@ function iyzico_get(string $uriPath, array $query = []): array {
             $out = ['ok' => true, 'status' => $status, 'data' => $data, 'error' => '', 'reason' => ''];
         }
     }
-    iyzico_audit_log('GET', $uriPath, $query, $out);
+    if (!$isReport) {
+        iyzico_audit_log('GET', $uriPath, $query, $out);
+    }
     return $out;
 }
 
@@ -556,7 +559,7 @@ function iyzico_payment_transactions_by_date(string $ymd): array {
         return $cache[$ymd];
     }
     $all = [];
-    for ($page = 1; $page <= 8; $page++) {
+    for ($page = 1; $page <= 3; $page++) {
         $res = iyzico_get('/v2/reporting/payment/transactions', [
             'transactionDate' => $ymd,
             'page' => $page,

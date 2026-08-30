@@ -904,12 +904,47 @@ function subscription_tx_buyer_name(array $t): string {
 }
 
 /**
+ * Aynı iyzico ödeme nosuna veya aynı gün boş-nolu kopyaya düşen fazla faturaları siler.
+ */
+function subscription_dedupe_invoices_by_payment_id(PDO $pdo): int {
+    $n = 0;
+    try {
+        $n += (int) $pdo->exec(
+            "DELETE i1 FROM subscription_invoices i1
+             INNER JOIN subscription_invoices i2
+                ON i1.provider_payment_id = i2.provider_payment_id
+               AND i1.provider_payment_id <> ''
+               AND i1.id > i2.id"
+        );
+        $n += (int) $pdo->exec(
+            "DELETE i1 FROM subscription_invoices i1
+             INNER JOIN subscription_invoices i2
+                ON i1.subscription_id = i2.subscription_id
+               AND DATE(i1.created_at) = DATE(i2.created_at)
+               AND i1.amount_kurus = i2.amount_kurus
+               AND i1.status = 'paid' AND i2.status = 'paid'
+               AND (i1.provider_payment_id IS NULL OR i1.provider_payment_id = '')
+               AND i2.provider_payment_id <> ''"
+        );
+    } catch (Throwable $e) {
+        return $n;
+    }
+    return $n;
+}
+
+/**
  * iyzico İşlemler raporundan eksik abonelik faturalarını yazar.
- * Webhook kaçınca panel 26 Ağustos'ta kalıyordu.
+ * Panel yüklemesinde en yeni günden geriye, kısa süre bütçesiyle çalışır.
  *
  * @return int yeni yazılan fatura
  */
-function subscription_import_iyzico_payments(PDO $pdo, string $from, string $to): int {
+function subscription_import_iyzico_payments(
+    PDO $pdo,
+    string $from,
+    string $to,
+    float $deadline = 0.0,
+    int $detailLeft = 0
+): int {
     if (!function_exists('iyzico_ready') || !iyzico_ready()) {
         return 0;
     }
@@ -925,8 +960,8 @@ function subscription_import_iyzico_payments(PDO $pdo, string $from, string $to)
     if (!$ts || !$end) {
         return 0;
     }
-    for ($i = 0; $i < 14 && $ts <= $end; $i++, $ts += 86400) {
-        $days[] = date('Y-m-d', $ts);
+    for ($i = 0; $i < 8 && $end >= $ts; $i++, $end -= 86400) {
+        $days[] = date('Y-m-d', $end);
     }
 
     $used = [];
@@ -961,6 +996,8 @@ function subscription_import_iyzico_payments(PDO $pdo, string $from, string $to)
     $byRef = [];
     $byConv = [];
     $byName = [];
+    $byEmail = [];
+    $subAmounts = [];
     foreach ($subs as $row) {
         $ref = trim((string) $row['iyzico_subscription_ref']);
         $conv = trim((string) $row['conversation_id']);
@@ -974,11 +1011,43 @@ function subscription_import_iyzico_payments(PDO $pdo, string $from, string $to)
         if ($nm !== '') {
             $byName[$nm][] = $row;
         }
+        $em = mb_strtolower(trim((string) $row['student_email']));
+        if ($em !== '') {
+            $byEmail[$em][] = $row;
+        }
+        $ak = (int) $row['amount_kurus'];
+        if ($ak > 0) {
+            $subAmounts[$ak] = true;
+        }
     }
 
+    $billed = [];
+    try {
+        $bst = $pdo->prepare(
+            "SELECT subscription_id, DATE(created_at) AS d
+             FROM subscription_invoices
+             WHERE status = 'paid' AND created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)"
+        );
+        $bst->execute([$from, $to]);
+        foreach ($bst as $r) {
+            $billed[(int) $r['subscription_id'] . ':' . $r['d']] = true;
+        }
+    } catch (Throwable $e) {
+    }
+
+    $timedOut = static function () use ($deadline): bool {
+        return $deadline > 0 && microtime(true) >= $deadline;
+    };
+
     $assignedDay = [];
-    $detailLeft = 12;
-    $findSub = static function (array $t, string $pid, string $ymd) use ($byRef, $byConv, $byName, &$detailLeft, &$assignedDay): ?array {
+    $findSub = static function (array $t, string $pid, string $ymd) use (
+        $byRef,
+        $byConv,
+        $byName,
+        $byEmail,
+        &$detailLeft,
+        &$assignedDay
+    ): ?array {
         foreach (['conversationId', 'paymentConversationId', 'subscriptionReferenceCode'] as $k) {
             $c = trim((string) ($t[$k] ?? ''));
             if ($c !== '' && isset($byRef[$c])) {
@@ -989,6 +1058,7 @@ function subscription_import_iyzico_payments(PDO $pdo, string $from, string $to)
             }
         }
         $name = mb_strtolower(subscription_tx_buyer_name($t));
+        $email = mb_strtolower(trim((string) ($t['buyerEmail'] ?? $t['email'] ?? $t['customerEmail'] ?? '')));
         $kurus = (int) round(((float) ($t['paidPrice'] ?? $t['price'] ?? 0)) * 100);
         $pick = static function (array $cands) use ($ymd, &$assignedDay): ?array {
             $free = [];
@@ -1025,6 +1095,19 @@ function subscription_import_iyzico_payments(PDO $pdo, string $from, string $to)
                 return $got;
             }
         }
+        if ($email !== '' && isset($byEmail[$email])) {
+            $cands = [];
+            foreach ($byEmail[$email] as $row) {
+                if ($kurus > 0 && (int) $row['amount_kurus'] !== $kurus) {
+                    continue;
+                }
+                $cands[] = $row;
+            }
+            $got = $pick($cands);
+            if ($got !== null) {
+                return $got;
+            }
+        }
         if ($pid !== '' && $detailLeft > 0) {
             $detailLeft--;
             $rep = iyzico_payment_report($pid);
@@ -1044,9 +1127,91 @@ function subscription_import_iyzico_payments(PDO $pdo, string $from, string $to)
         return null;
     };
 
+    $pickUnbilled = static function (string $ymd, int $kurus) use ($subs, &$assignedDay, &$billed): ?array {
+        $unbilled = [];
+        $extra = [];
+        foreach ($subs as $row) {
+            if ($kurus > 0 && (int) $row['amount_kurus'] !== $kurus) {
+                continue;
+            }
+            $k = (int) $row['id'] . ':' . $ymd;
+            if (isset($assignedDay[$k])) {
+                $extra[] = $row;
+                continue;
+            }
+            if (!isset($billed[$k])) {
+                $unbilled[] = $row;
+            } else {
+                $extra[] = $row;
+            }
+        }
+        $pool = $unbilled !== [] ? $unbilled : $extra;
+        foreach ($pool as $row) {
+            if (in_array((string) $row['status'], ['active', 'past_due'], true)) {
+                $k = (int) $row['id'] . ':' . $ymd;
+                $assignedDay[$k] = true;
+                $billed[$k] = true;
+                return $row;
+            }
+        }
+        if ($pool !== []) {
+            $row = $pool[0];
+            $k = (int) $row['id'] . ':' . $ymd;
+            $assignedDay[$k] = true;
+            $billed[$k] = true;
+            return $row;
+        }
+        return null;
+    };
+
     $n = 0;
+    $commitInv = static function (array $row, string $pid, int $kurus, string $ymd, array $t) use ($pdo, &$used, &$billed, &$n): void {
+        $subKurus = (int) $row['amount_kurus'];
+        if ($subKurus > 0 && $kurus !== $subKurus) {
+            return;
+        }
+        $payAt = subscription_tx_paid_at($t, $ymd);
+        $ok = subscription_record_invoice(
+            $pdo,
+            (int) $row['id'],
+            'iyz-' . $pid,
+            $kurus,
+            'paid',
+            $pid,
+            $payAt
+        );
+        if (!$ok) {
+            return;
+        }
+        $used[$pid] = true;
+        $billed[(int) $row['id'] . ':' . substr($payAt, 0, 10)] = true;
+        $n++;
+        $st = (string) $row['status'];
+        $last = (string) ($row['last_paid_at'] ?? '');
+        if (in_array($st, ['active', 'past_due', 'expired'], true) && ($last === '' || $payAt >= $last)) {
+            $interval = (string) ($row['interval_unit'] ?: subscription_interval());
+            $end = subscription_add_period($interval, $payAt);
+            try {
+                $pdo->prepare(
+                    "UPDATE subscriptions
+                     SET status = 'active', last_paid_at = ?, current_period_end = ?,
+                         error_message = '', cancelled_at = NULL, updated_at = NOW()
+                     WHERE id = ?"
+                )->execute([$payAt, $end, (int) $row['id']]);
+            } catch (Throwable $e) {
+            }
+        }
+    };
+
     foreach ($days as $ymd) {
+        if ($timedOut()) {
+            break;
+        }
+        $pending = [];
         foreach (iyzico_payment_transactions_by_date($ymd) as $t) {
+            if ($timedOut()) {
+                break 2;
+            }
             $type = strtoupper((string) ($t['transactionType'] ?? 'PAYMENT'));
             if ($type !== '' && $type !== 'PAYMENT') {
                 continue;
@@ -1061,44 +1226,26 @@ function subscription_import_iyzico_payments(PDO $pdo, string $from, string $to)
             }
             $row = $findSub($t, $pid, $ymd);
             if ($row === null) {
-                continue;
-            }
-            $subKurus = (int) $row['amount_kurus'];
-            if ($subKurus > 0 && $kurus !== $subKurus) {
-                continue;
-            }
-            $payAt = subscription_tx_paid_at($t, $ymd);
-            $ok = subscription_record_invoice(
-                $pdo,
-                (int) $row['id'],
-                'iyz-' . $pid,
-                $kurus,
-                'paid',
-                $pid,
-                $payAt
-            );
-            if (!$ok) {
-                continue;
-            }
-            $used[$pid] = true;
-            $n++;
-            $st = (string) $row['status'];
-            $last = (string) ($row['last_paid_at'] ?? '');
-            if (in_array($st, ['active', 'past_due', 'expired'], true) && ($last === '' || $payAt >= $last)) {
-                $interval = (string) ($row['interval_unit'] ?: subscription_interval());
-                $end = subscription_add_period($interval, $payAt);
-                try {
-                    $pdo->prepare(
-                        "UPDATE subscriptions
-                         SET status = 'active', last_paid_at = ?, current_period_end = ?,
-                             error_message = '', cancelled_at = NULL, updated_at = NOW()
-                         WHERE id = ?"
-                    )->execute([$payAt, $end, (int) $row['id']]);
-                    $row['status'] = 'active';
-                    $row['last_paid_at'] = $payAt;
-                } catch (Throwable $e) {
+                if (isset($subAmounts[$kurus])) {
+                    $pending[] = [$t, $pid, $kurus];
                 }
+                continue;
             }
+            $commitInv($row, $pid, $kurus, $ymd, $t);
+        }
+        foreach ($pending as $item) {
+            if ($timedOut()) {
+                break 2;
+            }
+            [$t, $pid, $kurus] = $item;
+            if (isset($used[$pid])) {
+                continue;
+            }
+            $row = $pickUnbilled($ymd, $kurus);
+            if ($row === null) {
+                continue;
+            }
+            $commitInv($row, $pid, $kurus, $ymd, $t);
         }
     }
     return $n;

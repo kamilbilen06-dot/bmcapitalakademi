@@ -643,10 +643,17 @@ try {
                 $to = $today;
             }
 
-            $importFrom = $from !== '' ? $from : date('Y-m-d', strtotime('-8 days'));
-            $importTo = $to !== '' ? $to : $today;
+            @set_time_limit(20);
             try {
-                subscription_import_iyzico_payments($pdo, $importFrom, $importTo);
+                subscription_dedupe_invoices_by_payment_id($pdo);
+                subscription_import_iyzico_payments(
+                    $pdo,
+                    date('Y-m-d', strtotime('-3 days')),
+                    $today,
+                    microtime(true) + 8.0,
+                    0
+                );
+                subscription_dedupe_invoices_by_payment_id($pdo);
             } catch (Throwable $e) {
                 error_log('odeme iyzico senkron: ' . $e->getMessage());
             }
@@ -750,17 +757,8 @@ try {
                 );
                 $sst->execute($sparams);
                 $subRows = $sst->fetchAll();
-                $filledIds = subscription_backfill_missing_payment_ids($pdo, $subRows);
-                $lookupLeft = 2;
                 foreach ($subRows as $inv) {
                     $payId = iyzico_normalize_payment_id($inv['provider_payment_id'] ?? '');
-                    if ($payId === '') {
-                        $payId = $filledIds[(int)$inv['id']] ?? '';
-                    }
-                    if ($payId === '' && $lookupLeft > 0 && (string)$inv['status'] === 'paid') {
-                        $payId = subscription_fill_invoice_payment_id($pdo, $inv);
-                        $lookupLeft--;
-                    }
                     $items[] = [
                         'tur' => 'Abonelik',
                         'ref' => $payId,
@@ -829,7 +827,7 @@ try {
                 'items' => $items,
                 'summary' => $summary,
                 'subCounts' => $subCounts,
-                'duplicates' => subscription_duplicate_charges($pdo, $importFrom, $importTo),
+                'duplicates' => subscription_duplicate_charges($pdo, $from, $to),
                 'from' => $from,
                 'to' => $to,
                 'tur' => $tur,

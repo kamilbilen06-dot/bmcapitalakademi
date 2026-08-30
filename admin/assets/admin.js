@@ -789,7 +789,7 @@
   };
   function drawOdemeler(filters) {
     get("payments_overview", filters).then(function (d) {
-      if (!d.ok) { el.wrap.innerHTML = '<p class="empty">Yüklenemedi</p>'; return; }
+      if (!d || !d.ok) { el.wrap.innerHTML = '<p class="empty">Yüklenemedi</p>'; return; }
       var s = d.summary || {};
       var sc = d.subCounts || {};
       var items = d.items || [];
@@ -903,6 +903,8 @@
           }
         };
       });
+    }).catch(function () {
+      el.wrap.innerHTML = '<p class="empty">Ödemeler yüklenemedi. Sayfayı yenileyin.</p>';
     });
   }
 

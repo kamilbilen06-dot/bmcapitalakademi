@@ -56,11 +56,15 @@ try {
     $rec = subscription_reconcile_due_periods($pdo);
     $out['expired'] = $rec['expired'];
     $out['renewed'] = $rec['renewed'];
+    subscription_dedupe_invoices_by_payment_id($pdo);
     $out['invoices'] = subscription_import_iyzico_payments(
         $pdo,
         date('Y-m-d', strtotime('-4 days')),
-        date('Y-m-d')
+        date('Y-m-d'),
+        0.0,
+        6
     );
+    subscription_dedupe_invoices_by_payment_id($pdo);
     $out['refunds'] = payments_sync_iyzico_refunds_all($pdo, 40);
 
     try {
