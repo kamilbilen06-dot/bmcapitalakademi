@@ -72,6 +72,9 @@ try {
         'navSss' => (($settings['nav_sss'] ?? '0') === '1'),
         'navIletisim' => (($settings['nav_iletisim'] ?? '0') === '1'),
         'navAraclar' => (($settings['nav_araclar'] ?? '1') === '1'),
+        'featureNisan2026' => feature_nisan_2026_active($settings),
+        'featureMeteAkyol' => feature_mete_akyol_active($settings),
+        'featureMetematikselHediye' => feature_metematiksel_hediye_active($settings),
         'emailjs' => [
             'publicKey' => $settings['emailjs_public'] ?? '',
             'serviceId' => $settings['emailjs_service'] ?? '',
@@ -95,7 +98,7 @@ try {
         'site' => $site,
         'egitmenProfilleri' => $egitmenProfilleri,
     ];
-    feature_filter_public_payload($payload);
+    feature_filter_public_payload($payload, $settings);
     json_out($payload);
 } catch (Throwable $e) {
     json_out(['ok' => false, 'error' => 'Veri alınamadı'], 500);

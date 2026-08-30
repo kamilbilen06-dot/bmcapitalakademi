@@ -1,43 +1,54 @@
 /**
- * Geçici özellik bayrakları (frontend).
- *
- * Dr. Mete Akyol + sosyal + kitap/WhatsApp hediyesini tekrar göstermek için:
- *   meteAkyolActive: true
- * ve api/feature_flags.php içinde FEATURE_METE_AKYOL_ACTIVE → true
+ * Yönetilebilir içerik bayrakları (frontend).
+ * Varsayılanlar pasiftir; api/public.php ayarları geldiğinde main.js günceller.
  */
 window.BM_FLAGS = {
+  nisan2026Active: false,
   meteAkyolActive: false,
+  metematikselHediyeActive: false,
 };
 
-(function applyMeteFeatureFlag() {
-  var flags = window.BM_FLAGS || {};
-  var active = !!flags.meteAkyolActive;
-
-  function apply() {
-    if (!active) {
-      document.documentElement.classList.add("bm-mete-off");
-      document.querySelectorAll('[data-bm-feature="mete-akyol"]').forEach(function (el) {
-        el.hidden = true;
-        el.setAttribute("aria-hidden", "true");
-        el.style.display = "none";
-      });
-      document.querySelectorAll(".bm-mete-off-only").forEach(function (el) {
-        el.hidden = false;
-        el.removeAttribute("aria-hidden");
-        el.style.display = "";
-      });
+(function () {
+  function setVisibility(el, visible) {
+    el.hidden = !visible;
+    if (visible) {
+      el.removeAttribute("aria-hidden");
+      el.style.display = "";
     } else {
-      document.documentElement.classList.remove("bm-mete-off");
-      document.querySelectorAll(".bm-mete-off-only").forEach(function (el) {
-        el.hidden = true;
-        el.setAttribute("aria-hidden", "true");
-        el.style.display = "none";
-      });
+      el.setAttribute("aria-hidden", "true");
+      el.style.display = "none";
     }
   }
 
+  function apply(next) {
+    var flags = next || window.BM_FLAGS || {};
+    window.BM_FLAGS = {
+      nisan2026Active: !!flags.nisan2026Active,
+      meteAkyolActive: !!flags.meteAkyolActive,
+      metematikselHediyeActive: !!flags.metematikselHediyeActive,
+    };
+
+    document.documentElement.classList.toggle(
+      "bm-mete-off",
+      !window.BM_FLAGS.meteAkyolActive
+    );
+    document.querySelectorAll('[data-bm-feature="mete-akyol"]').forEach(function (el) {
+      setVisibility(el, window.BM_FLAGS.meteAkyolActive);
+    });
+    document.querySelectorAll('[data-bm-feature="metematiksel-hediye"]').forEach(function (el) {
+      setVisibility(el, window.BM_FLAGS.metematikselHediyeActive);
+    });
+    document.querySelectorAll('[data-bm-feature="nisan-2026"]').forEach(function (el) {
+      setVisibility(el, window.BM_FLAGS.nisan2026Active);
+    });
+    document.querySelectorAll(".bm-mete-off-only").forEach(function (el) {
+      setVisibility(el, !window.BM_FLAGS.meteAkyolActive);
+    });
+  }
+
+  window.BM_FEATURES = { apply: apply };
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", apply);
+    document.addEventListener("DOMContentLoaded", function () { apply(); });
   } else {
     apply();
   }

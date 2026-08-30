@@ -375,6 +375,13 @@
             if (site.telefon) site.telefonHref = "tel:" + String(site.telefon).replace(/\s/g, "");
             if (!site.marka) site.marka = "BM Capital Akademi";
             window.BM_DATA.site = site;
+            if (window.BM_FEATURES) {
+              window.BM_FEATURES.apply({
+                nisan2026Active: site.featureNisan2026 === true || site.featureNisan2026 === "1",
+                meteAkyolActive: site.featureMeteAkyol === true || site.featureMeteAkyol === "1",
+                metematikselHediyeActive: site.featureMetematikselHediye === true || site.featureMetematikselHediye === "1",
+              });
+            }
           }
         }
         finish();
