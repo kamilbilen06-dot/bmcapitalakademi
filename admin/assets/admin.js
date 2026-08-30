@@ -1289,14 +1289,18 @@
         ((s.iyzico_ready === "1") ? "sandbox açık" : "sandbox kapalı") +
         " · kaynak: " + esc(s.iyzico_key_source || "yok") +
         ". Test kartı: 5528 7900 0000 0008 · 12/30 · CVC 123 · SMS 123456</p>" +
-        '<h3 style="margin:22px 0 4px;font-size:15px">Öğrenci e-postaları (Resend)</h3>' +
-        '<p class="hint" style="margin:0 0 12px">GoDaddy rölesi ~60 sn bekletir; Gmail SMTP bu hostingde kapalı. Mail <b>Resend HTTPS</b> ile gider (noreply@). ' +
-        ((s.mail_http_ready === "1") ? "Anahtar kayıtlı, hazır." : "Anahtar yok — şimdilik yavaş Exim.") +
-        ' Boş alan kayıtlı anahtarı değiştirmez.</p>' +
+        '<h3 style="margin:22px 0 4px;font-size:15px">Öğrenci e-postaları (SMTP)</h3>' +
+        '<p class="hint" style="margin:0 0 12px">Kayıt doğrulama ve şifre sıfırlama Gmail SMTP ile gider. Boş şifre alanı kayıtlı şifreyi değiştirmez.</p>' +
         '<div class="form-grid">' +
-        '<div class="field full"><label>Resend API key</label><input type="password" name="resend_api_key" value="" autocomplete="new-password" placeholder="' +
-        (s.resend_api_key_set ? "Kayıtlı (değiştirmek için yazın)" : "re_...") +
-        '"></div>' +
+        fld("smtp_host", "SMTP sunucu") + fld("smtp_port", "Port (587 / 465)") +
+        '<div class="field"><label>Şifreleme</label><select name="smtp_secure">' +
+          '<option value="tls"' + ((s.smtp_secure || "tls") === "tls" ? " selected" : "") + ">STARTTLS (587)</option>" +
+          '<option value="ssl"' + (s.smtp_secure === "ssl" ? " selected" : "") + ">SSL (465)</option>" +
+          '<option value="none"' + (s.smtp_secure === "none" ? " selected" : "") + ">Yok</option>" +
+        "</select></div>" +
+        fld("smtp_user", "Kullanıcı (e-posta)") +
+        '<div class="field"><label>Şifre</label><input type="password" name="smtp_pass" value="" autocomplete="new-password" placeholder="' + (s.smtp_pass_set ? "Kayıtlı (değiştirmek için yazın)" : "") + '"></div>' +
+        fld("smtp_from", "Gönderen e-posta") + fld("smtp_from_name", "Gönderen adı") +
         "</div>" +
         '<h3 style="margin:22px 0 4px;font-size:15px">İletişim formu (EmailJS)</h3>' +
         '<div class="form-grid">' +
@@ -1315,7 +1319,7 @@
       document.getElementById("setForm").onsubmit = function (e) {
         e.preventDefault();
         var f = e.target, out = {};
-        ["marka", "sehir", "telefon", "whatsapp", "instagram", "twitter", "banka", "hesap_adi", "iban", "instructor_share_pct", "emailjs_public", "emailjs_service", "emailjs_template", "emailjs_to", "resend_api_key", "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from", "smtp_from_name", "sub_enabled", "sub_title", "sub_price", "sub_blurb", "sub_instructor_id", "satici_unvan", "satici_adres", "satici_vergi", "satici_mersis", "nav_hakkimizda", "nav_sss", "nav_iletisim", "nav_araclar"].forEach(function (k) { if (f[k]) out[k] = f[k].value; });
+        ["marka", "sehir", "telefon", "whatsapp", "instagram", "twitter", "banka", "hesap_adi", "iban", "instructor_share_pct", "emailjs_public", "emailjs_service", "emailjs_template", "emailjs_to", "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from", "smtp_from_name", "sub_enabled", "sub_title", "sub_price", "sub_blurb", "sub_instructor_id", "satici_unvan", "satici_adres", "satici_vergi", "satici_mersis", "nav_hakkimizda", "nav_sss", "nav_iletisim", "nav_araclar"].forEach(function (k) { if (f[k]) out[k] = f[k].value; });
         post("settings_save", out).then(function (r) { toast(r.ok ? "Ayarlar kaydedildi" : (r.error || "Hata"), r.ok ? "ok" : "err"); });
       };
       document.getElementById("pwForm").onsubmit = function (e) {

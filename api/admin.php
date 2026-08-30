@@ -466,10 +466,6 @@ try {
             foreach ($pdo->query("SELECT k, v FROM settings") as $r) { $s[$r['k']] = $r['v']; }
             $s['smtp_pass_set'] = !empty($s['smtp_pass']);
             $s['smtp_pass'] = '';
-            $s['resend_api_key_set'] = !empty($s['resend_api_key']);
-            $s['resend_api_key'] = '';
-            require_once __DIR__ . '/mailer.php';
-            $s['mail_http_ready'] = mailer_http_available() ? '1' : '0';
             $s['iyzico_running_test'] = iyzico_is_sandbox() ? '1' : '0';
             $s['iyzico_key_source'] = defined('IYZICO_KEY_SOURCE') ? IYZICO_KEY_SOURCE : 'none';
             $s['iyzico_ready'] = iyzico_ready() ? '1' : '0';
@@ -503,13 +499,13 @@ try {
 
         case 'settings_save': {
             $in = body_json();
-            $allowed = ['marka','sehir','telefon','whatsapp','instagram','twitter','iban','banka','hesap_adi','emailjs_public','emailjs_service','emailjs_template','emailjs_to','resend_api_key','smtp_host','smtp_port','smtp_secure','smtp_user','smtp_pass','smtp_from','smtp_from_name','instructor_share_pct','sub_enabled','sub_title','sub_price','sub_blurb','sub_instructor_id','satici_unvan','satici_adres','satici_vergi','satici_mersis','nav_hakkimizda','nav_sss','nav_iletisim','nav_araclar'];
+            $allowed = ['marka','sehir','telefon','whatsapp','instagram','twitter','iban','banka','hesap_adi','emailjs_public','emailjs_service','emailjs_template','emailjs_to','smtp_host','smtp_port','smtp_secure','smtp_user','smtp_pass','smtp_from','smtp_from_name','instructor_share_pct','sub_enabled','sub_title','sub_price','sub_blurb','sub_instructor_id','satici_unvan','satici_adres','satici_vergi','satici_mersis','nav_hakkimizda','nav_sss','nav_iletisim','nav_araclar'];
             $stmt = $pdo->prepare("INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)");
             foreach ($allowed as $k) {
                 if (!array_key_exists($k, $in)) {
                     continue;
                 }
-                if (($k === 'smtp_pass' || $k === 'resend_api_key') && trim((string)$in[$k]) === '') {
+                if ($k === 'smtp_pass' && trim((string)$in[$k]) === '') {
                     continue;
                 }
                 if ($k === 'instructor_share_pct') {
