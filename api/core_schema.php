@@ -151,13 +151,25 @@ function site_from_iyzico_dt(string $raw): string {
         $dt->setTimezone($tz);
         return $dt->format('Y-m-d H:i:s');
     }
-    try {
-        if (preg_match('/[zZ]|[+\-]\d{2}:?\d{2}$/', $raw) || str_contains($raw, 'T')) {
-            $dt = new DateTime($raw);
-        } else {
-            $dt = new DateTime($raw, new DateTimeZone('UTC'));
+    if (preg_match('/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+|\s*\|\s*)?(\d{2}:\d{2}(?::\d{2})?)?/', $raw, $m)) {
+        $h = $m[4] !== '' ? $m[4] : '12:00';
+        if (strlen($h) === 5) {
+            $h .= ':00';
         }
-        $dt->setTimezone($tz);
+        return $m[3] . '-' . $m[2] . '-' . $m[1] . ' ' . $h;
+    }
+    try {
+        if (preg_match('/[zZ]|[+\-]\d{2}:?\d{2}$/', $raw)) {
+            $dt = new DateTime($raw);
+            $dt->setTimezone($tz);
+            return $dt->format('Y-m-d H:i:s');
+        }
+        $naive = $raw;
+        if (str_contains($naive, 'T')) {
+            $naive = str_replace('T', ' ', $naive);
+        }
+        $naive = substr($naive, 0, 19);
+        $dt = new DateTime($naive, $tz);
         return $dt->format('Y-m-d H:i:s');
     } catch (Throwable $e) {
         $ts = strtotime($raw);

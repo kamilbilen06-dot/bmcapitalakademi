@@ -132,11 +132,14 @@
 
   function fmtDate(s) {
     if (!s) return "";
-    if (/^\d{2}\.\d{2}\.\d{4}/.test(String(s))) return s;
-    var raw = String(s).trim().replace(" ", "T");
-    if (!/[zZ]|[+\-]\d{2}:?\d{2}$/.test(raw)) raw += "+03:00";
-    var d = new Date(raw);
-    if (isNaN(d)) return s;
+    var str = String(s).trim();
+    if (/^\d{2}\.\d{2}\.\d{4}/.test(str)) return str;
+    var m = str.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (m) {
+      return m[3] + "." + m[2] + "." + m[1] + " " + m[4] + ":" + m[5];
+    }
+    var d = new Date(str);
+    if (isNaN(d)) return str;
     return d.toLocaleString("tr-TR", {
       timeZone: "Europe/Istanbul",
       day: "2-digit",

@@ -643,24 +643,46 @@ try {
                 $to = $today;
             }
 
-            @set_time_limit(20);
+            @set_time_limit(25);
+            $spanFrom = $from !== '' ? $from : date('Y-m-d', strtotime('-7 days'));
+            $spanTo = $today;
+            if ($to !== '') {
+                $spanTo = $to < $today ? $to : $today;
+            }
+            if (strtotime($spanTo . ' 12:00:00') - strtotime($spanFrom . ' 12:00:00') > 8 * 86400) {
+                $spanFrom = date('Y-m-d', strtotime($spanTo . ' -7 days'));
+            }
+            $iyzIdx = [];
             try {
+                $iyzIdx = iyzico_tx_index_by_dates($spanFrom, $spanTo);
                 subscription_dedupe_invoices_by_payment_id($pdo);
+                subscription_reattach_invoices_by_buyer(
+                    $pdo,
+                    $spanFrom,
+                    $spanTo,
+                    microtime(true) + 5.0,
+                    4
+                );
                 subscription_import_iyzico_payments(
                     $pdo,
                     date('Y-m-d', strtotime('-3 days')),
                     $today,
-                    microtime(true) + 8.0,
+                    microtime(true) + 4.0,
                     0
                 );
-                subscription_reattach_invoices_by_buyer(
-                    $pdo,
-                    date('Y-m-d', strtotime('-7 days')),
-                    $today,
-                    microtime(true) + 6.0,
-                    4
-                );
                 subscription_dedupe_invoices_by_payment_id($pdo);
+                if ($iyzIdx !== []) {
+                    $tm = $pdo->prepare(
+                        "UPDATE subscription_invoices SET created_at = ? WHERE provider_payment_id = ? AND created_at <> ?"
+                    );
+                    foreach ($iyzIdx as $pid => $fact) {
+                        $at = (string) ($fact['paidAt'] ?? '');
+                        if ($at === '') {
+                            continue;
+                        }
+                        $tm->execute([$at, $pid, $at]);
+                    }
+                }
             } catch (Throwable $e) {
                 error_log('odeme iyzico senkron: ' . $e->getMessage());
             }
@@ -786,6 +808,44 @@ try {
             } catch (Throwable $e) {
                 // subscription_invoices henüz yoksa sessiz geç
             }
+            }
+
+            if ($iyzIdx !== []) {
+                $uniqueName = [];
+                try {
+                    $uniqueName = subscription_buyer_indexes(
+                        $pdo->query("SELECT * FROM subscriptions ORDER BY id DESC LIMIT 400")->fetchAll() ?: []
+                    )['uniqueName'];
+                } catch (Throwable $e) {
+                    $uniqueName = [];
+                }
+                foreach ($items as &$it) {
+                    $pid = iyzico_normalize_payment_id($it['iyzicoPaymentId'] ?? '');
+                    if ($pid === '' || !isset($iyzIdx[$pid])) {
+                        continue;
+                    }
+                    $fact = $iyzIdx[$pid];
+                    $iyzName = trim((string) ($fact['name'] ?? ''));
+                    if ($iyzName !== '') {
+                        $it['student_name'] = $iyzName;
+                        $nm = subscription_norm_person_name($iyzName);
+                        if (isset($uniqueName[$nm]['student_email'])) {
+                            $it['student_email'] = (string) $uniqueName[$nm]['student_email'];
+                        } elseif ((string) ($fact['email'] ?? '') !== '') {
+                            $it['student_email'] = (string) $fact['email'];
+                        }
+                    }
+                    $at = (string) ($fact['paidAt'] ?? '');
+                    if ($at !== '') {
+                        $it['paid_at'] = $at;
+                        $it['created_at'] = $at;
+                    }
+                    if (!empty($fact['refunded']) && (string) $it['tur'] === 'Abonelik') {
+                        $it['status'] = 'refunded';
+                        $it['tahsilEdildi'] = false;
+                    }
+                }
+                unset($it);
             }
 
             usort($items, static function ($a, $b) {

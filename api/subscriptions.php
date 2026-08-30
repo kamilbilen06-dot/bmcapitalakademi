@@ -442,7 +442,7 @@ function subscription_nested_email(array $data, int $depth = 0): string {
     return '';
 }
 
-/** iyzico işlem satırını sitedeki aboneye bağla: referans, e-posta, yoksa tekil isim. */
+/** iyzico işlem satırını sitedeki aboneye bağla: e-posta / tekil isim, sonra referans. */
 function subscription_match_sub_for_tx(
     array $t,
     array $byRef,
@@ -450,15 +450,6 @@ function subscription_match_sub_for_tx(
     array $byEmail,
     array $uniqueName
 ): ?array {
-    foreach (['conversationId', 'paymentConversationId', 'subscriptionReferenceCode'] as $k) {
-        $c = trim((string) ($t[$k] ?? ''));
-        if ($c !== '' && isset($byRef[$c])) {
-            return $byRef[$c];
-        }
-        if ($c !== '' && isset($byConv[$c])) {
-            return $byConv[$c];
-        }
-    }
     $email = subscription_norm_email((string) ($t['buyerEmail'] ?? $t['email'] ?? $t['customerEmail'] ?? ''));
     if ($email !== '' && isset($byEmail[$email])) {
         $cands = subscription_canonical_rows($byEmail[$email]);
@@ -467,6 +458,15 @@ function subscription_match_sub_for_tx(
     $name = subscription_norm_person_name(subscription_tx_buyer_name($t));
     if ($name !== '' && isset($uniqueName[$name])) {
         return $uniqueName[$name];
+    }
+    foreach (['conversationId', 'paymentConversationId', 'subscriptionReferenceCode'] as $k) {
+        $c = trim((string) ($t[$k] ?? ''));
+        if ($c !== '' && isset($byRef[$c])) {
+            return $byRef[$c];
+        }
+        if ($c !== '' && isset($byConv[$c])) {
+            return $byConv[$c];
+        }
     }
     return null;
 }
@@ -1372,13 +1372,74 @@ function subscription_tx_paid_at(array $t, string $ymd): string {
 }
 
 function subscription_tx_buyer_name(array $t): string {
-    $n = trim((string) ($t['buyerName'] ?? $t['name'] ?? $t['customerName'] ?? ''));
-    $s = trim((string) ($t['buyerSurname'] ?? $t['surname'] ?? $t['customerSurname'] ?? ''));
+    $n = trim((string) ($t['buyerName'] ?? $t['name'] ?? $t['customerName'] ?? $t['firstName'] ?? $t['memberName'] ?? ''));
+    $s = trim((string) ($t['buyerSurname'] ?? $t['surname'] ?? $t['customerSurname'] ?? $t['lastName'] ?? ''));
     $full = trim($n . ' ' . $s);
     if ($full !== '') {
         return $full;
     }
-    return trim((string) ($t['cardHolderName'] ?? ''));
+    $one = trim((string) ($t['cardHolderName'] ?? $t['buyerFullName'] ?? $t['fullName'] ?? ''));
+    return $one;
+}
+
+/**
+ * iyzico İşlemler listesi: ödeme no => ad, saat, iade.
+ *
+ * @return array<string, array{name:string,email:string,paidAt:string,refunded:bool}>
+ */
+function iyzico_tx_index_by_dates(string $from, string $to): array {
+    $out = [];
+    if (!function_exists('iyzico_ready') || !iyzico_ready()) {
+        return $out;
+    }
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+        return $out;
+    }
+    if ($from > $to) {
+        [$from, $to] = [$to, $from];
+    }
+    $ts = strtotime($from . ' 12:00:00');
+    $end = strtotime($to . ' 12:00:00');
+    if (!$ts || !$end) {
+        return $out;
+    }
+    for ($i = 0; $i < 10 && $end >= $ts; $i++, $end -= 86400) {
+        $ymd = date('Y-m-d', $end);
+        foreach (iyzico_payment_transactions_by_date($ymd) as $t) {
+            $pid = iyzico_normalize_payment_id($t['paymentId'] ?? '');
+            if ($pid === '') {
+                continue;
+            }
+            $type = strtoupper((string) ($t['transactionType'] ?? 'PAYMENT'));
+            $refunded = str_contains($type, 'REFUND')
+                || str_contains(strtoupper((string) ($t['paymentRefundStatus'] ?? $t['refundStatus'] ?? '')), 'REFUND');
+            $name = subscription_tx_buyer_name($t);
+            $email = subscription_norm_email((string) ($t['buyerEmail'] ?? $t['email'] ?? $t['customerEmail'] ?? ''));
+            $paidAt = subscription_tx_paid_at($t, $ymd);
+            if (!isset($out[$pid])) {
+                $out[$pid] = [
+                    'name' => $name,
+                    'email' => $email,
+                    'paidAt' => $paidAt,
+                    'refunded' => $refunded,
+                ];
+            } else {
+                if ($name !== '' && $out[$pid]['name'] === '') {
+                    $out[$pid]['name'] = $name;
+                }
+                if ($email !== '' && $out[$pid]['email'] === '') {
+                    $out[$pid]['email'] = $email;
+                }
+                if ($paidAt !== '' && ($out[$pid]['paidAt'] === '' || $paidAt < $out[$pid]['paidAt'])) {
+                    $out[$pid]['paidAt'] = $paidAt;
+                }
+                if ($refunded) {
+                    $out[$pid]['refunded'] = true;
+                }
+            }
+        }
+    }
+    return $out;
 }
 
 /**
