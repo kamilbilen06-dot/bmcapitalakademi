@@ -437,6 +437,12 @@
     }
 
     loadContent(function () {
+      // Ayarlar API'den asenkron gelir; başlık/footer ilk çizimde data.js
+      // varsayılanlarını kullanır. Güncel menü bayraklarını görünür yapmak
+      // için içerik geldikten sonra chrome'u yeniden çiz.
+      paintChrome();
+      initMenu();
+      initStudentNav();
       if (window.BM_CATALOG) window.BM_CATALOG.init();
     });
     trackVisit();

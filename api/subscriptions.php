@@ -86,6 +86,52 @@ function subscription_add_period(string $interval, string $fromSql = ''): string
     return date('Y-m-d H:i:s', strtotime('+1 month', $t));
 }
 
+/**
+ * Sandbox günlük planlarında dönem sonunu son başarılı çekimden üret.
+ * iyzico'nun plan endDate değeri kayıtlar arasında farklı gün dönebiliyor;
+ * site tarafında aynı ödeme kuralı kullanılmalı.
+ */
+function subscription_normalize_daily_periods(PDO $pdo, ?int $studentId = null): int {
+    if (!iyzico_is_sandbox()) {
+        return 0;
+    }
+    try {
+        $sql = "SELECT id, last_paid_at, current_period_end
+                FROM subscriptions
+                WHERE status IN ('active', 'past_due')
+                  AND interval_unit = 'DAILY'
+                  AND last_paid_at IS NOT NULL
+                  AND last_paid_at <> ''";
+        $params = [];
+        if ($studentId !== null && $studentId > 0) {
+            $sql .= ' AND student_id = ?';
+            $params[] = $studentId;
+        }
+        $st = $pdo->prepare($sql);
+        $st->execute($params);
+        $upd = $pdo->prepare(
+            'UPDATE subscriptions SET current_period_end = ?, updated_at = NOW() WHERE id = ?'
+        );
+        $n = 0;
+        foreach ($st->fetchAll() as $row) {
+            $paidAt = trim((string) ($row['last_paid_at'] ?? ''));
+            if ($paidAt === '' || strtotime($paidAt) === false) {
+                continue;
+            }
+            $end = subscription_add_period('DAILY', $paidAt);
+            if ((string) ($row['current_period_end'] ?? '') === $end) {
+                continue;
+            }
+            $upd->execute([$end, (int) $row['id']]);
+            $n++;
+        }
+        return $n;
+    } catch (Throwable $e) {
+        error_log('günlük abonelik süre eşitleme: ' . $e->getMessage());
+        return 0;
+    }
+}
+
 function subscription_status_label(string $status, bool $entitled = false): string {
     if ($status === 'cancelled' && $entitled) {
         return 'Aktif · iptal edildi';
@@ -226,7 +272,7 @@ function subscription_sync_row_with_iyzico(PDO $pdo, array $row): string {
         if ($end === '' || subscription_calendar_day_ended($end)) {
             $inner['endDate'] = subscription_add_period($interval, site_now());
         }
-        subscription_mark_active($pdo, $row, $inner, $interval);
+        subscription_mark_active($pdo, $row, $inner, $interval, site_now());
         subscription_record_renewal_invoice($pdo, $row, $inner);
         return 'renewed';
     }
@@ -261,6 +307,7 @@ function subscription_reconcile_due_periods(PDO $pdo, ?int $studentId = null): a
     $out = ['expired' => 0, 'renewed' => 0];
     $limit = $studentId !== null && $studentId > 0 ? 8 : 40;
     $calls = 0;
+    subscription_normalize_daily_periods($pdo, $studentId);
 
     $fetch = static function (PDO $pdo, string $sql, array $params) {
         $st = $pdo->prepare($sql);
@@ -1086,18 +1133,39 @@ function subscription_touch(PDO $pdo, int $id): void {
     $pdo->prepare("UPDATE subscriptions SET updated_at = NOW() WHERE id = ?")->execute([$id]);
 }
 
-function subscription_mark_active(PDO $pdo, array $row, array $inner, string $interval): void {
+function subscription_mark_active(
+    PDO $pdo,
+    array $row,
+    array $inner,
+    string $interval,
+    string $periodBase = ''
+): void {
     $id = (int)$row['id'];
     $ref = (string)($inner['subscriptionReferenceCode'] ?? $inner['referenceCode'] ?? $row['iyzico_subscription_ref']);
     $cust = (string)($inner['customerReferenceCode'] ?? $row['iyzico_customer_ref']);
-    $endRaw = (string)($inner['endDate'] ?? $inner['subscriptionEndDate'] ?? $inner['nextPaymentDate'] ?? '');
-    $end = site_from_iyzico_dt($endRaw);
-    if ($end === '') {
-        $base = (string)($row['current_period_end'] ?? '');
-        if ($base !== '' && strtotime($base) > time()) {
-            $end = subscription_add_period($interval, $base);
-        } else {
-            $end = subscription_add_period($interval, site_now());
+    $end = '';
+    if (iyzico_is_sandbox() && strtoupper($interval) === 'DAILY') {
+        $base = trim($periodBase);
+        if ($base === '') {
+            $base = trim((string)($row['last_paid_at'] ?? ''));
+        }
+        if ($base === '') {
+            $base = site_from_iyzico_dt((string)($inner['createdDate'] ?? ''));
+        }
+        if ($base === '') {
+            $base = site_now();
+        }
+        $end = subscription_add_period('DAILY', $base);
+    } else {
+        $endRaw = (string)($inner['endDate'] ?? $inner['subscriptionEndDate'] ?? $inner['nextPaymentDate'] ?? '');
+        $end = site_from_iyzico_dt($endRaw);
+        if ($end === '') {
+            $base = (string)($row['current_period_end'] ?? '');
+            if ($base !== '' && strtotime($base) > time()) {
+                $end = subscription_add_period($interval, $base);
+            } else {
+                $end = subscription_add_period($interval, site_now());
+            }
         }
     }
     $pdo->prepare(
@@ -2214,11 +2282,11 @@ function subscription_handle_webhook(PDO $pdo, array $payload): void {
             $fresh = $det['ok'];
             if ($fresh) {
                 $inner = iyzico_v2_data($det['data']);
-                subscription_mark_active($pdo, $row, $inner, (string)$row['interval_unit']);
+                subscription_mark_active($pdo, $row, $inner, (string)$row['interval_unit'], site_now());
             }
         }
         if (!$fresh) {
-            subscription_mark_active($pdo, $row, $payload, (string)$row['interval_unit']);
+            subscription_mark_active($pdo, $row, $payload, (string)$row['interval_unit'], site_now());
         }
         subscription_record_invoice($pdo, (int)$row['id'], $orderRef, (int)$row['amount_kurus'], 'paid', subscription_resolve_payment_id($row, $inner, $payload));
         subscription_notify_new($pdo, $row);
