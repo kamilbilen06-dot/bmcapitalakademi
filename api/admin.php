@@ -628,6 +628,28 @@ try {
             if ($to !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
                 $to = '';
             }
+            $siteY = (int) date('Y');
+            if ($from !== '' && (int) substr($from, 0, 4) !== $siteY) {
+                $from = $siteY . substr($from, 4);
+            }
+            if ($to !== '' && (int) substr($to, 0, 4) !== $siteY) {
+                $to = $siteY . substr($to, 4);
+            }
+            if ($from !== '' && $to !== '' && $from > $to) {
+                [$from, $to] = [$to, $from];
+            }
+            $today = date('Y-m-d');
+            if ($to !== '' && $to > $today) {
+                $to = $today;
+            }
+
+            $importFrom = $from !== '' ? $from : date('Y-m-d', strtotime('-8 days'));
+            $importTo = $to !== '' ? $to : $today;
+            try {
+                subscription_import_iyzico_payments($pdo, $importFrom, $importTo);
+            } catch (Throwable $e) {
+                error_log('odeme iyzico senkron: ' . $e->getMessage());
+            }
             $like = '%' . $q . '%';
             $loadKurs = $tur !== 'abonelik';
             $loadSub = $tur !== 'kurs';
@@ -807,6 +829,7 @@ try {
                 'items' => $items,
                 'summary' => $summary,
                 'subCounts' => $subCounts,
+                'duplicates' => subscription_duplicate_charges($pdo, $importFrom, $importTo),
                 'from' => $from,
                 'to' => $to,
                 'tur' => $tur,

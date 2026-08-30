@@ -693,13 +693,15 @@ function subscription_record_invoice(
     string $orderRef,
     int $amountKurus,
     string $status,
-    string $paymentId = ''
+    string $paymentId = '',
+    string $createdAt = ''
 ): bool {
     $orderRef = mb_substr(trim($orderRef), 0, 80);
     $paymentId = iyzico_normalize_payment_id($paymentId);
     if ($orderRef === '') {
         $orderRef = 'inv-' . $subscriptionId . '-' . date('YmdHis') . '-' . bin2hex(random_bytes(2));
     }
+    $at = $createdAt !== '' ? $createdAt : site_now();
     try {
         $pdo->prepare(
             "INSERT INTO subscription_invoices
@@ -708,7 +710,7 @@ function subscription_record_invoice(
              ON DUPLICATE KEY UPDATE
                 status = VALUES(status),
                 provider_payment_id = IF(VALUES(provider_payment_id) = '', provider_payment_id, VALUES(provider_payment_id))"
-        )->execute([$subscriptionId, $orderRef, $paymentId, $amountKurus, $status, site_now()]);
+        )->execute([$subscriptionId, $orderRef, $paymentId, $amountKurus, $status, $at]);
         return true;
     } catch (Throwable $e) {
         return false;
@@ -876,6 +878,267 @@ function subscription_backfill_missing_payment_ids(PDO $pdo, array $invoices): a
         }
     }
     return $filled;
+}
+
+function subscription_tx_paid_at(array $t, string $ymd): string {
+    $raw = trim((string) ($t['transactionDate'] ?? $t['createdDate'] ?? ''));
+    $converted = site_from_iyzico_dt($raw);
+    if ($converted !== '') {
+        return $converted;
+    }
+    if (preg_match('/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}:\d{2}:\d{2}))?/', $raw, $m)) {
+        $h = $m[4] !== '' ? $m[4] : '12:00:00';
+        return $m[3] . '-' . $m[2] . '-' . $m[1] . ' ' . $h;
+    }
+    return preg_match('/^\d{4}-\d{2}-\d{2}$/', $ymd) ? $ymd . ' 12:00:00' : site_now();
+}
+
+function subscription_tx_buyer_name(array $t): string {
+    $n = trim((string) ($t['buyerName'] ?? $t['name'] ?? $t['customerName'] ?? ''));
+    $s = trim((string) ($t['buyerSurname'] ?? $t['surname'] ?? $t['customerSurname'] ?? ''));
+    $full = trim($n . ' ' . $s);
+    if ($full !== '') {
+        return $full;
+    }
+    return trim((string) ($t['cardHolderName'] ?? ''));
+}
+
+/**
+ * iyzico İşlemler raporundan eksik abonelik faturalarını yazar.
+ * Webhook kaçınca panel 26 Ağustos'ta kalıyordu.
+ *
+ * @return int yeni yazılan fatura
+ */
+function subscription_import_iyzico_payments(PDO $pdo, string $from, string $to): int {
+    if (!function_exists('iyzico_ready') || !iyzico_ready()) {
+        return 0;
+    }
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+        return 0;
+    }
+    if ($from > $to) {
+        [$from, $to] = [$to, $from];
+    }
+    $days = [];
+    $ts = strtotime($from . ' 12:00:00');
+    $end = strtotime($to . ' 12:00:00');
+    if (!$ts || !$end) {
+        return 0;
+    }
+    for ($i = 0; $i < 14 && $ts <= $end; $i++, $ts += 86400) {
+        $days[] = date('Y-m-d', $ts);
+    }
+
+    $used = [];
+    try {
+        foreach ($pdo->query("SELECT provider_payment_id FROM subscription_invoices WHERE provider_payment_id <> ''") ?: [] as $r) {
+            $id = iyzico_normalize_payment_id($r['provider_payment_id'] ?? '');
+            if ($id !== '') {
+                $used[$id] = true;
+            }
+        }
+        foreach ($pdo->query("SELECT provider_payment_id, amount_kurus FROM payment_orders WHERE provider_payment_id <> ''") ?: [] as $r) {
+            $id = iyzico_normalize_payment_id($r['provider_payment_id'] ?? '');
+            if ($id !== '') {
+                $used[$id] = true;
+            }
+        }
+    } catch (Throwable $e) {
+        return 0;
+    }
+
+    $subs = [];
+    try {
+        $subs = $pdo->query(
+            "SELECT * FROM subscriptions
+             WHERE iyzico_subscription_ref <> '' OR conversation_id <> ''
+             ORDER BY id DESC
+             LIMIT 400"
+        )->fetchAll() ?: [];
+    } catch (Throwable $e) {
+        return 0;
+    }
+    $byRef = [];
+    $byConv = [];
+    $byName = [];
+    foreach ($subs as $row) {
+        $ref = trim((string) $row['iyzico_subscription_ref']);
+        $conv = trim((string) $row['conversation_id']);
+        if ($ref !== '') {
+            $byRef[$ref] = $row;
+        }
+        if ($conv !== '') {
+            $byConv[$conv] = $row;
+        }
+        $nm = mb_strtolower(trim((string) $row['student_name']));
+        if ($nm !== '') {
+            $byName[$nm][] = $row;
+        }
+    }
+
+    $assignedDay = [];
+    $detailLeft = 12;
+    $findSub = static function (array $t, string $pid, string $ymd) use ($byRef, $byConv, $byName, &$detailLeft, &$assignedDay): ?array {
+        foreach (['conversationId', 'paymentConversationId', 'subscriptionReferenceCode'] as $k) {
+            $c = trim((string) ($t[$k] ?? ''));
+            if ($c !== '' && isset($byRef[$c])) {
+                return $byRef[$c];
+            }
+            if ($c !== '' && isset($byConv[$c])) {
+                return $byConv[$c];
+            }
+        }
+        $name = mb_strtolower(subscription_tx_buyer_name($t));
+        $kurus = (int) round(((float) ($t['paidPrice'] ?? $t['price'] ?? 0)) * 100);
+        $pick = static function (array $cands) use ($ymd, &$assignedDay): ?array {
+            $free = [];
+            foreach ($cands as $row) {
+                $k = (int) $row['id'] . ':' . $ymd;
+                if (!isset($assignedDay[$k])) {
+                    $free[] = $row;
+                }
+            }
+            $pool = $free !== [] ? $free : $cands;
+            foreach ($pool as $row) {
+                if (in_array((string) $row['status'], ['active', 'past_due'], true)) {
+                    $assignedDay[(int) $row['id'] . ':' . $ymd] = true;
+                    return $row;
+                }
+            }
+            if ($pool !== []) {
+                $row = $pool[0];
+                $assignedDay[(int) $row['id'] . ':' . $ymd] = true;
+                return $row;
+            }
+            return null;
+        };
+        if ($name !== '' && isset($byName[$name])) {
+            $cands = [];
+            foreach ($byName[$name] as $row) {
+                if ($kurus > 0 && (int) $row['amount_kurus'] !== $kurus) {
+                    continue;
+                }
+                $cands[] = $row;
+            }
+            $got = $pick($cands);
+            if ($got !== null) {
+                return $got;
+            }
+        }
+        if ($pid !== '' && $detailLeft > 0) {
+            $detailLeft--;
+            $rep = iyzico_payment_report($pid);
+            if (!empty($rep['ok'])) {
+                $data = iyzico_v2_data($rep['data'] ?? []);
+                foreach (['subscriptionReferenceCode', 'conversationId', 'paymentConversationId'] as $k) {
+                    $c = trim((string) ($data[$k] ?? ''));
+                    if ($c !== '' && isset($byRef[$c])) {
+                        return $byRef[$c];
+                    }
+                    if ($c !== '' && isset($byConv[$c])) {
+                        return $byConv[$c];
+                    }
+                }
+            }
+        }
+        return null;
+    };
+
+    $n = 0;
+    foreach ($days as $ymd) {
+        foreach (iyzico_payment_transactions_by_date($ymd) as $t) {
+            $type = strtoupper((string) ($t['transactionType'] ?? 'PAYMENT'));
+            if ($type !== '' && $type !== 'PAYMENT') {
+                continue;
+            }
+            $pid = iyzico_normalize_payment_id($t['paymentId'] ?? '');
+            if ($pid === '' || isset($used[$pid])) {
+                continue;
+            }
+            $kurus = (int) round(((float) ($t['paidPrice'] ?? $t['price'] ?? 0)) * 100);
+            if ($kurus < 100) {
+                continue;
+            }
+            $row = $findSub($t, $pid, $ymd);
+            if ($row === null) {
+                continue;
+            }
+            $subKurus = (int) $row['amount_kurus'];
+            if ($subKurus > 0 && $kurus !== $subKurus) {
+                continue;
+            }
+            $payAt = subscription_tx_paid_at($t, $ymd);
+            $ok = subscription_record_invoice(
+                $pdo,
+                (int) $row['id'],
+                'iyz-' . $pid,
+                $kurus,
+                'paid',
+                $pid,
+                $payAt
+            );
+            if (!$ok) {
+                continue;
+            }
+            $used[$pid] = true;
+            $n++;
+            $st = (string) $row['status'];
+            $last = (string) ($row['last_paid_at'] ?? '');
+            if (in_array($st, ['active', 'past_due', 'expired'], true) && ($last === '' || $payAt >= $last)) {
+                $interval = (string) ($row['interval_unit'] ?: subscription_interval());
+                $end = subscription_add_period($interval, $payAt);
+                try {
+                    $pdo->prepare(
+                        "UPDATE subscriptions
+                         SET status = 'active', last_paid_at = ?, current_period_end = ?,
+                             error_message = '', cancelled_at = NULL, updated_at = NOW()
+                         WHERE id = ?"
+                    )->execute([$payAt, $end, (int) $row['id']]);
+                    $row['status'] = 'active';
+                    $row['last_paid_at'] = $payAt;
+                } catch (Throwable $e) {
+                }
+            }
+        }
+    }
+    return $n;
+}
+
+/**
+ * Aynı takvim gününde bir e-postaya birden fazla başarılı abonelik çekimi.
+ *
+ * @return list<array{name:string,email:string,day:string,count:int}>
+ */
+function subscription_duplicate_charges(PDO $pdo, string $from, string $to): array {
+    $out = [];
+    try {
+        $sql = "SELECT s.student_name AS name, s.student_email AS email, DATE(i.created_at) AS day, COUNT(*) AS c
+                FROM subscription_invoices i
+                JOIN subscriptions s ON s.id = i.subscription_id
+                WHERE i.status = 'paid'";
+        $params = [];
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) {
+            $sql .= ' AND DATE(i.created_at) >= ?';
+            $params[] = $from;
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+            $sql .= ' AND DATE(i.created_at) <= ?';
+            $params[] = $to;
+        }
+        $sql .= ' GROUP BY s.student_email, DATE(i.created_at) HAVING c > 1 ORDER BY day DESC LIMIT 20';
+        $st = $pdo->prepare($sql);
+        $st->execute($params);
+        foreach ($st->fetchAll() as $r) {
+            $out[] = [
+                'name' => (string) $r['name'],
+                'email' => (string) $r['email'],
+                'day' => (string) $r['day'],
+                'count' => (int) $r['c'],
+            ];
+        }
+    } catch (Throwable $e) {
+    }
+    return $out;
 }
 
 function subscription_notify_new(PDO $pdo, array $row): void {

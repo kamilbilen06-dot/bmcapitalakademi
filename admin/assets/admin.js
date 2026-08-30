@@ -793,9 +793,10 @@
       var s = d.summary || {};
       var sc = d.subCounts || {};
       var items = d.items || [];
+      var dups = d.duplicates || [];
       filters = filters || {};
-      if (filters.from === undefined) filters.from = d.from || "";
-      if (filters.to === undefined) filters.to = d.to || "";
+      filters.from = d.from || "";
+      filters.to = d.to || "";
 
       var rows = items.length
         ? items.map(function (r) {
@@ -840,6 +841,13 @@
         ((s.inceleme || 0) > 0
           ? '<p class="page-hint">⚠️ <b>' + (s.inceleme || 0) + ' ödeme inceleme bekliyor:</b> para çekilmiş olabilir ama erişim açılmamış. ' +
             'Karta tıklayıp listeyi görün; iyzico’da doğrulayıp Öğrenciler sekmesinden elle erişim verin.</p>'
+          : "") +
+        (dups.length
+          ? '<p class="page-hint">⚠️ Aynı günde birden fazla abonelik çekimi: ' +
+            dups.map(function (x) {
+              return esc(x.name || x.email) + " ×" + x.count + " (" + esc(x.day) + ")";
+            }).join(" · ") +
+            ". iyzico’da ayrı abonelik kaydı vardır; sitede ikinci satır açılmaz ama kart iki kez çekilir.</p>"
           : "") +
         '<div class="panel"><div class="panel-body"><div class="filters">' +
         '<div class="field"><label>Başlangıç</label><input type="date" id="odFrom" value="' + esc(filters.from || "") + '"></div>' +

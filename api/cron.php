@@ -45,7 +45,7 @@ if ($key === '') {
 }
 
 header('Content-Type: application/json; charset=utf-8');
-$out = ['ok' => true, 'expired' => 0, 'renewed' => 0, 'refunds' => 0, 'tokens' => 0];
+    $out = ['ok' => true, 'expired' => 0, 'renewed' => 0, 'invoices' => 0, 'refunds' => 0, 'tokens' => 0];
 
 try {
     $pdo = db();
@@ -56,6 +56,11 @@ try {
     $rec = subscription_reconcile_due_periods($pdo);
     $out['expired'] = $rec['expired'];
     $out['renewed'] = $rec['renewed'];
+    $out['invoices'] = subscription_import_iyzico_payments(
+        $pdo,
+        date('Y-m-d', strtotime('-4 days')),
+        date('Y-m-d')
+    );
     $out['refunds'] = payments_sync_iyzico_refunds_all($pdo, 40);
 
     try {
