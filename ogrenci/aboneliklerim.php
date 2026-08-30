@@ -43,7 +43,7 @@ try {
         subscription_abandon_unpaid_pending($pdo, (int)$student['id']);
     }
 
-    $row = subscription_find_current($pdo, (int)$student['id']);
+    $row = subscription_find_current($pdo, (int)$student['id'], (string)($student['email'] ?? ''));
 
     if ($synced && $row && (string)$row['status'] === 'active') {
         $error = '';

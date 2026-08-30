@@ -28,9 +28,9 @@ try {
     $enabled = subscription_enabled($pdo) && subscription_price_kurus($pdo) >= 100 && iyzico_ready();
     subscription_abandon_unpaid_pending($pdo, (int)$student['id']);
     subscription_reconcile_due_periods($pdo, (int)$student['id']);
-    $already = subscription_blocking_row($pdo, (int)$student['id']);
+    $already = subscription_blocking_row($pdo, (int)$student['id'], (string)($student['email'] ?? ''));
     if (!$already) {
-        $already = subscription_find_current($pdo, (int)$student['id']);
+        $already = subscription_find_current($pdo, (int)$student['id'], (string)($student['email'] ?? ''));
     }
     $needPhone = preg_replace('/\D/', '', $phone) === '';
 } catch (Throwable $e) {

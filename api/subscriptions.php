@@ -3,6 +3,7 @@
  * WhatsApp grubu aboneliği — iş kuralları.
  *
  * Kartı biz saklamayız; iyzico Subscription ürünü çeker.
+ * Kişi e-posta ile ayırt edilir (isim değil). Bir e-postaya en fazla bir açık abonelik.
  * Süre dönem saatinde kapanmaz: Türkiye 24:00’te iyzico’ya bakılır.
  * Çekildiyse aynı satır uzar (yeni abonelik açılmaz); çekilmediyse expired.
  * Gruba ekleme/çıkarma siteden yapılmaz (admin WhatsApp'tan elle).
@@ -354,23 +355,62 @@ function subscription_find_by_iyzico_ref(PDO $pdo, string $ref): ?array {
     return $row ?: null;
 }
 
-function subscription_find_current(PDO $pdo, int $studentId): ?array {
+function subscription_norm_email(string $email): string {
+    return mb_strtolower(trim($email));
+}
+
+function subscription_student_email(PDO $pdo, int $studentId): string {
+    if ($studentId <= 0) {
+        return '';
+    }
+    try {
+        $st = $pdo->prepare("SELECT email FROM students WHERE id = ? LIMIT 1");
+        $st->execute([$studentId]);
+        return subscription_norm_email((string) ($st->fetchColumn() ?: ''));
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+
+function subscription_find_current(PDO $pdo, int $studentId, string $email = ''): ?array {
     subscription_reconcile_due_periods($pdo, $studentId);
-    $st = $pdo->prepare(
-        "SELECT * FROM subscriptions
-         WHERE student_id = ?
-           AND (
-             status IN ('active', 'past_due')
+    $email = subscription_norm_email($email);
+    if ($email === '') {
+        $email = subscription_student_email($pdo, $studentId);
+    }
+    $openSql = "status IN ('active', 'past_due')
              OR (status = 'cancelled'
                  AND current_period_end IS NOT NULL
-                 AND DATE(current_period_end) >= CURDATE())
-           )
-         ORDER BY FIELD(status, 'active', 'past_due', 'cancelled'), id DESC
-         LIMIT 1"
-    );
-    $st->execute([$studentId]);
-    $row = $st->fetch();
-    return $row ?: null;
+                 AND DATE(current_period_end) >= CURDATE())";
+    try {
+        if ($email !== '') {
+            $st = $pdo->prepare(
+                "SELECT * FROM subscriptions
+                 WHERE LOWER(student_email) = ? AND ($openSql)
+                 ORDER BY FIELD(status, 'active', 'past_due', 'cancelled'), last_paid_at DESC, id DESC
+                 LIMIT 1"
+            );
+            $st->execute([$email]);
+            $row = $st->fetch();
+            if ($row) {
+                return $row;
+            }
+        }
+        if ($studentId > 0) {
+            $st = $pdo->prepare(
+                "SELECT * FROM subscriptions
+                 WHERE student_id = ? AND ($openSql)
+                 ORDER BY FIELD(status, 'active', 'past_due', 'cancelled'), id DESC
+                 LIMIT 1"
+            );
+            $st->execute([$studentId]);
+            $row = $st->fetch();
+            return $row ?: null;
+        }
+    } catch (Throwable $e) {
+        return null;
+    }
+    return null;
 }
 
 /**
@@ -379,62 +419,88 @@ function subscription_find_current(PDO $pdo, int $studentId): ?array {
  * iyzico referansı yok ve hiç tahsilat yoksa bu bir abonelik değildir;
  * Aboneliklerim'de "Ödeme bekliyor" görünmesin, yeni deneme de engellenmesin.
  */
-function subscription_abandon_unpaid_pending(PDO $pdo, int $studentId): int {
-    if ($studentId <= 0) {
+function subscription_abandon_unpaid_pending(PDO $pdo, int $studentId, string $email = ''): int {
+    $email = subscription_norm_email($email);
+    if ($email === '' && $studentId > 0) {
+        $email = subscription_student_email($pdo, $studentId);
+    }
+    if ($studentId <= 0 && $email === '') {
         return 0;
     }
     try {
-        $st = $pdo->prepare(
-            "UPDATE subscriptions
+        $sql = "UPDATE subscriptions
              SET status = 'cancelled', cancelled_at = NOW(),
                  error_message = 'Ödeme tamamlanmadı', updated_at = NOW()
-             WHERE student_id = ?
-               AND status = 'pending'
+             WHERE status = 'pending'
                AND iyzico_subscription_ref = ''
-               AND last_paid_at IS NULL"
-        );
-        $st->execute([$studentId]);
-        return (int)$st->rowCount();
+               AND last_paid_at IS NULL";
+        $params = [];
+        if ($studentId > 0 && $email !== '') {
+            $sql .= " AND (student_id = ? OR LOWER(student_email) = ?)";
+            $params = [$studentId, $email];
+        } elseif ($email !== '') {
+            $sql .= " AND LOWER(student_email) = ?";
+            $params = [$email];
+        } else {
+            $sql .= " AND student_id = ?";
+            $params = [$studentId];
+        }
+        $st = $pdo->prepare($sql);
+        $st->execute($params);
+        return (int) $st->rowCount();
     } catch (Throwable $e) {
         return 0;
     }
 }
 
-function subscription_blocking_row(PDO $pdo, int $studentId): ?array {
-    $st = $pdo->prepare(
-        "SELECT * FROM subscriptions
-         WHERE student_id = ? AND status IN ('active', 'past_due', 'pending')
-         ORDER BY id DESC LIMIT 1"
-    );
-    $st->execute([$studentId]);
-    $row = $st->fetch();
-    return $row ?: null;
+function subscription_blocking_row(PDO $pdo, int $studentId, string $email = ''): ?array {
+    $email = subscription_norm_email($email);
+    if ($email === '') {
+        $email = subscription_student_email($pdo, $studentId);
+    }
+    try {
+        if ($email !== '') {
+            $st = $pdo->prepare(
+                "SELECT * FROM subscriptions
+                 WHERE LOWER(student_email) = ? AND status IN ('active', 'past_due', 'pending')
+                 ORDER BY FIELD(status, 'active', 'past_due', 'pending'), last_paid_at DESC, id DESC
+                 LIMIT 1"
+            );
+            $st->execute([$email]);
+            $row = $st->fetch();
+            if ($row) {
+                return $row;
+            }
+        }
+        if ($studentId > 0) {
+            $st = $pdo->prepare(
+                "SELECT * FROM subscriptions
+                 WHERE student_id = ? AND status IN ('active', 'past_due', 'pending')
+                 ORDER BY id DESC LIMIT 1"
+            );
+            $st->execute([$studentId]);
+            $row = $st->fetch();
+            return $row ?: null;
+        }
+    } catch (Throwable $e) {
+        return null;
+    }
+    return null;
 }
 
 function subscription_rows_for_identity(PDO $pdo, int $studentId, string $email): array {
-    $email = mb_strtolower(trim($email));
-    if ($studentId <= 0 && $email === '') {
+    $email = subscription_norm_email($email);
+    if ($email === '' && $studentId > 0) {
+        $email = subscription_student_email($pdo, $studentId);
+    }
+    if ($email === '') {
         return [];
     }
     try {
-        if ($studentId > 0 && $email !== '') {
-            $st = $pdo->prepare(
-                "SELECT * FROM subscriptions
-                 WHERE student_id = ? OR LOWER(student_email) = ?
-                 ORDER BY id DESC LIMIT 50"
-            );
-            $st->execute([$studentId, $email]);
-        } elseif ($studentId > 0) {
-            $st = $pdo->prepare(
-                "SELECT * FROM subscriptions WHERE student_id = ? ORDER BY id DESC LIMIT 50"
-            );
-            $st->execute([$studentId]);
-        } else {
-            $st = $pdo->prepare(
-                "SELECT * FROM subscriptions WHERE LOWER(student_email) = ? ORDER BY id DESC LIMIT 50"
-            );
-            $st->execute([$email]);
-        }
+        $st = $pdo->prepare(
+            "SELECT * FROM subscriptions WHERE LOWER(student_email) = ? ORDER BY id DESC LIMIT 50"
+        );
+        $st->execute([$email]);
         return $st->fetchAll() ?: [];
     } catch (Throwable $e) {
         return [];
@@ -469,7 +535,7 @@ function subscription_row_is_better(array $a, array $b): bool {
 }
 
 /**
- * İsim/e-posta eşlemesinde aynı kişiye bir satır düşsün.
+ * Aynı e-postadaki fazla satırdan birini seçer (isim kullanılmaz).
  *
  * @param list<array<string,mixed>> $rows
  * @return list<array<string,mixed>>
@@ -477,7 +543,7 @@ function subscription_row_is_better(array $a, array $b): bool {
 function subscription_canonical_rows(array $rows): array {
     $best = [];
     foreach ($rows as $row) {
-        $em = mb_strtolower(trim((string) ($row['student_email'] ?? '')));
+        $em = subscription_norm_email((string) ($row['student_email'] ?? ''));
         $key = $em !== '' ? 'e:' . $em : 'id:' . (int) ($row['id'] ?? 0);
         if (!isset($best[$key]) || subscription_row_is_better($row, $best[$key])) {
             $best[$key] = $row;
@@ -615,10 +681,23 @@ function subscription_collapse_duplicates_for_identity(
     if ($keepId <= 0) {
         $keep = null;
         foreach ($rows as $row) {
-            if (!isset($liveIds[(int) $row['id']]) && !in_array((string) $row['status'], ['active', 'past_due'], true)) {
+            $id = (int) $row['id'];
+            if (!isset($liveIds[$id]) && !in_array((string) $row['status'], ['active', 'past_due'], true)) {
                 continue;
             }
-            if ($keep === null || subscription_row_is_better($row, $keep)) {
+            if ($keep === null) {
+                $keep = $row;
+                continue;
+            }
+            $aLive = isset($liveIds[$id]);
+            $bLive = isset($liveIds[(int) $keep['id']]);
+            if ($aLive !== $bLive) {
+                if ($aLive) {
+                    $keep = $row;
+                }
+                continue;
+            }
+            if (subscription_row_is_better($row, $keep)) {
                 $keep = $row;
             }
         }
@@ -674,7 +753,7 @@ function subscription_collapse_duplicates_for_identity(
     return $n;
 }
 
-/** Aktif listede aynı e-posta / öğrenci birden fazlaysa iyzico fazlasını kapatır. */
+/** Aynı e-postada birden fazla açık abonelik varsa fazlasını kapatır. */
 function subscription_collapse_duplicate_actives(PDO $pdo): int {
     $n = 0;
     $seen = [];
@@ -686,24 +765,11 @@ function subscription_collapse_duplicate_actives(PDO $pdo): int {
              LIMIT 40"
         ) ?: [] as $r) {
             $e = (string) $r['e'];
-            if ($e === '' || isset($seen['e:' . $e])) {
+            if ($e === '' || isset($seen[$e])) {
                 continue;
             }
-            $seen['e:' . $e] = true;
+            $seen[$e] = true;
             $n += subscription_collapse_duplicates_for_identity($pdo, 0, $e);
-        }
-        foreach ($pdo->query(
-            "SELECT student_id FROM subscriptions
-             WHERE student_id > 0 AND status IN ('active', 'past_due')
-             GROUP BY student_id HAVING COUNT(*) > 1
-             LIMIT 40"
-        ) ?: [] as $r) {
-            $sid = (int) $r['student_id'];
-            if ($sid <= 0 || isset($seen['s:' . $sid])) {
-                continue;
-            }
-            $seen['s:' . $sid] = true;
-            $n += subscription_collapse_duplicates_for_identity($pdo, $sid, '');
         }
     } catch (Throwable $e) {
         error_log('mukerrer abonelik: ' . $e->getMessage());
@@ -1295,9 +1361,7 @@ function subscription_import_iyzico_payments(
     }
     $byRef = [];
     $byConv = [];
-    $byName = [];
     $byEmail = [];
-    $subAmounts = [];
     foreach ($subs as $row) {
         $ref = trim((string) $row['iyzico_subscription_ref']);
         $conv = trim((string) $row['conversation_id']);
@@ -1307,17 +1371,9 @@ function subscription_import_iyzico_payments(
         if ($conv !== '') {
             $byConv[$conv] = $row;
         }
-        $nm = mb_strtolower(trim((string) $row['student_name']));
-        if ($nm !== '') {
-            $byName[$nm][] = $row;
-        }
-        $em = mb_strtolower(trim((string) $row['student_email']));
+        $em = subscription_norm_email((string) $row['student_email']);
         if ($em !== '') {
             $byEmail[$em][] = $row;
-        }
-        $ak = (int) $row['amount_kurus'];
-        if ($ak > 0) {
-            $subAmounts[$ak] = true;
         }
     }
 
@@ -1343,7 +1399,6 @@ function subscription_import_iyzico_payments(
     $findSub = static function (array $t, string $pid, string $ymd) use (
         $byRef,
         $byConv,
-        $byName,
         $byEmail,
         &$detailLeft,
         &$assignedDay
@@ -1357,8 +1412,7 @@ function subscription_import_iyzico_payments(
                 return $byConv[$c];
             }
         }
-        $name = mb_strtolower(subscription_tx_buyer_name($t));
-        $email = mb_strtolower(trim((string) ($t['buyerEmail'] ?? $t['email'] ?? $t['customerEmail'] ?? '')));
+        $email = subscription_norm_email((string) ($t['buyerEmail'] ?? $t['email'] ?? $t['customerEmail'] ?? ''));
         $kurus = (int) round(((float) ($t['paidPrice'] ?? $t['price'] ?? 0)) * 100);
         $pick = static function (array $cands) use ($ymd, &$assignedDay): ?array {
             $cands = subscription_canonical_rows($cands);
@@ -1383,19 +1437,6 @@ function subscription_import_iyzico_payments(
             }
             return null;
         };
-        if ($name !== '' && isset($byName[$name])) {
-            $cands = [];
-            foreach ($byName[$name] as $row) {
-                if ($kurus > 0 && (int) $row['amount_kurus'] !== $kurus) {
-                    continue;
-                }
-                $cands[] = $row;
-            }
-            $got = $pick($cands);
-            if ($got !== null) {
-                return $got;
-            }
-        }
         if ($email !== '' && isset($byEmail[$email])) {
             $cands = [];
             foreach ($byEmail[$email] as $row) {
@@ -1423,49 +1464,14 @@ function subscription_import_iyzico_payments(
                         return $byConv[$c];
                     }
                 }
+                $repEmail = subscription_norm_email((string) ($data['buyerEmail'] ?? $data['email'] ?? $data['customerEmail'] ?? ''));
+                if ($repEmail !== '' && isset($byEmail[$repEmail])) {
+                    $got = $pick($byEmail[$repEmail]);
+                    if ($got !== null) {
+                        return $got;
+                    }
+                }
             }
-        }
-        return null;
-    };
-
-    $pickUnbilled = static function (string $ymd, int $kurus) use ($subs, &$assignedDay, &$billed): ?array {
-        $eligible = [];
-        foreach ($subs as $row) {
-            if ($kurus > 0 && (int) $row['amount_kurus'] !== $kurus) {
-                continue;
-            }
-            $eligible[] = $row;
-        }
-        $eligible = subscription_canonical_rows($eligible);
-        $unbilled = [];
-        $extra = [];
-        foreach ($eligible as $row) {
-            $k = (int) $row['id'] . ':' . $ymd;
-            if (isset($assignedDay[$k])) {
-                $extra[] = $row;
-                continue;
-            }
-            if (!isset($billed[$k])) {
-                $unbilled[] = $row;
-            } else {
-                $extra[] = $row;
-            }
-        }
-        $pool = $unbilled !== [] ? $unbilled : $extra;
-        foreach ($pool as $row) {
-            if (in_array((string) $row['status'], ['active', 'past_due'], true)) {
-                $k = (int) $row['id'] . ':' . $ymd;
-                $assignedDay[$k] = true;
-                $billed[$k] = true;
-                return $row;
-            }
-        }
-        if ($pool !== []) {
-            $row = $pool[0];
-            $k = (int) $row['id'] . ':' . $ymd;
-            $assignedDay[$k] = true;
-            $billed[$k] = true;
-            return $row;
         }
         return null;
     };
@@ -1513,7 +1519,6 @@ function subscription_import_iyzico_payments(
         if ($timedOut()) {
             break;
         }
-        $pending = [];
         foreach (iyzico_payment_transactions_by_date($ymd) as $t) {
             if ($timedOut()) {
                 break 2;
@@ -1531,23 +1536,6 @@ function subscription_import_iyzico_payments(
                 continue;
             }
             $row = $findSub($t, $pid, $ymd);
-            if ($row === null) {
-                if (isset($subAmounts[$kurus])) {
-                    $pending[] = [$t, $pid, $kurus];
-                }
-                continue;
-            }
-            $commitInv($row, $pid, $kurus, $ymd, $t);
-        }
-        foreach ($pending as $item) {
-            if ($timedOut()) {
-                break 2;
-            }
-            [$t, $pid, $kurus] = $item;
-            if (isset($used[$pid])) {
-                continue;
-            }
-            $row = $pickUnbilled($ymd, $kurus);
             if ($row === null) {
                 continue;
             }
