@@ -411,6 +411,306 @@ function subscription_blocking_row(PDO $pdo, int $studentId): ?array {
     return $row ?: null;
 }
 
+function subscription_rows_for_identity(PDO $pdo, int $studentId, string $email): array {
+    $email = mb_strtolower(trim($email));
+    if ($studentId <= 0 && $email === '') {
+        return [];
+    }
+    try {
+        if ($studentId > 0 && $email !== '') {
+            $st = $pdo->prepare(
+                "SELECT * FROM subscriptions
+                 WHERE student_id = ? OR LOWER(student_email) = ?
+                 ORDER BY id DESC LIMIT 50"
+            );
+            $st->execute([$studentId, $email]);
+        } elseif ($studentId > 0) {
+            $st = $pdo->prepare(
+                "SELECT * FROM subscriptions WHERE student_id = ? ORDER BY id DESC LIMIT 50"
+            );
+            $st->execute([$studentId]);
+        } else {
+            $st = $pdo->prepare(
+                "SELECT * FROM subscriptions WHERE LOWER(student_email) = ? ORDER BY id DESC LIMIT 50"
+            );
+            $st->execute([$email]);
+        }
+        return $st->fetchAll() ?: [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/** Aynı e-postadaki fazla satırlardan duran / yeni olanı seç. */
+function subscription_row_is_better(array $a, array $b): bool {
+    $rank = static function (array $r): int {
+        $st = (string) ($r['status'] ?? '');
+        if ($st === 'active' || $st === 'past_due') {
+            return 3;
+        }
+        if ($st === 'expired') {
+            return 2;
+        }
+        if ($st === 'pending') {
+            return 1;
+        }
+        return 0;
+    };
+    $c = $rank($a) <=> $rank($b);
+    if ($c !== 0) {
+        return $c > 0;
+    }
+    $pa = (string) ($a['last_paid_at'] ?? '');
+    $pb = (string) ($b['last_paid_at'] ?? '');
+    if ($pa !== $pb) {
+        return $pa > $pb;
+    }
+    return (int) ($a['id'] ?? 0) > (int) ($b['id'] ?? 0);
+}
+
+/**
+ * İsim/e-posta eşlemesinde aynı kişiye bir satır düşsün.
+ *
+ * @param list<array<string,mixed>> $rows
+ * @return list<array<string,mixed>>
+ */
+function subscription_canonical_rows(array $rows): array {
+    $best = [];
+    foreach ($rows as $row) {
+        $em = mb_strtolower(trim((string) ($row['student_email'] ?? '')));
+        $key = $em !== '' ? 'e:' . $em : 'id:' . (int) ($row['id'] ?? 0);
+        if (!isset($best[$key]) || subscription_row_is_better($row, $best[$key])) {
+            $best[$key] = $row;
+        }
+    }
+    return array_values($best);
+}
+
+function subscription_cancel_iyzico_ref(string $ref): bool {
+    $ref = trim($ref);
+    if ($ref === '' || !function_exists('iyzico_ready') || !iyzico_ready()) {
+        return true;
+    }
+    $res = iyzico_sub_cancel($ref);
+    if (!empty($res['ok'])) {
+        return true;
+    }
+    $msg = mb_strtolower((string) ($res['error'] ?? ''));
+    foreach (['cancel', 'iptal', 'already', 'not active', 'aktif değil', 'expired', 'unpaid'] as $n) {
+        if (str_contains($msg, $n)) {
+            return true;
+        }
+    }
+    error_log('iyzico mukerrer iptal: ' . (string) ($res['error'] ?? ''));
+    return false;
+}
+
+function subscription_mark_duplicate_closed(PDO $pdo, array $row): void {
+    try {
+        $pdo->prepare(
+            "UPDATE subscriptions
+             SET status = 'cancelled',
+                 cancelled_at = COALESCE(cancelled_at, NOW()),
+                 error_message = 'Mükerrer abonelik kapatıldı',
+                 updated_at = NOW()
+             WHERE id = ?"
+        )->execute([(int) $row['id']]);
+    } catch (Throwable $e) {
+    }
+}
+
+/**
+ * Aynı öğrenci / e-postada iyzico'da ACTIVE kalan kaydı siteye alır.
+ * Yeni checkout açılmasın diye checkout öncesi çağrılır.
+ */
+function subscription_adopt_live_iyzico(PDO $pdo, int $studentId, string $email): ?array {
+    if (!function_exists('iyzico_ready') || !iyzico_ready()) {
+        return null;
+    }
+    $rows = subscription_rows_for_identity($pdo, $studentId, $email);
+    $calls = 0;
+    foreach ($rows as $row) {
+        $ref = trim((string) ($row['iyzico_subscription_ref'] ?? ''));
+        if ($ref === '') {
+            continue;
+        }
+        if ($calls >= 8) {
+            break;
+        }
+        $calls++;
+        $det = iyzico_sub_detail($ref);
+        if (empty($det['ok'])) {
+            continue;
+        }
+        $inner = iyzico_v2_data($det['data'] ?? []);
+        if (subscription_iyzico_row_status($inner) !== 'ACTIVE') {
+            continue;
+        }
+        $interval = (string) ($row['interval_unit'] ?: subscription_interval());
+        subscription_mark_active($pdo, $row, $inner, $interval);
+        return subscription_find_by_id($pdo, (int) $row['id']);
+    }
+    return null;
+}
+
+/**
+ * Aynı kişiye ait fazla iyzico aboneliklerini kapatır; sitede bir satır kalır.
+ * $keepId > 0 ise o satır korunur. $keepId === -1 ise hepsi kapatılır (öğrenci iptali).
+ *
+ * @return int kapatılan satır
+ */
+function subscription_collapse_duplicates_for_identity(
+    PDO $pdo,
+    int $studentId,
+    string $email,
+    int $keepId = 0
+): int {
+    $rows = subscription_rows_for_identity($pdo, $studentId, $email);
+    if ($rows === []) {
+        return 0;
+    }
+
+    $liveIds = [];
+    $calls = 0;
+    $innerById = [];
+    if (function_exists('iyzico_ready') && iyzico_ready()) {
+        foreach ($rows as $row) {
+            $id = (int) $row['id'];
+            $ref = trim((string) ($row['iyzico_subscription_ref'] ?? ''));
+            if ($ref === '' || $calls >= 10) {
+                continue;
+            }
+            $calls++;
+            $det = iyzico_sub_detail($ref);
+            if (empty($det['ok'])) {
+                continue;
+            }
+            $inner = iyzico_v2_data($det['data'] ?? []);
+            if (subscription_iyzico_row_status($inner) === 'ACTIVE') {
+                $liveIds[$id] = true;
+                $innerById[$id] = $inner;
+            }
+        }
+    }
+
+    if ($keepId === -1) {
+        $n = 0;
+        foreach ($rows as $row) {
+            $id = (int) $row['id'];
+            $ref = trim((string) ($row['iyzico_subscription_ref'] ?? ''));
+            if (isset($liveIds[$id]) && $ref !== '') {
+                if (!subscription_cancel_iyzico_ref($ref)) {
+                    continue;
+                }
+            }
+            $st = (string) ($row['status'] ?? '');
+            if (isset($liveIds[$id]) || in_array($st, ['active', 'past_due', 'pending'], true)) {
+                subscription_mark_duplicate_closed($pdo, $row);
+                $n++;
+            }
+        }
+        return $n;
+    }
+
+    if ($keepId <= 0) {
+        $keep = null;
+        foreach ($rows as $row) {
+            if (!isset($liveIds[(int) $row['id']]) && !in_array((string) $row['status'], ['active', 'past_due'], true)) {
+                continue;
+            }
+            if ($keep === null || subscription_row_is_better($row, $keep)) {
+                $keep = $row;
+            }
+        }
+        $keepId = $keep ? (int) $keep['id'] : 0;
+    }
+    if ($keepId <= 0) {
+        return 0;
+    }
+
+    $n = 0;
+    $keepRow = null;
+    foreach ($rows as $row) {
+        if ((int) $row['id'] === $keepId) {
+            $keepRow = $row;
+            break;
+        }
+    }
+    if (
+        $keepRow
+        && isset($innerById[$keepId])
+        && in_array((string) ($keepRow['status'] ?? ''), ['active', 'past_due', 'expired', 'pending'], true)
+    ) {
+        $interval = (string) ($keepRow['interval_unit'] ?: subscription_interval());
+        subscription_mark_active($pdo, $keepRow, $innerById[$keepId], $interval);
+        $keepRow = subscription_find_by_id($pdo, $keepId) ?: $keepRow;
+    }
+
+    foreach ($rows as $row) {
+        $id = (int) $row['id'];
+        if ($id === $keepId) {
+            continue;
+        }
+        $st = (string) ($row['status'] ?? '');
+        $live = isset($liveIds[$id]);
+        $siteOpen = in_array($st, ['active', 'past_due', 'pending'], true);
+        if (!$live && !$siteOpen) {
+            continue;
+        }
+        $ref = trim((string) ($row['iyzico_subscription_ref'] ?? ''));
+        if ($live && $ref !== '' && !subscription_cancel_iyzico_ref($ref)) {
+            continue;
+        }
+        if ((int) ($row['wa_added'] ?? 0) === 1 && $keepRow && (int) ($keepRow['wa_added'] ?? 0) === 0) {
+            try {
+                $pdo->prepare("UPDATE subscriptions SET wa_added = 1 WHERE id = ?")->execute([$keepId]);
+                $keepRow['wa_added'] = 1;
+            } catch (Throwable $e) {
+            }
+        }
+        subscription_mark_duplicate_closed($pdo, $row);
+        $n++;
+    }
+    return $n;
+}
+
+/** Aktif listede aynı e-posta / öğrenci birden fazlaysa iyzico fazlasını kapatır. */
+function subscription_collapse_duplicate_actives(PDO $pdo): int {
+    $n = 0;
+    $seen = [];
+    try {
+        foreach ($pdo->query(
+            "SELECT LOWER(student_email) e FROM subscriptions
+             WHERE student_email <> '' AND status IN ('active', 'past_due')
+             GROUP BY LOWER(student_email) HAVING COUNT(*) > 1
+             LIMIT 40"
+        ) ?: [] as $r) {
+            $e = (string) $r['e'];
+            if ($e === '' || isset($seen['e:' . $e])) {
+                continue;
+            }
+            $seen['e:' . $e] = true;
+            $n += subscription_collapse_duplicates_for_identity($pdo, 0, $e);
+        }
+        foreach ($pdo->query(
+            "SELECT student_id FROM subscriptions
+             WHERE student_id > 0 AND status IN ('active', 'past_due')
+             GROUP BY student_id HAVING COUNT(*) > 1
+             LIMIT 40"
+        ) ?: [] as $r) {
+            $sid = (int) $r['student_id'];
+            if ($sid <= 0 || isset($seen['s:' . $sid])) {
+                continue;
+            }
+            $seen['s:' . $sid] = true;
+            $n += subscription_collapse_duplicates_for_identity($pdo, $sid, '');
+        }
+    } catch (Throwable $e) {
+        error_log('mukerrer abonelik: ' . $e->getMessage());
+    }
+    return $n;
+}
+
 /**
  * iyzico'da ürün + fiyat planı olduğundan emin ol.
  * Sandbox: DAILY, canlı: MONTHLY. Fiyat değişince yeni plan açılır.
@@ -1061,6 +1361,7 @@ function subscription_import_iyzico_payments(
         $email = mb_strtolower(trim((string) ($t['buyerEmail'] ?? $t['email'] ?? $t['customerEmail'] ?? '')));
         $kurus = (int) round(((float) ($t['paidPrice'] ?? $t['price'] ?? 0)) * 100);
         $pick = static function (array $cands) use ($ymd, &$assignedDay): ?array {
+            $cands = subscription_canonical_rows($cands);
             $free = [];
             foreach ($cands as $row) {
                 $k = (int) $row['id'] . ':' . $ymd;
@@ -1128,12 +1429,17 @@ function subscription_import_iyzico_payments(
     };
 
     $pickUnbilled = static function (string $ymd, int $kurus) use ($subs, &$assignedDay, &$billed): ?array {
-        $unbilled = [];
-        $extra = [];
+        $eligible = [];
         foreach ($subs as $row) {
             if ($kurus > 0 && (int) $row['amount_kurus'] !== $kurus) {
                 continue;
             }
+            $eligible[] = $row;
+        }
+        $eligible = subscription_canonical_rows($eligible);
+        $unbilled = [];
+        $extra = [];
+        foreach ($eligible as $row) {
             $k = (int) $row['id'] . ':' . $ymd;
             if (isset($assignedDay[$k])) {
                 $extra[] = $row;
@@ -1320,6 +1626,12 @@ function subscription_activate_from_retrieve(PDO $pdo, array $row, array $inner)
         subscription_record_invoice($pdo, (int)$row['id'], $orderRef, (int)$row['amount_kurus'], 'paid', $payId);
         subscription_notify_new($pdo, $row);
     }
+    subscription_collapse_duplicates_for_identity(
+        $pdo,
+        (int) ($row['student_id'] ?? 0),
+        (string) ($row['student_email'] ?? ''),
+        (int) $row['id']
+    );
 }
 
 /**
@@ -1482,6 +1794,12 @@ function subscription_handle_webhook(PDO $pdo, array $payload): void {
         }
         subscription_record_invoice($pdo, (int)$row['id'], $orderRef, (int)$row['amount_kurus'], 'paid', subscription_resolve_payment_id($row, $inner, $payload));
         subscription_notify_new($pdo, $row);
+        subscription_collapse_duplicates_for_identity(
+            $pdo,
+            (int) ($row['student_id'] ?? 0),
+            (string) ($row['student_email'] ?? ''),
+            (int) $row['id']
+        );
         return;
     }
 
@@ -1558,6 +1876,12 @@ function subscription_cancel_for_student(PDO $pdo, int $studentId): array {
          WHERE id = ?"
     )->execute([(int)$row['id']]);
     subscription_notify_cancelled($pdo, (int)$row['id']);
+    subscription_collapse_duplicates_for_identity(
+        $pdo,
+        (int) ($row['student_id'] ?? $studentId),
+        (string) ($row['student_email'] ?? ''),
+        (int) $row['id']
+    );
     return ['ok' => true, 'error' => ''];
 }
 
@@ -1566,6 +1890,7 @@ function subscription_instructor_id(PDO $pdo): int {
 }
 
 function subscription_admin_list(PDO $pdo): array {
+    subscription_collapse_duplicate_actives($pdo);
     subscription_reconcile_due_periods($pdo);
     $rows = $pdo->query(
         "SELECT * FROM subscriptions ORDER BY FIELD(status, 'active', 'past_due', 'pending', 'cancelled', 'expired'), id DESC LIMIT 500"
@@ -1611,6 +1936,7 @@ function subscription_sort_admin_rows(array $out): array {
 }
 
 function subscription_list_for_instructor(PDO $pdo, int $instructorId): array {
+    subscription_collapse_duplicate_actives($pdo);
     subscription_reconcile_due_periods($pdo);
     if ($instructorId <= 0) {
         return [];

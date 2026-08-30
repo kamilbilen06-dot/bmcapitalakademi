@@ -1193,7 +1193,7 @@
       "</div></div></div>" +
       '<div class="panel"><div class="panel-head"><h3>WhatsApp grubu aboneleri</h3>' +
       '<span class="count">' + items.length + " / " + all.length + " kayıt</span></div>" +
-      '<div class="panel-body"><p class="hint">Grup ekleme/çıkarma siteden yapılmaz. WhatsApp’tan elle ekleyip buradan işaretleyin. Kart çekimi iyzico aboneliğidir. Dönem saati çekim saati değildir: üyelik o gün Türkiye saatiyle 24:00’e kadar açık kalır. Gece iyzico’ya bakılır; çekildiyse aynı abone kalır (yeni satır açılmaz), çekilmediyse süresi dolar ve gruptan çıkarılır.</p></div>' +
+      '<div class="panel-body"><p class="hint">Grup ekleme/çıkarma siteden yapılmaz. WhatsApp’tan elle ekleyip buradan işaretleyin. Kart çekimi iyzico aboneliğidir. Aynı e-postaya ikinci abonelik açılmaz; iyzico’da kalan fazla kayıt kapatılır. Dönem saati çekim saati değildir: üyelik o gün Türkiye saatiyle 24:00’e kadar açık kalır. Gece iyzico’ya bakılır; çekildiyse aynı abone kalır, çekilmediyse süresi dolar.</p></div>' +
       '<div class="table-wrap"><table><thead><tr>' +
       "<th>Öğrenci</th><th>Telefon</th><th>Durum</th><th>Dönem sonu</th><th>Son ödeme</th><th></th>" +
       "</tr></thead><tbody>" + rows + "</tbody></table></div></div>";

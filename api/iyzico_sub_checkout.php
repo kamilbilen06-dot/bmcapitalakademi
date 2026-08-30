@@ -63,6 +63,18 @@ try {
     subscription_abandon_unpaid_pending($pdo, (int)$student['id']);
     subscription_reconcile_for_student($pdo, (int)$student['id'], true, true);
 
+    $live = subscription_adopt_live_iyzico($pdo, (int)$student['id'], (string)$student['email']);
+    if ($live && subscription_is_entitled($live)) {
+        subscription_collapse_duplicates_for_identity(
+            $pdo,
+            (int)$student['id'],
+            (string)$student['email'],
+            (int)$live['id']
+        );
+        header('Location: /ogrenci/aboneliklerim.php', true, 302);
+        exit;
+    }
+
     $block = subscription_blocking_row($pdo, (int)$student['id']);
     if ($block) {
         if ($block['status'] === 'pending') {

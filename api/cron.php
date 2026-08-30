@@ -45,7 +45,7 @@ if ($key === '') {
 }
 
 header('Content-Type: application/json; charset=utf-8');
-    $out = ['ok' => true, 'expired' => 0, 'renewed' => 0, 'invoices' => 0, 'refunds' => 0, 'tokens' => 0];
+    $out = ['ok' => true, 'expired' => 0, 'renewed' => 0, 'invoices' => 0, 'refunds' => 0, 'tokens' => 0, 'collapsed' => 0];
 
 try {
     $pdo = db();
@@ -65,6 +65,7 @@ try {
         6
     );
     subscription_dedupe_invoices_by_payment_id($pdo);
+    $out['collapsed'] = subscription_collapse_duplicate_actives($pdo);
     $out['refunds'] = payments_sync_iyzico_refunds_all($pdo, 40);
 
     try {
