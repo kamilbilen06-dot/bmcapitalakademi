@@ -178,7 +178,8 @@
   function payPill(st) {
     if (st === "paid") return '<span class="pill ok">Ödendi</span>';
     if (st === "pending") return '<span class="pill urun">Bekliyor</span>';
-    if (st === "refunded" || st === "cancelled") return '<span class="pill off">Kapalı</span>';
+    if (st === "refunded") return '<span class="pill off">İade edildi</span>';
+    if (st === "cancelled") return '<span class="pill off">Kapalı</span>';
     return '<span class="pill off">' + esc(st || "—") + "</span>";
   }
 

@@ -643,7 +643,7 @@ try {
                 $to = $today;
             }
 
-            @set_time_limit(25);
+            @set_time_limit(45);
             $spanFrom = $from !== '' ? $from : date('Y-m-d', strtotime('-7 days'));
             $spanTo = $today;
             if ($to !== '') {
@@ -654,33 +654,34 @@ try {
             }
             $iyzIdx = [];
             try {
-                $iyzIdx = iyzico_tx_index_by_dates($spanFrom, $spanTo);
                 subscription_dedupe_invoices_by_payment_id($pdo);
-                subscription_reattach_invoices_by_buyer(
-                    $pdo,
-                    $spanFrom,
-                    $spanTo,
-                    microtime(true) + 5.0,
-                    4
-                );
+                subscription_sync_invoice_buyers($pdo, microtime(true) + 22.0);
+                $iyzIdx = iyzico_tx_index_by_dates($spanFrom, $spanTo);
                 subscription_import_iyzico_payments(
                     $pdo,
                     date('Y-m-d', strtotime('-3 days')),
                     $today,
-                    microtime(true) + 4.0,
+                    microtime(true) + 3.0,
                     0
                 );
                 subscription_dedupe_invoices_by_payment_id($pdo);
+                subscription_sync_invoice_buyers($pdo, microtime(true) + 4.0);
                 if ($iyzIdx !== []) {
                     $tm = $pdo->prepare(
                         "UPDATE subscription_invoices SET created_at = ? WHERE provider_payment_id = ? AND created_at <> ?"
                     );
+                    $rf = $pdo->prepare(
+                        "UPDATE subscription_invoices SET status = 'refunded'
+                         WHERE provider_payment_id = ? AND status = 'paid'"
+                    );
                     foreach ($iyzIdx as $pid => $fact) {
                         $at = (string) ($fact['paidAt'] ?? '');
-                        if ($at === '') {
-                            continue;
+                        if ($at !== '') {
+                            $tm->execute([$at, $pid, $at]);
                         }
-                        $tm->execute([$at, $pid, $at]);
+                        if (!empty($fact['refunded'])) {
+                            $rf->execute([$pid]);
+                        }
                     }
                 }
             } catch (Throwable $e) {
@@ -765,9 +766,10 @@ try {
             }
             if ($q !== '') {
                 $swhere .= " AND (i.order_reference LIKE ? OR i.provider_payment_id LIKE ?"
+                    . " OR i.iyzico_buyer_name LIKE ? OR i.iyzico_buyer_email LIKE ?"
                     . " OR s.conversation_id LIKE ? OR s.iyzico_subscription_ref LIKE ?"
                     . " OR s.student_email LIKE ? OR s.student_name LIKE ?)";
-                array_push($sparams, $like, $like, $like, $like, $like, $like);
+                array_push($sparams, $like, $like, $like, $like, $like, $like, $like, $like);
             }
             list($sDatePart, $sDateParams) = $dateSql('i.created_at');
             $swhere .= $sDatePart;
@@ -776,6 +778,7 @@ try {
             try {
                 $sst = $pdo->prepare(
                     "SELECT i.id, i.order_reference, i.provider_payment_id, i.amount_kurus, i.status, i.created_at,
+                            i.iyzico_buyer_name, i.iyzico_buyer_email,
                             s.student_name, s.student_email, s.conversation_id, s.interval_unit,
                             s.iyzico_subscription_ref
                      FROM subscription_invoices i
@@ -788,13 +791,15 @@ try {
                 $subRows = $sst->fetchAll();
                 foreach ($subRows as $inv) {
                     $payId = iyzico_normalize_payment_id($inv['provider_payment_id'] ?? '');
+                    $buyerName = trim((string) ($inv['iyzico_buyer_name'] ?? ''));
+                    $buyerEmail = trim((string) ($inv['iyzico_buyer_email'] ?? ''));
                     $items[] = [
                         'tur' => 'Abonelik',
                         'ref' => $payId,
                         'aramaRef' => $payId,
                         'iyzicoPaymentId' => $payId,
-                        'student_name' => (string)($inv['student_name'] ?? ''),
-                        'student_email' => (string)($inv['student_email'] ?? ''),
+                        'student_name' => $buyerName !== '' ? $buyerName : (string)($inv['student_name'] ?? ''),
+                        'student_email' => $buyerEmail !== '' ? $buyerEmail : (string)($inv['student_email'] ?? ''),
                         'aciklama' => 'WhatsApp grubu ('
                             . ((string)($inv['interval_unit'] ?? '') === 'DAILY' ? 'günlük' : 'aylık') . ')',
                         'amount_kurus' => (int)$inv['amount_kurus'],
@@ -810,43 +815,73 @@ try {
             }
             }
 
-            if ($iyzIdx !== []) {
-                $uniqueName = [];
-                try {
-                    $uniqueName = subscription_buyer_indexes(
-                        $pdo->query("SELECT * FROM subscriptions ORDER BY id DESC LIMIT 400")->fetchAll() ?: []
-                    )['uniqueName'];
-                } catch (Throwable $e) {
-                    $uniqueName = [];
+            $buyerMap = [];
+            try {
+                $buyerMap = iyzico_payment_buyer_map(0.0);
+            } catch (Throwable $e) {
+                $buyerMap = [];
+            }
+            $uniqueName = [];
+            $byEmail = [];
+            try {
+                $idx = subscription_buyer_indexes(
+                    $pdo->query("SELECT * FROM subscriptions ORDER BY id DESC LIMIT 400")->fetchAll() ?: []
+                );
+                $uniqueName = $idx['uniqueName'];
+                $byEmail = $idx['byEmail'];
+            } catch (Throwable $e) {
+            }
+            foreach ($items as &$it) {
+                $pid = iyzico_normalize_payment_id($it['iyzicoPaymentId'] ?? '');
+                if ($pid === '') {
+                    continue;
                 }
-                foreach ($items as &$it) {
-                    $pid = iyzico_normalize_payment_id($it['iyzicoPaymentId'] ?? '');
-                    if ($pid === '' || !isset($iyzIdx[$pid])) {
-                        continue;
-                    }
-                    $fact = $iyzIdx[$pid];
-                    $iyzName = trim((string) ($fact['name'] ?? ''));
-                    if ($iyzName !== '') {
-                        $it['student_name'] = $iyzName;
-                        $nm = subscription_norm_person_name($iyzName);
-                        if (isset($uniqueName[$nm]['student_email'])) {
-                            $it['student_email'] = (string) $uniqueName[$nm]['student_email'];
-                        } elseif ((string) ($fact['email'] ?? '') !== '') {
-                            $it['student_email'] = (string) $fact['email'];
+                if (isset($buyerMap[$pid])) {
+                    $bn = trim((string) ($buyerMap[$pid]['name'] ?? ''));
+                    $be = subscription_norm_email((string) ($buyerMap[$pid]['email'] ?? ''));
+                    if ($be !== '' && isset($byEmail[$be])) {
+                        $cands = subscription_canonical_rows($byEmail[$be]);
+                        if ($cands !== []) {
+                            if ($bn === '') {
+                                $bn = trim((string) ($cands[0]['student_name'] ?? ''));
+                            }
+                            if ($be === '') {
+                                $be = subscription_norm_email((string) ($cands[0]['student_email'] ?? ''));
+                            }
                         }
                     }
-                    $at = (string) ($fact['paidAt'] ?? '');
-                    if ($at !== '') {
-                        $it['paid_at'] = $at;
-                        $it['created_at'] = $at;
+                    if ($bn !== '') {
+                        $it['student_name'] = $bn;
                     }
-                    if (!empty($fact['refunded']) && (string) $it['tur'] === 'Abonelik') {
-                        $it['status'] = 'refunded';
-                        $it['tahsilEdildi'] = false;
+                    if ($be !== '') {
+                        $it['student_email'] = $be;
                     }
                 }
-                unset($it);
+                if (!isset($iyzIdx[$pid])) {
+                    continue;
+                }
+                $fact = $iyzIdx[$pid];
+                $iyzName = trim((string) ($fact['name'] ?? ''));
+                if ($iyzName !== '') {
+                    $it['student_name'] = $iyzName;
+                    $nm = subscription_norm_person_name($iyzName);
+                    if (isset($uniqueName[$nm]['student_email'])) {
+                        $it['student_email'] = (string) $uniqueName[$nm]['student_email'];
+                    } elseif ((string) ($fact['email'] ?? '') !== '') {
+                        $it['student_email'] = (string) $fact['email'];
+                    }
+                }
+                $at = (string) ($fact['paidAt'] ?? '');
+                if ($at !== '') {
+                    $it['paid_at'] = $at;
+                    $it['created_at'] = $at;
+                }
+                if (!empty($fact['refunded']) && (string) $it['tur'] === 'Abonelik') {
+                    $it['status'] = 'refunded';
+                    $it['tahsilEdildi'] = false;
+                }
             }
+            unset($it);
 
             usort($items, static function ($a, $b) {
                 $ta = strtotime($a['paid_at'] !== '' ? $a['paid_at'] : $a['created_at']) ?: 0;

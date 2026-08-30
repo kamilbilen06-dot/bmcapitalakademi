@@ -131,12 +131,13 @@ function iyzico_get(string $uriPath, array $query = []): array {
         $url .= '?' . http_build_query($query);
     }
     $isReport = str_contains($uriPath, '/v2/reporting/');
+    $isSubQuery = str_contains($uriPath, '/v2/subscription/subscriptions');
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_HTTPGET => true,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => $isReport ? 5 : 12,
-        CURLOPT_CONNECTTIMEOUT => $isReport ? 3 : 5,
+        CURLOPT_TIMEOUT => $isReport ? 5 : ($isSubQuery ? 8 : 12),
+        CURLOPT_CONNECTTIMEOUT => ($isReport || $isSubQuery) ? 3 : 5,
         CURLOPT_HTTPHEADER => [
             'Authorization: ' . $authHeader,
             'x-iyzi-rnd: ' . $randomKey,
@@ -160,7 +161,7 @@ function iyzico_get(string $uriPath, array $query = []): array {
             $out = ['ok' => true, 'status' => $status, 'data' => $data, 'error' => '', 'reason' => ''];
         }
     }
-    if (!$isReport) {
+    if (!$isReport && !$isSubQuery) {
         iyzico_audit_log('GET', $uriPath, $query, $out);
     }
     return $out;
@@ -530,6 +531,42 @@ function iyzico_extract_payment_id(array $data, int $depth = 0): string {
         }
     }
     return '';
+}
+
+/**
+ * Yanıttaki bütün iyzico ödeme numaraları (abonelik orders / paymentAttempts).
+ *
+ * @return list<string>
+ */
+function iyzico_collect_payment_ids(array $data, int $depth = 0): array {
+    $ids = [];
+    if ($depth > 8) {
+        return [];
+    }
+    foreach (['paymentId', 'iyziPaymentId', 'payment_id'] as $k) {
+        if (!isset($data[$k])) {
+            continue;
+        }
+        $id = iyzico_normalize_payment_id($data[$k]);
+        if ($id !== '') {
+            $ids[$id] = true;
+        }
+    }
+    foreach ($data as $v) {
+        if (is_array($v)) {
+            foreach (iyzico_collect_payment_ids($v, $depth + 1) as $id) {
+                $ids[$id] = true;
+            }
+        }
+    }
+    return array_keys($ids);
+}
+
+function iyzico_sub_search(int $page = 1, int $count = 50): array {
+    return iyzico_get('/v2/subscription/subscriptions', [
+        'page' => max(1, $page),
+        'count' => min(100, max(1, $count)),
+    ]);
 }
 
 function iyzico_find_payment_id_by_conversation(string $conversationId): string {

@@ -1442,6 +1442,208 @@ function iyzico_tx_index_by_dates(string $from, string $to): array {
     return $out;
 }
 
+function subscription_buyer_from_iyzico_sub(array $item): array {
+    $email = subscription_norm_email((string) ($item['customerEmail'] ?? ''));
+    if ($email === '') {
+        $email = subscription_nested_email($item);
+    }
+    $name = subscription_tx_buyer_name($item);
+    $cust = $item['customer'] ?? null;
+    if (is_array($cust)) {
+        $cn = trim((string) ($cust['name'] ?? '') . ' ' . (string) ($cust['surname'] ?? $cust['lastName'] ?? ''));
+        if ($cn !== '') {
+            $name = $cn;
+        }
+        if ($email === '') {
+            $email = subscription_norm_email((string) ($cust['email'] ?? ''));
+        }
+    }
+    return [
+        'name' => trim($name),
+        'email' => $email,
+        'ref' => trim((string) ($item['referenceCode'] ?? $item['subscriptionReferenceCode'] ?? '')),
+    ];
+}
+
+/**
+ * iyzico abonelik siparişlerinden ödeme no => alıcı (ad / e-posta).
+ * Raporlama listesinde alıcı adı yoktur; paneldeki isim buradan gelir.
+ *
+ * @return array<string, array{name:string,email:string,ref:string}>
+ */
+function iyzico_payment_buyer_map(float $deadline = 0.0, ?array $replace = null): array {
+    static $cache = null;
+    if ($replace !== null) {
+        $cache = $replace;
+        return $cache;
+    }
+    if (is_array($cache)) {
+        return $cache;
+    }
+    $out = [];
+    if (!function_exists('iyzico_ready') || !iyzico_ready()) {
+        $cache = $out;
+        return $out;
+    }
+    $absorb = static function (array $item) use (&$out): void {
+        $buyer = subscription_buyer_from_iyzico_sub($item);
+        foreach (iyzico_collect_payment_ids($item) as $pid) {
+            if (!isset($out[$pid])) {
+                $out[$pid] = $buyer;
+                continue;
+            }
+            if ($buyer['name'] !== '' && $out[$pid]['name'] === '') {
+                $out[$pid]['name'] = $buyer['name'];
+            }
+            if ($buyer['email'] !== '' && $out[$pid]['email'] === '') {
+                $out[$pid]['email'] = $buyer['email'];
+            }
+        }
+    };
+
+    $pageCount = 1;
+    for ($page = 1; $page <= 8; $page++) {
+        if ($deadline > 0 && microtime(true) >= $deadline) {
+            break;
+        }
+        $res = iyzico_sub_search($page, 50);
+        if (empty($res['ok'])) {
+            break;
+        }
+        $inner = iyzico_v2_data($res['data'] ?? []);
+        $items = $inner['items'] ?? [];
+        if (!is_array($items) || $items === []) {
+            break;
+        }
+        foreach ($items as $item) {
+            if (is_array($item)) {
+                $absorb($item);
+            }
+        }
+        $pageCount = max(1, (int) ($inner['pageCount'] ?? 1));
+        if ($page >= $pageCount) {
+            break;
+        }
+    }
+
+    $cache = $out;
+    return $out;
+}
+
+/**
+ * Yerel abonelik referanslarından eksik ödeme no eşlemesini tamamlar.
+ *
+ * @param array<string, array{name:string,email:string,ref:string}> $map
+ * @return array<string, array{name:string,email:string,ref:string}>
+ */
+function iyzico_payment_buyer_map_fill_refs(array $map, array $subs, float $deadline = 0.0): array {
+    $seen = [];
+    foreach ($subs as $row) {
+        if ($deadline > 0 && microtime(true) >= $deadline) {
+            break;
+        }
+        $ref = trim((string) ($row['iyzico_subscription_ref'] ?? ''));
+        if ($ref === '' || isset($seen[$ref])) {
+            continue;
+        }
+        $seen[$ref] = true;
+        $det = iyzico_sub_detail($ref);
+        if (empty($det['ok'])) {
+            continue;
+        }
+        $inner = iyzico_v2_data($det['data'] ?? []);
+        $buyer = subscription_buyer_from_iyzico_sub($inner);
+        if ($buyer['email'] === '') {
+            $buyer['email'] = subscription_norm_email((string) ($row['student_email'] ?? ''));
+        }
+        if ($buyer['name'] === '') {
+            $buyer['name'] = trim((string) ($row['student_name'] ?? ''));
+        }
+        if ($buyer['ref'] === '') {
+            $buyer['ref'] = $ref;
+        }
+        foreach (iyzico_collect_payment_ids($inner) as $pid) {
+            $map[$pid] = $buyer;
+        }
+    }
+    return $map;
+}
+
+/**
+ * Fatura satırına iyzico'daki gerçek alıcıyı yazar ve abone kaydını taşır.
+ */
+function subscription_sync_invoice_buyers(PDO $pdo, float $deadline = 0.0): int {
+    try {
+        $subs = $pdo->query("SELECT * FROM subscriptions ORDER BY id DESC LIMIT 400")->fetchAll() ?: [];
+    } catch (Throwable $e) {
+        return 0;
+    }
+    $map = iyzico_payment_buyer_map($deadline);
+    $map = iyzico_payment_buyer_map_fill_refs($map, $subs, $deadline);
+    iyzico_payment_buyer_map(0.0, $map);
+    if ($map === []) {
+        return 0;
+    }
+    $idx = subscription_buyer_indexes($subs);
+    $n = 0;
+    try {
+        $rows = $pdo->query(
+            "SELECT id, subscription_id, provider_payment_id FROM subscription_invoices
+             WHERE provider_payment_id <> ''"
+        )->fetchAll() ?: [];
+    } catch (Throwable $e) {
+        return 0;
+    }
+    try {
+        $upd = $pdo->prepare(
+            "UPDATE subscription_invoices
+             SET iyzico_buyer_name = ?, iyzico_buyer_email = ?, subscription_id = ?
+             WHERE id = ?"
+        );
+    } catch (Throwable $e) {
+        return 0;
+    }
+    foreach ($rows as $inv) {
+        $pid = iyzico_normalize_payment_id($inv['provider_payment_id'] ?? '');
+        if ($pid === '' || !isset($map[$pid])) {
+            continue;
+        }
+        $b = $map[$pid];
+        $name = trim((string) ($b['name'] ?? ''));
+        $email = subscription_norm_email((string) ($b['email'] ?? ''));
+        $newSub = (int) $inv['subscription_id'];
+        if ($email !== '' && isset($idx['byEmail'][$email])) {
+            $cands = subscription_canonical_rows($idx['byEmail'][$email]);
+            if ($cands !== []) {
+                $newSub = (int) $cands[0]['id'];
+                if ($name === '') {
+                    $name = trim((string) ($cands[0]['student_name'] ?? ''));
+                }
+            }
+        } elseif ($name !== '') {
+            $nm = subscription_norm_person_name($name);
+            if (isset($idx['uniqueName'][$nm])) {
+                $newSub = (int) $idx['uniqueName'][$nm]['id'];
+                if ($email === '') {
+                    $email = subscription_norm_email((string) ($idx['uniqueName'][$nm]['student_email'] ?? ''));
+                }
+            }
+        }
+        if ($name === '' && $email === '') {
+            continue;
+        }
+        if ($newSub <= 0) {
+            $newSub = (int) $inv['subscription_id'];
+        }
+        try {
+            $upd->execute([$name, $email, $newSub, (int) $inv['id']]);
+            $n++;
+        } catch (Throwable $e) {
+        }
+    }
+    return $n;
+}
+
 /**
  * Yanlış aboneye yazılmış faturaları iyzico alıcı adı / e-postasına göre taşır.
  * Saat alanına dokunmaz.
@@ -1787,7 +1989,9 @@ function subscription_import_iyzico_payments(
 function subscription_duplicate_charges(PDO $pdo, string $from, string $to): array {
     $out = [];
     try {
-        $sql = "SELECT s.student_name AS name, s.student_email AS email, DATE(i.created_at) AS day, COUNT(*) AS c
+        $sql = "SELECT COALESCE(NULLIF(i.iyzico_buyer_name, ''), s.student_name) AS name,
+                       COALESCE(NULLIF(i.iyzico_buyer_email, ''), s.student_email) AS email,
+                       DATE(i.created_at) AS day, COUNT(*) AS c
                 FROM subscription_invoices i
                 JOIN subscriptions s ON s.id = i.subscription_id
                 WHERE i.status = 'paid'";
@@ -1800,7 +2004,9 @@ function subscription_duplicate_charges(PDO $pdo, string $from, string $to): arr
             $sql .= ' AND DATE(i.created_at) <= ?';
             $params[] = $to;
         }
-        $sql .= ' GROUP BY s.student_email, DATE(i.created_at) HAVING c > 1 ORDER BY day DESC LIMIT 20';
+        $sql .= ' GROUP BY COALESCE(NULLIF(i.iyzico_buyer_email, \'\'), s.student_email),'
+            . ' COALESCE(NULLIF(i.iyzico_buyer_name, \'\'), s.student_name), DATE(i.created_at)'
+            . ' HAVING c > 1 ORDER BY day DESC LIMIT 20';
         $st = $pdo->prepare($sql);
         $st->execute($params);
         foreach ($st->fetchAll() as $r) {

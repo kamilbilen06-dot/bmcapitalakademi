@@ -80,6 +80,18 @@ function subscriptions_ensure_schema(PDO $pdo): void {
         'provider_payment_id',
         "VARCHAR(32) NOT NULL DEFAULT '' AFTER order_reference"
     );
+    egitmen_add_column_if_missing(
+        $pdo,
+        'subscription_invoices',
+        'iyzico_buyer_name',
+        "VARCHAR(160) NOT NULL DEFAULT '' AFTER provider_payment_id"
+    );
+    egitmen_add_column_if_missing(
+        $pdo,
+        'subscription_invoices',
+        'iyzico_buyer_email',
+        "VARCHAR(190) NOT NULL DEFAULT '' AFTER iyzico_buyer_name"
+    );
 
     subscriptions_seed_settings($pdo);
 }

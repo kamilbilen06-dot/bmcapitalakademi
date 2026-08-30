@@ -45,7 +45,7 @@ if ($key === '') {
 }
 
 header('Content-Type: application/json; charset=utf-8');
-    $out = ['ok' => true, 'expired' => 0, 'renewed' => 0, 'invoices' => 0, 'refunds' => 0, 'tokens' => 0, 'collapsed' => 0, 'reattached' => 0];
+    $out = ['ok' => true, 'expired' => 0, 'renewed' => 0, 'invoices' => 0, 'refunds' => 0, 'tokens' => 0, 'collapsed' => 0, 'reattached' => 0, 'buyers' => 0];
 
 try {
     $pdo = db();
@@ -65,6 +65,7 @@ try {
         6
     );
     subscription_dedupe_invoices_by_payment_id($pdo);
+    $out['buyers'] = subscription_sync_invoice_buyers($pdo, 0.0);
     $out['reattached'] = subscription_reattach_invoices_by_buyer(
         $pdo,
         date('Y-m-d', strtotime('-7 days')),
