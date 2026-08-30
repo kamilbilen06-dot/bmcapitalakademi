@@ -359,6 +359,118 @@ function subscription_norm_email(string $email): string {
     return mb_strtolower(trim($email));
 }
 
+function subscription_norm_person_name(string $name): string {
+    $n = trim((string) preg_replace('/\s+/u', ' ', $name));
+    return mb_strtolower($n, 'UTF-8');
+}
+
+/**
+ * @param list<array<string,mixed>> $subs
+ * @return array{byEmail: array<string, list<array<string,mixed>>>, byConv: array<string, array<string,mixed>>, byRef: array<string, array<string,mixed>>, uniqueName: array<string, array<string,mixed>>}
+ */
+function subscription_buyer_indexes(array $subs): array {
+    $byEmail = [];
+    $byConv = [];
+    $byRef = [];
+    $nameEmails = [];
+    foreach ($subs as $row) {
+        $ref = trim((string) ($row['iyzico_subscription_ref'] ?? ''));
+        $conv = trim((string) ($row['conversation_id'] ?? ''));
+        if ($ref !== '') {
+            $byRef[$ref] = $row;
+        }
+        if ($conv !== '') {
+            $byConv[$conv] = $row;
+        }
+        $em = subscription_norm_email((string) ($row['student_email'] ?? ''));
+        if ($em !== '') {
+            $byEmail[$em][] = $row;
+        }
+        $nm = subscription_norm_person_name((string) ($row['student_name'] ?? ''));
+        if ($nm !== '' && $em !== '') {
+            $nameEmails[$nm][$em] = true;
+        }
+    }
+    $uniqueName = [];
+    foreach ($nameEmails as $nm => $emails) {
+        if (count($emails) !== 1) {
+            continue;
+        }
+        $em = (string) array_key_first($emails);
+        $cands = subscription_canonical_rows($byEmail[$em] ?? []);
+        if ($cands !== []) {
+            $uniqueName[$nm] = $cands[0];
+        }
+    }
+    return [
+        'byEmail' => $byEmail,
+        'byConv' => $byConv,
+        'byRef' => $byRef,
+        'uniqueName' => $uniqueName,
+    ];
+}
+
+function subscription_nested_email(array $data, int $depth = 0): string {
+    if ($depth > 5) {
+        return '';
+    }
+    foreach (['email', 'buyerEmail', 'customerEmail', 'emailAddress'] as $k) {
+        if (!isset($data[$k]) || !is_string($data[$k])) {
+            continue;
+        }
+        $em = subscription_norm_email($data[$k]);
+        if ($em !== '' && str_contains($em, '@')) {
+            return $em;
+        }
+    }
+    foreach (['buyer', 'customer', 'billingAddress'] as $k) {
+        if (isset($data[$k]) && is_array($data[$k])) {
+            $em = subscription_nested_email($data[$k], $depth + 1);
+            if ($em !== '') {
+                return $em;
+            }
+        }
+    }
+    foreach ($data as $v) {
+        if (is_array($v)) {
+            $em = subscription_nested_email($v, $depth + 1);
+            if ($em !== '') {
+                return $em;
+            }
+        }
+    }
+    return '';
+}
+
+/** iyzico işlem satırını sitedeki aboneye bağla: referans, e-posta, yoksa tekil isim. */
+function subscription_match_sub_for_tx(
+    array $t,
+    array $byRef,
+    array $byConv,
+    array $byEmail,
+    array $uniqueName
+): ?array {
+    foreach (['conversationId', 'paymentConversationId', 'subscriptionReferenceCode'] as $k) {
+        $c = trim((string) ($t[$k] ?? ''));
+        if ($c !== '' && isset($byRef[$c])) {
+            return $byRef[$c];
+        }
+        if ($c !== '' && isset($byConv[$c])) {
+            return $byConv[$c];
+        }
+    }
+    $email = subscription_norm_email((string) ($t['buyerEmail'] ?? $t['email'] ?? $t['customerEmail'] ?? ''));
+    if ($email !== '' && isset($byEmail[$email])) {
+        $cands = subscription_canonical_rows($byEmail[$email]);
+        return $cands[0] ?? null;
+    }
+    $name = subscription_norm_person_name(subscription_tx_buyer_name($t));
+    if ($name !== '' && isset($uniqueName[$name])) {
+        return $uniqueName[$name];
+    }
+    return null;
+}
+
 function subscription_student_email(PDO $pdo, int $studentId): string {
     if ($studentId <= 0) {
         return '';
@@ -1270,6 +1382,134 @@ function subscription_tx_buyer_name(array $t): string {
 }
 
 /**
+ * Yanlış aboneye yazılmış faturaları iyzico alıcı adı / e-postasına göre taşır.
+ * Saat alanına dokunmaz.
+ */
+function subscription_reattach_invoices_by_buyer(
+    PDO $pdo,
+    string $from,
+    string $to,
+    float $deadline = 0.0,
+    int $detailLeft = 4
+): int {
+    if (!function_exists('iyzico_ready') || !iyzico_ready()) {
+        return 0;
+    }
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+        return 0;
+    }
+    if ($from > $to) {
+        [$from, $to] = [$to, $from];
+    }
+    try {
+        $subs = $pdo->query("SELECT * FROM subscriptions ORDER BY id DESC LIMIT 400")->fetchAll() ?: [];
+    } catch (Throwable $e) {
+        return 0;
+    }
+    $idx = subscription_buyer_indexes($subs);
+    $byEmail = $idx['byEmail'];
+    $byConv = $idx['byConv'];
+    $byRef = $idx['byRef'];
+    $uniqueName = $idx['uniqueName'];
+
+    $need = [];
+    try {
+        $st = $pdo->prepare(
+            "SELECT id, subscription_id, provider_payment_id
+             FROM subscription_invoices
+             WHERE status = 'paid' AND provider_payment_id <> ''
+               AND created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 2 DAY)"
+        );
+        $st->execute([$from . ' 00:00:00', $to]);
+        foreach ($st as $inv) {
+            $pid = iyzico_normalize_payment_id($inv['provider_payment_id'] ?? '');
+            if ($pid !== '') {
+                $need[$pid] = $inv;
+            }
+        }
+    } catch (Throwable $e) {
+        return 0;
+    }
+    if ($need === []) {
+        return 0;
+    }
+
+    $days = [];
+    $ts = strtotime($from . ' 12:00:00');
+    $end = strtotime($to . ' 12:00:00');
+    if (!$ts || !$end) {
+        return 0;
+    }
+    for ($i = 0; $i < 10 && $end >= $ts; $i++, $end -= 86400) {
+        $days[] = date('Y-m-d', $end);
+    }
+
+    $upd = $pdo->prepare("UPDATE subscription_invoices SET subscription_id = ? WHERE id = ?");
+    $n = 0;
+    $unmatched = $need;
+    foreach ($days as $ymd) {
+        if ($deadline > 0 && microtime(true) >= $deadline) {
+            break;
+        }
+        foreach (iyzico_payment_transactions_by_date($ymd) as $t) {
+            $pid = iyzico_normalize_payment_id($t['paymentId'] ?? '');
+            if ($pid === '' || !isset($unmatched[$pid])) {
+                continue;
+            }
+            $row = subscription_match_sub_for_tx($t, $byRef, $byConv, $byEmail, $uniqueName);
+            if ($row === null) {
+                continue;
+            }
+            $invId = (int) $unmatched[$pid]['id'];
+            $old = (int) $unmatched[$pid]['subscription_id'];
+            $new = (int) $row['id'];
+            if ($new > 0 && $new !== $old) {
+                try {
+                    $upd->execute([$new, $invId]);
+                    $n++;
+                } catch (Throwable $e) {
+                }
+            }
+            unset($unmatched[$pid]);
+        }
+    }
+
+    foreach ($unmatched as $pid => $inv) {
+        if ($detailLeft <= 0 || ($deadline > 0 && microtime(true) >= $deadline)) {
+            break;
+        }
+        $detailLeft--;
+        $rep = iyzico_payment_report($pid);
+        if (empty($rep['ok'])) {
+            continue;
+        }
+        $data = iyzico_v2_data($rep['data'] ?? []);
+        $t = [
+            'conversationId' => (string) ($data['conversationId'] ?? $data['paymentConversationId'] ?? ''),
+            'paymentConversationId' => (string) ($data['paymentConversationId'] ?? ''),
+            'subscriptionReferenceCode' => (string) ($data['subscriptionReferenceCode'] ?? ''),
+            'buyerEmail' => subscription_nested_email($data),
+            'buyerName' => (string) ($data['buyerName'] ?? $data['name'] ?? ''),
+            'buyerSurname' => (string) ($data['buyerSurname'] ?? $data['surname'] ?? ''),
+        ];
+        $row = subscription_match_sub_for_tx($t, $byRef, $byConv, $byEmail, $uniqueName);
+        if ($row === null) {
+            continue;
+        }
+        $new = (int) $row['id'];
+        $old = (int) $inv['subscription_id'];
+        if ($new > 0 && $new !== $old) {
+            try {
+                $upd->execute([$new, (int) $inv['id']]);
+                $n++;
+            } catch (Throwable $e) {
+            }
+        }
+    }
+    return $n;
+}
+
+/**
  * Aynı iyzico ödeme nosuna veya aynı gün boş-nolu kopyaya düşen fazla faturaları siler.
  */
 function subscription_dedupe_invoices_by_payment_id(PDO $pdo): int {
@@ -1350,32 +1590,15 @@ function subscription_import_iyzico_payments(
 
     $subs = [];
     try {
-        $subs = $pdo->query(
-            "SELECT * FROM subscriptions
-             WHERE iyzico_subscription_ref <> '' OR conversation_id <> ''
-             ORDER BY id DESC
-             LIMIT 400"
-        )->fetchAll() ?: [];
+        $subs = $pdo->query("SELECT * FROM subscriptions ORDER BY id DESC LIMIT 400")->fetchAll() ?: [];
     } catch (Throwable $e) {
         return 0;
     }
-    $byRef = [];
-    $byConv = [];
-    $byEmail = [];
-    foreach ($subs as $row) {
-        $ref = trim((string) $row['iyzico_subscription_ref']);
-        $conv = trim((string) $row['conversation_id']);
-        if ($ref !== '') {
-            $byRef[$ref] = $row;
-        }
-        if ($conv !== '') {
-            $byConv[$conv] = $row;
-        }
-        $em = subscription_norm_email((string) $row['student_email']);
-        if ($em !== '') {
-            $byEmail[$em][] = $row;
-        }
-    }
+    $idx = subscription_buyer_indexes($subs);
+    $byRef = $idx['byRef'];
+    $byConv = $idx['byConv'];
+    $byEmail = $idx['byEmail'];
+    $uniqueName = $idx['uniqueName'];
 
     $billed = [];
     try {
@@ -1395,85 +1618,35 @@ function subscription_import_iyzico_payments(
         return $deadline > 0 && microtime(true) >= $deadline;
     };
 
-    $assignedDay = [];
-    $findSub = static function (array $t, string $pid, string $ymd) use (
+    $findSub = static function (array $t, string $pid) use (
         $byRef,
         $byConv,
         $byEmail,
-        &$detailLeft,
-        &$assignedDay
+        $uniqueName,
+        &$detailLeft
     ): ?array {
-        foreach (['conversationId', 'paymentConversationId', 'subscriptionReferenceCode'] as $k) {
-            $c = trim((string) ($t[$k] ?? ''));
-            if ($c !== '' && isset($byRef[$c])) {
-                return $byRef[$c];
-            }
-            if ($c !== '' && isset($byConv[$c])) {
-                return $byConv[$c];
-            }
+        $row = subscription_match_sub_for_tx($t, $byRef, $byConv, $byEmail, $uniqueName);
+        if ($row !== null) {
+            return $row;
         }
-        $email = subscription_norm_email((string) ($t['buyerEmail'] ?? $t['email'] ?? $t['customerEmail'] ?? ''));
-        $kurus = (int) round(((float) ($t['paidPrice'] ?? $t['price'] ?? 0)) * 100);
-        $pick = static function (array $cands) use ($ymd, &$assignedDay): ?array {
-            $cands = subscription_canonical_rows($cands);
-            $free = [];
-            foreach ($cands as $row) {
-                $k = (int) $row['id'] . ':' . $ymd;
-                if (!isset($assignedDay[$k])) {
-                    $free[] = $row;
-                }
-            }
-            $pool = $free !== [] ? $free : $cands;
-            foreach ($pool as $row) {
-                if (in_array((string) $row['status'], ['active', 'past_due'], true)) {
-                    $assignedDay[(int) $row['id'] . ':' . $ymd] = true;
-                    return $row;
-                }
-            }
-            if ($pool !== []) {
-                $row = $pool[0];
-                $assignedDay[(int) $row['id'] . ':' . $ymd] = true;
-                return $row;
-            }
+        if ($pid === '' || $detailLeft <= 0) {
             return null;
-        };
-        if ($email !== '' && isset($byEmail[$email])) {
-            $cands = [];
-            foreach ($byEmail[$email] as $row) {
-                if ($kurus > 0 && (int) $row['amount_kurus'] !== $kurus) {
-                    continue;
-                }
-                $cands[] = $row;
-            }
-            $got = $pick($cands);
-            if ($got !== null) {
-                return $got;
-            }
         }
-        if ($pid !== '' && $detailLeft > 0) {
-            $detailLeft--;
-            $rep = iyzico_payment_report($pid);
-            if (!empty($rep['ok'])) {
-                $data = iyzico_v2_data($rep['data'] ?? []);
-                foreach (['subscriptionReferenceCode', 'conversationId', 'paymentConversationId'] as $k) {
-                    $c = trim((string) ($data[$k] ?? ''));
-                    if ($c !== '' && isset($byRef[$c])) {
-                        return $byRef[$c];
-                    }
-                    if ($c !== '' && isset($byConv[$c])) {
-                        return $byConv[$c];
-                    }
-                }
-                $repEmail = subscription_norm_email((string) ($data['buyerEmail'] ?? $data['email'] ?? $data['customerEmail'] ?? ''));
-                if ($repEmail !== '' && isset($byEmail[$repEmail])) {
-                    $got = $pick($byEmail[$repEmail]);
-                    if ($got !== null) {
-                        return $got;
-                    }
-                }
-            }
+        $detailLeft--;
+        $rep = iyzico_payment_report($pid);
+        if (empty($rep['ok'])) {
+            return null;
         }
-        return null;
+        $data = iyzico_v2_data($rep['data'] ?? []);
+        $t2 = [
+            'conversationId' => (string) ($data['conversationId'] ?? $data['paymentConversationId'] ?? ''),
+            'paymentConversationId' => (string) ($data['paymentConversationId'] ?? ''),
+            'subscriptionReferenceCode' => (string) ($data['subscriptionReferenceCode'] ?? ''),
+            'buyerEmail' => subscription_nested_email($data),
+            'buyerName' => (string) ($data['buyerName'] ?? $data['name'] ?? ''),
+            'buyerSurname' => (string) ($data['buyerSurname'] ?? $data['surname'] ?? ''),
+        ];
+        return subscription_match_sub_for_tx($t2, $byRef, $byConv, $byEmail, $uniqueName);
     };
 
     $n = 0;
@@ -1535,7 +1708,7 @@ function subscription_import_iyzico_payments(
             if ($kurus < 100) {
                 continue;
             }
-            $row = $findSub($t, $pid, $ymd);
+            $row = $findSub($t, $pid);
             if ($row === null) {
                 continue;
             }

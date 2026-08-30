@@ -653,6 +653,13 @@ try {
                     microtime(true) + 8.0,
                     0
                 );
+                subscription_reattach_invoices_by_buyer(
+                    $pdo,
+                    date('Y-m-d', strtotime('-7 days')),
+                    $today,
+                    microtime(true) + 6.0,
+                    4
+                );
                 subscription_dedupe_invoices_by_payment_id($pdo);
             } catch (Throwable $e) {
                 error_log('odeme iyzico senkron: ' . $e->getMessage());
