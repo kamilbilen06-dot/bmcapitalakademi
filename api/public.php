@@ -71,7 +71,7 @@ try {
         'navHakkimizda' => (($settings['nav_hakkimizda'] ?? '0') === '1'),
         'navSss' => (($settings['nav_sss'] ?? '0') === '1'),
         'navIletisim' => (($settings['nav_iletisim'] ?? '0') === '1'),
-        'navAraclar' => (($settings['nav_araclar'] ?? '0') === '1'),
+        'navAraclar' => (($settings['nav_araclar'] ?? '1') === '1'),
         'emailjs' => [
             'publicKey' => $settings['emailjs_public'] ?? '',
             'serviceId' => $settings['emailjs_service'] ?? '',

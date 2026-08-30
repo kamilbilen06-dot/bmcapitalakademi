@@ -110,7 +110,7 @@ function subscriptions_seed_settings(PDO $pdo): void {
         'nav_hakkimizda' => '0',
         'nav_sss' => '0',
         'nav_iletisim' => '0',
-        'nav_araclar' => '0',
+        'nav_araclar' => '1',
     ];
     $stmt = $pdo->prepare("INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = v");
     foreach ($defaults as $k => $v) {

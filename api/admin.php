@@ -491,7 +491,7 @@ try {
             }
             foreach (['nav_hakkimizda', 'nav_sss', 'nav_iletisim', 'nav_araclar'] as $nk) {
                 if (!isset($s[$nk]) || trim((string)$s[$nk]) === '') {
-                    $s[$nk] = '0';
+                    $s[$nk] = $nk === 'nav_araclar' ? '1' : '0';
                 }
             }
             json_out(['ok' => true, 'settings' => $s, 'instructors' => admin_filter_instructors($pdo)]);

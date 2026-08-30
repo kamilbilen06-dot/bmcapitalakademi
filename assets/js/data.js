@@ -24,7 +24,7 @@ window.BM_DATA = {
     navHakkimizda: false,
     navSss: false,
     navIletisim: false,
-    navAraclar: false,
+    navAraclar: true,
     // İletişim formu e-posta gönderimi (EmailJS - public key gizli değildir)
     emailjs: {
       publicKey: "GCgkZATeZisTHfirF",
