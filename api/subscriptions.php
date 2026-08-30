@@ -98,7 +98,7 @@ function subscription_normalize_daily_periods(PDO $pdo, ?int $studentId = null):
     try {
         $sql = "SELECT id, last_paid_at, current_period_end
                 FROM subscriptions
-                WHERE status IN ('active', 'past_due')
+                WHERE status IN ('active', 'past_due', 'cancelled')
                   AND interval_unit = 'DAILY'
                   AND last_paid_at IS NOT NULL
                   AND last_paid_at <> ''";
