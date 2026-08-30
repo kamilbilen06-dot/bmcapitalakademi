@@ -7,13 +7,11 @@ if (is_file(__DIR__ . '/mail_config.local.php')) {
 }
 
 /**
- * Gönderim yolu. Gmail SMTP kimliği doğrulanmış gönderim yaptığı için mail
- * saniyeler içinde düşer. Sunucunun kendi servisi (Exim) domainde SPF/DKIM
- * olmadığından Gmail tarafından bekletiliyor (2-3 dk).
- * SPF ve DKIM açıldıktan sonra 'server' yapılabilir.
+ * Mail: Resend HTTPS (443) — GoDaddy SMTP/Exim rölesi yok.
+ * Anahtar yoksa canlıda cPanel Exim (yavaş ama gider).
  */
 if (!defined('MAIL_TRANSPORT')) {
-    define('MAIL_TRANSPORT', 'smtp');
+    define('MAIL_TRANSPORT', 'http');
 }
 
 /** 'server' yoluna düşülürse kullanılacak gönderen (Gmail adresi DMARC'ı bozar) */

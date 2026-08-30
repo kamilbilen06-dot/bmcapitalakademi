@@ -1,6 +1,6 @@
 <?php
 /**
- * SMTP e-posta gönderimi (Composer/PHPMailer yok).
+ * E-posta: Resend HTTPS, yoksa cPanel Exim. Composer/PHPMailer yok.
  *
  * Öncelik: api/mail_config.local.php sabitleri → settings tablosu.
  * Gönderim başarısız olsa bile kayıt/ödeme akışı durmaz.
@@ -162,25 +162,57 @@ function mailer_smtp_available(): bool {
     return $c['user'] === '' || $c['pass'] !== '';
 }
 
+function mailer_http_api_key(): string {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+    $key = '';
+    if (defined('RESEND_API_KEY')) {
+        $key = trim((string) RESEND_API_KEY);
+    }
+    if ($key === '') {
+        try {
+            if (function_exists('db')) {
+                $st = db()->query("SELECT v FROM settings WHERE k = 'resend_api_key' LIMIT 1");
+                $key = trim((string) ($st ? $st->fetchColumn() : ''));
+            }
+        } catch (Throwable $e) {
+            $key = '';
+        }
+    }
+    $cached = $key;
+    return $cached;
+}
+
+function mailer_http_available(): bool {
+    if (mailer_http_api_key() === '') {
+        return false;
+    }
+    $disabled = mailer_disabled_functions();
+    if (function_exists('curl_init') && !in_array('curl_exec', $disabled, true)) {
+        return true;
+    }
+    return (bool) ini_get('allow_url_fopen');
+}
+
 /**
- * Denenecek gönderim yolları. Canlıda (Linux) önce sunucu, sonra SMTP.
- * Windows'ta sendmail yok, o yüzden yerel testte SMTP başa alınır.
+ * http (Resend 443) varsa o. Linux'ta Gmail SMTP denenmez (GoDaddy keser, süre ekler).
  *
  * @return string[]
  */
 function mailer_transport_order(): array {
-    $order = mailer_is_windows() ? ['smtp', 'server'] : ['server', 'smtp'];
-    if (defined('MAIL_TRANSPORT')) {
-        $t = strtolower(trim((string) MAIL_TRANSPORT));
-        if ($t === 'smtp') {
-            $order = ['smtp', 'server'];
-        } elseif (in_array($t, ['server', 'mail', 'sendmail'], true)) {
-            $order = ['server', 'smtp'];
-        }
+    $out = [];
+    if (mailer_http_available()) {
+        $out[] = 'http';
     }
-    return array_values(array_filter($order, static function (string $t): bool {
-        return $t === 'server' ? mailer_server_available() : mailer_smtp_available();
-    }));
+    if (mailer_is_windows() && mailer_smtp_available()) {
+        $out[] = 'smtp';
+    }
+    if (mailer_server_available()) {
+        $out[] = 'server';
+    }
+    return $out;
 }
 
 /**
@@ -361,6 +393,16 @@ function mailer_send(string $to, string $subject, string $html, string $text = '
         }
         $msg = mailer_build_message($to, $subject, $html, $text, $sender);
 
+        if ($transport === 'http') {
+            try {
+                mailer_http_send($to, $subject, $html, $text, $sender);
+                return ['ok' => true, 'error' => '', 'transport' => 'http'];
+            } catch (Throwable $e) {
+                $errors[] = 'http: ' . $e->getMessage();
+                continue;
+            }
+        }
+
         if ($transport === 'server') {
             if (mailer_server_send($to, $msg, $sender)) {
                 return ['ok' => true, 'error' => '', 'transport' => 'server'];
@@ -383,8 +425,83 @@ function mailer_send(string $to, string $subject, string $html, string $text = '
 }
 
 /**
- * cPanel / Exim üzerinden gönderim. Zarf adresi (-f) domain adresidir;
- * SPF ve DKIM bu adres için açık olmalı.
+ * Resend HTTP API — GoDaddy 443 açık, 587/465 kapalı.
+ *
+ * @param array{addr:string,name:string,reply:string} $sender
+ */
+function mailer_http_send(string $to, string $subject, string $html, string $text, array $sender): void {
+    $key = mailer_http_api_key();
+    if ($key === '') {
+        throw new RuntimeException('Resend anahtarı yok');
+    }
+    $payload = [
+        'from' => $sender['name'] . ' <' . $sender['addr'] . '>',
+        'to' => [$to],
+        'subject' => $subject,
+        'html' => $html,
+        'text' => $text,
+        'reply_to' => $sender['reply'],
+    ];
+    $body = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($body === false) {
+        throw new RuntimeException('JSON üretilemedi');
+    }
+
+    $raw = '';
+    $status = 0;
+    $disabled = mailer_disabled_functions();
+    if (function_exists('curl_init') && !in_array('curl_exec', $disabled, true)) {
+        $ch = curl_init('https://api.resend.com/emails');
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $body,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 12,
+            CURLOPT_CONNECTTIMEOUT => 6,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $key,
+                'Content-Type: application/json',
+            ],
+        ]);
+        $raw = (string) curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $cerr = curl_error($ch);
+        curl_close($ch);
+        if ($raw === '' && $cerr !== '') {
+            throw new RuntimeException('Bağlantı: ' . $cerr);
+        }
+    } else {
+        $ctx = stream_context_create([
+            'http' => [
+                'method' => 'POST',
+                'header' => "Authorization: Bearer {$key}\r\nContent-Type: application/json\r\n",
+                'content' => $body,
+                'timeout' => 12,
+                'ignore_errors' => true,
+            ],
+        ]);
+        $raw = (string) @file_get_contents('https://api.resend.com/emails', false, $ctx);
+        if (isset($http_response_header[0]) && preg_match('/\s(\d{3})\s/', $http_response_header[0], $m)) {
+            $status = (int) $m[1];
+        }
+    }
+
+    if ($status >= 200 && $status < 300) {
+        return;
+    }
+    $err = '';
+    $decoded = json_decode($raw, true);
+    if (is_array($decoded)) {
+        $err = (string) ($decoded['message'] ?? $decoded['error'] ?? '');
+        if ($err === '' && isset($decoded['name'])) {
+            $err = (string) $decoded['name'];
+        }
+    }
+    throw new RuntimeException($err !== '' ? $err : ('HTTP ' . $status));
+}
+
+/**
+ * cPanel / Exim. Zarf adresi domain (noreply@).
  *
  * @param array{subject:string,headers:string,body:string,raw:string} $msg
  * @param array{addr:string,name:string,reply:string} $sender
