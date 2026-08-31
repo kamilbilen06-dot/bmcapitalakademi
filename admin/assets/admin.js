@@ -238,7 +238,7 @@
     var plotW = width - left - right, plotH = height - top - bottom;
     var max = 1;
     series.forEach(function (s) {
-      max = Math.max(max, Number(s.views) || 0, Number(s.unique) || 0);
+      max = Math.max(max, Number(s.unique) || 0);
     });
     function x(i) {
       return left + (series.length <= 1 ? plotW / 2 : i * plotW / (series.length - 1));
@@ -265,11 +265,10 @@
       return '<text x="' + x(i) + '" y="' + (height - 10) + '" text-anchor="middle" class="chart-axis">' +
         esc(String(s.date || "").slice(5)) + "</text>";
     }).join("");
-    return '<svg class="line-chart" viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="Günlük sayfa görüntüleme ve tekil ziyaretçi grafiği">' +
+    return '<svg class="line-chart" viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="Günlük tekil ziyaretçi grafiği">' +
       grid + labels +
-      '<polyline points="' + polyline("views") + '" class="chart-line views"></polyline>' +
       '<polyline points="' + polyline("unique") + '" class="chart-line unique"></polyline>' +
-      dots("views", "views") + dots("unique", "unique") +
+      dots("unique", "unique") +
       "</svg>";
   }
 
@@ -292,13 +291,6 @@
   function renderAnalytics(d, includeCards) {
     var c = d.cards || {};
     updateUnread(c.unread || 0);
-    var sources = (d.sources || []).map(function (s) {
-      return '<div class="source-row"><div><span>' + esc(s.name) + '</span><strong>' + (Number(s.pct) || 0) + '%</strong></div>' +
-        '<div class="source-track"><span style="width:' + Math.min(100, Number(s.pct) || 0) + '%"></span></div></div>';
-    }).join("") || '<p class="empty">Henüz kaynak verisi yok.</p>';
-    var cities = (d.cities || []).map(function (city) {
-      return "<tr><td>" + esc(city.name || "Bilinmiyor") + "</td><td class='num'>" + (Number(city.count) || 0) + "</td></tr>";
-    }).join("") || "<tr><td colspan='2' class='empty'>Henüz şehir verisi yok.</td></tr>";
     var topRows = (d.topPages || []).map(function (p) {
       return "<tr><td>" + esc(p.path || "/") + "</td><td class='num'>" + (Number(p.c) || 0) + "</td></tr>";
     }).join("") || '<tr><td colspan="2" class="empty">Henüz veri yok</td></tr>';
@@ -312,12 +304,8 @@
       : "";
 
     el.wrap.innerHTML = cards +
-      '<div class="panel"><div class="panel-head"><h3>Son 30 Gün · Sayfa Görüntüleme ve Tekil Ziyaretçi</h3><div class="chart-legend"><span class="legend-views">Sayfa görüntüleme</span><span class="legend-unique">Tekil ziyaretçi</span></div></div><div class="panel-body">' +
+      '<div class="panel"><div class="panel-head"><h3>Son 30 Gün · Tekil Ziyaretçi</h3></div><div class="panel-body">' +
       lineChart(d.series) + "</div></div>" +
-      '<div class="analytics-grid">' +
-      '<div class="panel"><div class="panel-head"><h3>Ziyaretçi Nereden Geliyor?</h3></div><div class="panel-body source-list">' + sources + "</div></div>" +
-      '<div class="panel"><div class="panel-head"><h3>Şehir</h3></div><div class="panel-body table-wrap"><table><thead><tr><th>Şehir</th><th class="num">Ziyaretçi</th></tr></thead><tbody>' + cities + "</tbody></table></div></div>" +
-      "</div>" +
       '<div class="panel"><div class="panel-head"><h3>Son Ziyaretçiler</h3><span class="hint">Detay için satıra tıklayın</span></div><div class="panel-body table-wrap"><table><thead><tr><th>Ziyaretçi</th><th>İlk geliş</th><th>Son aktivite</th><th>Gezdiği sayfa</th><th>Süre</th><th>Durum</th><th>Satın alma</th></tr></thead><tbody>' +
       visitorRows(d.visitors) + "</tbody></table></div></div>" +
       '<div class="panel"><div class="panel-head"><h3>En Çok Görüntülenen Sayfalar</h3></div><div class="panel-body table-wrap"><table><thead><tr><th>Sayfa</th><th class="num">Görüntüleme</th></tr></thead><tbody>' + topRows + "</tbody></table></div></div>";

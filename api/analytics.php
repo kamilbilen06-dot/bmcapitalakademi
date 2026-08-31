@@ -407,15 +407,18 @@ function analytics_dashboard(PDO $pdo): array {
 
 function analytics_visitor_detail(PDO $pdo, string $visitorId): ?array {
     analytics_ensure_schema($pdo);
-    $visitorId = strtoupper(preg_replace('/[^A-F0-9]/', '', $visitorId) ?? '');
+    $visitorId = strtoupper(preg_replace('/[^a-f0-9]/i', '', $visitorId) ?? '');
     if (strlen($visitorId) < 8) {
         return null;
     }
     $st = $pdo->prepare(
         "SELECT visitor_id, path, title, created_at
-         FROM page_views WHERE visitor_id = ? ORDER BY created_at ASC LIMIT 300"
+         FROM page_views
+         WHERE visitor_id = ?
+            OR (visitor_id = '' AND RIGHT(SHA2(COALESCE(ip, ''), 256), 8) = ?)
+         ORDER BY created_at ASC LIMIT 300"
     );
-    $st->execute([$visitorId]);
+    $st->execute([$visitorId, strtolower($visitorId)]);
     $rows = $st->fetchAll();
     if (!$rows) {
         return null;

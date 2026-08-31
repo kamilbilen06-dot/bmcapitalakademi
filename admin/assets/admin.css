@@ -78,10 +78,10 @@ a{text-decoration:none;color:inherit}
 .chart-axis{fill:#8595a8;font-size:11px}
 .chart-line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
 .chart-line.views{stroke:var(--gold)}
-.chart-line.unique{stroke:#3276d2}
+.chart-line.unique{stroke:var(--gold)}
 .chart-dot{stroke:#fff;stroke-width:2}
 .chart-dot.views{fill:var(--gold)}
-.chart-dot.unique{fill:#3276d2}
+.chart-dot.unique{fill:var(--gold)}
 .chart-legend{display:flex;gap:16px;color:var(--muted);font-size:12px}
 .chart-legend span:before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:currentColor}
 .legend-views{color:var(--gold)}
