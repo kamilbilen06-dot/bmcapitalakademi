@@ -118,31 +118,19 @@ function site_bootstrap(PDO $pdo): void {
     }
     $done = true;
 
-    $steps = [
-        'site_core_ensure_tables',
-        'egitmen_ensure_schema',
-        'instructors_ensure_schema',
-        'auth_ensure_schema',
-        'students_ensure_schema',
-        'payments_ensure_schema',
-        'subscriptions_ensure_schema',
-        'seed_settings',
-        'seed_modules',
-        'normalize_technical_basic_course',
-        'seed_faqs',
-        'remove_archived_training_faq',
-        'site_bootstrap_admin',
-    ];
-    foreach ($steps as $fn) {
-        if (!function_exists($fn)) {
-            continue;
-        }
-        try {
-            $fn($pdo);
-        } catch (Throwable $e) {
-            error_log($fn . ': ' . $e->getMessage());
-        }
-    }
+    site_core_ensure_tables($pdo);
+    egitmen_ensure_schema($pdo);
+    instructors_ensure_schema($pdo);
+    auth_ensure_schema($pdo);
+    students_ensure_schema($pdo);
+    payments_ensure_schema($pdo);
+    subscriptions_ensure_schema($pdo);
+    seed_settings($pdo);
+    seed_modules($pdo);
+    normalize_technical_basic_course($pdo);
+    seed_faqs($pdo);
+    remove_archived_training_faq($pdo);
+    site_bootstrap_admin($pdo);
 }
 
 /** Türkiye saati (yaz/kış farkı yok). */
