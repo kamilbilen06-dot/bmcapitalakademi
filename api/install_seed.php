@@ -209,11 +209,11 @@ function seed_modules($pdo) {
     }
 }
 
-/** Tarihli kampanya eğitimini normal, tarihsiz Kamil Bilen eğitimine dönüştür. */
+/** Sadece temel eğitimin eski sabit tarihlerini kaldır. */
 function normalize_technical_basic_course(PDO $pdo): void {
     try {
         $st = $pdo->prepare(
-            "SELECT id, instructors, katilim_not, tarih_not, data
+            "SELECT id, tarih_not, data
              FROM modules WHERE slug = ? LIMIT 1"
         );
         $st->execute(['teknik-temel-algoritmik']);
@@ -226,16 +226,11 @@ function normalize_technical_basic_course(PDO $pdo): void {
         if (!is_array($data)) {
             $data = [];
         }
-        $data['hediye'] = [];
-        $data['hediyeGorsel'] = '';
         $data['tarihler'] = [];
         $json = json_encode($data, JSON_UNESCAPED_UNICODE);
-        $katilimNot = 'Canlı online veya İzmir yüz yüze · Grup dersi veya birebir özel ders olarak alınabilir.';
 
         if (
-            (string)$row['instructors'] === 'Dr. Kamil BİLEN'
-            && (string)$row['katilim_not'] === $katilimNot
-            && trim((string)$row['tarih_not']) === ''
+            trim((string)$row['tarih_not']) === ''
             && (string)$row['data'] === (string)$json
         ) {
             return;
@@ -243,9 +238,9 @@ function normalize_technical_basic_course(PDO $pdo): void {
 
         $pdo->prepare(
             "UPDATE modules
-             SET instructors = ?, katilim_not = ?, tarih_not = NULL, data = ?
+             SET tarih_not = NULL, data = ?
              WHERE id = ?"
-        )->execute(['Dr. Kamil BİLEN', $katilimNot, $json, (int)$row['id']]);
+        )->execute([$json, (int)$row['id']]);
     } catch (Throwable $e) {
         error_log('teknik eğitim normalleştirme: ' . $e->getMessage());
     }
