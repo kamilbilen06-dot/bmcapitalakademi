@@ -10,7 +10,6 @@ require_once __DIR__ . '/auth_schema.php';
 require_once __DIR__ . '/students_schema.php';
 require_once __DIR__ . '/payments_schema.php';
 require_once __DIR__ . '/subscriptions_schema.php';
-require_once __DIR__ . '/analytics.php';
 
 function site_core_ensure_tables(PDO $pdo): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS admin_users (
@@ -109,12 +108,9 @@ function site_bootstrap(PDO $pdo): void {
     students_ensure_schema($pdo);
     payments_ensure_schema($pdo);
     subscriptions_ensure_schema($pdo);
-    analytics_ensure_schema($pdo);
     seed_settings($pdo);
     seed_modules($pdo);
-    normalize_technical_basic_course($pdo);
     seed_faqs($pdo);
-    remove_archived_training_faq($pdo);
     site_bootstrap_admin($pdo);
 }
 

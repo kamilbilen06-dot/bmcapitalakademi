@@ -64,7 +64,6 @@ function ogrenci_head(string $title, string $bodyClass = ''): void {
 function ogrenci_foot(): void {
     ?>
   <script src="assets/ogrenci.js"></script>
-  <script src="../assets/js/track.js"></script>
 </body>
 </html><?php
 }
