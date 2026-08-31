@@ -45,7 +45,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Kullanıcı adı veya şifre hatalı.';
             }
         } catch (Throwable $e) {
-            error_log('admin login: ' . $e->getMessage());
             $error = 'Bağlantı hatası. Veritabanı ayarlarını ve kurulumu kontrol edin.';
         }
     }
