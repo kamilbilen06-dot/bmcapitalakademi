@@ -377,7 +377,6 @@
             window.BM_DATA.site = site;
             if (window.BM_FEATURES) {
               window.BM_FEATURES.apply({
-                nisan2026Active: site.featureNisan2026 === true || site.featureNisan2026 === "1",
                 meteAkyolActive: site.featureMeteAkyol === true || site.featureMeteAkyol === "1",
                 metematikselHediyeActive: site.featureMetematikselHediye === true || site.featureMetematikselHediye === "1",
               });
@@ -392,13 +391,36 @@
   }
 
   // --- Ziyaretçi takibi (yönetim paneli istatistikleri) ---
+  function visitorId() {
+    var k = "bm_vid";
+    var id = "";
+    try { id = localStorage.getItem(k) || ""; } catch (e) {}
+    if (!/^[A-F0-9]{8}$/i.test(id)) {
+      var m = document.cookie.match(/(?:^|; )bm_vid=([A-F0-9]{8})/i);
+      if (m) id = m[1];
+    }
+    if (!/^[A-F0-9]{8}$/i.test(id)) {
+      id = "";
+      var hex = "0123456789ABCDEF";
+      for (var i = 0; i < 8; i++) id += hex.charAt(Math.floor(Math.random() * 16));
+    }
+    id = id.toUpperCase();
+    try { localStorage.setItem(k, id); } catch (e) {}
+    document.cookie = "bm_vid=" + id + ";path=/;max-age=34560000;samesite=lax";
+    return id;
+  }
   function trackVisit() {
     if (!window.fetch) return;
     try {
       fetch(apiBase + "track.php", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: location.pathname }),
+        body: JSON.stringify({
+          vid: visitorId(),
+          path: location.pathname + (location.search || ""),
+          title: document.title || "",
+          referrer: document.referrer || "",
+        }),
         credentials: "same-origin",
         keepalive: true,
       }).catch(function () {});

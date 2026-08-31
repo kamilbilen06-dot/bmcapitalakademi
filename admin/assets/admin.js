@@ -207,6 +207,133 @@
     el.topAction.onclick = fn;
   }
 
+  function lineChartSvg(series) {
+    series = series || [];
+    var w = 640, h = 220, padL = 36, padR = 12, padT = 16, padB = 28;
+    var innerW = w - padL - padR, innerH = h - padT - padB;
+    var max = 1;
+    series.forEach(function (s) {
+      if (s.views > max) max = s.views;
+      if (s.unique > max) max = s.unique;
+    });
+    function x(i) {
+      return padL + (series.length < 2 ? innerW / 2 : (i / (series.length - 1)) * innerW);
+    }
+    function y(v) {
+      return padT + innerH - (v / max) * innerH;
+    }
+    function pts(key) {
+      return series.map(function (s, i) { return x(i).toFixed(1) + "," + y(s[key] || 0).toFixed(1); }).join(" ");
+    }
+    var ticks = "";
+    for (var t = 0; t <= 4; t++) {
+      var val = Math.round((max * (4 - t)) / 4);
+      var yy = padT + (innerH * t) / 4;
+      ticks += '<line x1="' + padL + '" y1="' + yy + '" x2="' + (w - padR) + '" y2="' + yy + '" stroke="#eef1f5"/>';
+      ticks += '<text x="' + (padL - 6) + '" y="' + (yy + 4) + '" text-anchor="end" class="lc-tick">' + val + "</text>";
+    }
+    var labels = "";
+    series.forEach(function (s, i) {
+      if (i % 5 !== 0 && i !== series.length - 1) return;
+      labels += '<text x="' + x(i) + '" y="' + (h - 8) + '" text-anchor="middle" class="lc-tick">' +
+        esc(s.date.slice(8) + "." + s.date.slice(5, 7)) + "</text>";
+    });
+    var dots = series.map(function (s, i) {
+      var lbl = s.date.slice(8) + "." + s.date.slice(5, 7);
+      return '<circle cx="' + x(i) + '" cy="' + y(s.views) + '" r="3" fill="#f39c12"><title>' +
+        lbl + ": " + s.views + " görüntüleme</title></circle>" +
+        '<circle cx="' + x(i) + '" cy="' + y(s.unique) + '" r="3" fill="#1f2d3d"><title>' +
+        lbl + ": " + s.unique + " tekil</title></circle>";
+    }).join("");
+    return (
+      '<svg class="line-chart" viewBox="0 0 ' + w + " " + h + '" preserveAspectRatio="none" role="img">' +
+      ticks +
+      '<polyline fill="none" stroke="#f39c12" stroke-width="2.4" points="' + pts("views") + '"/>' +
+      '<polyline fill="none" stroke="#1f2d3d" stroke-width="2.4" points="' + pts("unique") + '"/>' +
+      dots + labels +
+      "</svg>" +
+      '<div class="lc-legend">' +
+      '<span><i class="lc-dot views"></i> Sayfa görüntüleme</span>' +
+      '<span><i class="lc-dot unique"></i> Tekil ziyaretçi</span>' +
+      "</div>"
+    );
+  }
+
+  function analyticsPanels(d) {
+    var sources = d.sources || [];
+    var cities = d.cities || [];
+    var visitors = d.visitors || [];
+    var srcHtml = sources.length
+      ? sources.map(function (s) {
+          return '<div class="src-row"><span class="src-name">' + esc(s.name) +
+            '</span><span class="src-bar"><i style="width:' + (s.pct || 0) + '%"></i></span>' +
+            '<span class="src-pct">' + (s.pct || 0) + "%</span></div>";
+        }).join("")
+      : '<p class="empty" style="padding:16px 0">Henüz kaynak verisi yok.</p>';
+    var cityRows = cities.length
+      ? cities.map(function (c) {
+          return "<tr><td>" + esc(c.name) + '</td><td class="num">' + c.count + "</td></tr>";
+        }).join("")
+      : '<tr><td colspan="2" class="empty">Henüz şehir verisi yok.</td></tr>';
+    var visRows = visitors.length
+      ? visitors.map(function (v) {
+          return '<tr class="visitor-row" data-vid="' + esc(v.id) + '">' +
+            "<td><strong>" + esc(v.label) + "</strong></td>" +
+            "<td>" + esc(v.first) + "</td>" +
+            "<td>" + esc(v.last) + "</td>" +
+            "<td>" + esc(v.page) + "</td>" +
+            "<td>" + v.minutes + " dk</td>" +
+            "<td>" + esc(v.status) + "</td></tr>";
+        }).join("")
+      : '<tr><td colspan="6" class="empty">Bugün henüz ziyaretçi yok.</td></tr>';
+    return (
+      '<div class="panel"><div class="panel-head"><h3>Son 30 gün · Tekil ziyaretçi ve sayfa görüntüleme</h3></div>' +
+      '<div class="panel-body">' + lineChartSvg(d.series || []) + "</div></div>" +
+      '<div class="analytics-split">' +
+      '<div class="panel"><div class="panel-head"><h3>Ziyaretçi nereden geliyor?</h3></div>' +
+      '<div class="panel-body">' + srcHtml + "</div></div>" +
+      '<div class="panel"><div class="panel-head"><h3>Şehir</h3></div><div class="table-wrap">' +
+      '<table><thead><tr><th>Şehir</th><th style="text-align:right">Ziyaretçi</th></tr></thead><tbody>' +
+      cityRows + "</tbody></table></div></div></div>" +
+      '<div class="panel"><div class="panel-head"><h3>Son ziyaretçiler</h3>' +
+      '<span class="count">bugün ' + visitors.length + " oturum</span></div>" +
+      '<div class="table-wrap"><table><thead><tr>' +
+      "<th>Ziyaretçi</th><th>İlk geliş</th><th>Son aktivite</th><th>Gezdiği sayfa</th><th>Süre</th><th>Durum</th>" +
+      "</tr></thead><tbody>" + visRows + "</tbody></table></div></div>"
+    );
+  }
+
+  function bindVisitorRows() {
+    el.wrap.querySelectorAll("[data-vid]").forEach(function (row) {
+      row.addEventListener("click", function () {
+        var id = row.getAttribute("data-vid");
+        get("visitor_detail", { id: id }).then(function (d) {
+          if (!d || !d.ok || !d.item) { toast("Ziyaretçi detayı yok", "err"); return; }
+          var it = d.item;
+          var journey = (it.journey || []).map(function (p) {
+            return '<div class="journey-line"><span>' + esc(p.time) + "</span><b>" + esc(p.page) + "</b></div>";
+          }).join("");
+          if (it.exit) {
+            journey += '<div class="journey-line exit"><span>' + esc(it.last) + "</span><b>Çıkış</b></div>";
+          }
+          var prev = (it.sessions || []).slice(1).map(function (s) {
+            return "<li>" + esc(s.date) + " · " + esc(s.first) + "–" + esc(s.last) + " · " +
+              esc(s.page) + " · " + s.minutes + " dk</li>";
+          }).join("");
+          openModal(it.label || "Ziyaretçi",
+            '<div class="journey">' + journey + "</div>" +
+            '<p class="journey-sum">Toplam süre: <b>' + (it.total_minutes || it.minutes || 0) +
+            " dk</b> · Sayfa: <b>" + (it.pages_count || 0) +
+            "</b> · Satın alma: <b>" + esc(it.bought_label || "❌") + "</b></p>" +
+            (it.visit_count > 1
+              ? '<p class="hint">Aynı tarayıcıdan ' + it.visit_count + " ziyaret (anonim ID).</p><ul class='journey-prev'>" + prev + "</ul>"
+              : '<p class="hint">Bu anonim ID ile kayıtlı ilk ziyaret.</p>')
+          );
+        });
+      });
+    });
+  }
+
   // ---------- DASHBOARD ----------
   var renderers = {};
   renderers.dashboard = function () {
@@ -214,16 +341,8 @@
       if (!d.ok) return;
       var c = d.cards;
       updateUnread(c.unread);
-      var max = 1;
-      d.series.forEach(function (s) { if (s.views > max) max = s.views; });
-      var bars = d.series.map(function (s) {
-        var h = Math.round((s.views / max) * 100);
-        var lbl = s.date.slice(8) + "." + s.date.slice(5, 7);
-        return '<div class="bar" style="height:' + h + '%"><span class="tip">' + lbl + ": " + s.views + " görüntüleme · " + s.unique + " tekil</span></div>";
-      }).join("");
-      var first = d.series[0].date, last = d.series[d.series.length - 1].date;
-      var topRows = d.topPages.length
-        ? d.topPages.map(function (p) { return "<tr><td>" + esc(p.path || "/") + '</td><td style="text-align:right">' + p.c + "</td></tr>"; }).join("")
+      var topRows = (d.topPages || []).length
+        ? d.topPages.map(function (p) { return "<tr><td>" + esc(p.path || "/") + '</td><td class="num">' + p.c + "</td></tr>"; }).join("")
         : '<tr><td colspan="2" class="empty">Henüz veri yok</td></tr>';
 
       el.wrap.innerHTML =
@@ -233,13 +352,11 @@
         card("Toplam", c.total, "tüm zamanlar") +
         card("İçerik", c.modules, c.faqs + " S.S.S.") +
         "</div>" +
-        '<div class="panel"><div class="panel-head"><h3>Son 30 Gün · Günlük Görüntüleme</h3></div><div class="panel-body">' +
-        '<div class="chart">' + bars + "</div>" +
-        '<div class="chart-x"><span>' + first.slice(5) + "</span><span>" + last.slice(5) + "</span></div>" +
-        "</div></div>" +
+        analyticsPanels(d) +
         '<div class="panel"><div class="panel-head"><h3>En Çok Görüntülenen Sayfalar</h3></div><div class="panel-body table-wrap">' +
         '<table><thead><tr><th>Sayfa</th><th style="text-align:right">Görüntüleme</th></tr></thead><tbody>' + topRows + "</tbody></table>" +
         "</div></div>";
+      bindVisitorRows();
     });
   };
   function card(label, num, sub, gold) {
@@ -759,14 +876,8 @@
   renderers.istatistik = function () {
     get("stats").then(function (d) {
       if (!d.ok) return;
-      var max = 1; d.series.forEach(function (s) { if (s.views > max) max = s.views; });
-      var bars = d.series.map(function (s) {
-        var h = Math.round((s.views / max) * 100);
-        var lbl = s.date.slice(8) + "." + s.date.slice(5, 7);
-        return '<div class="bar" style="height:' + h + '%"><span class="tip">' + lbl + ": " + s.views + " · " + s.unique + " tekil</span></div>";
-      }).join("");
-      var tableRows = d.series.slice().reverse().filter(function (s) { return s.views > 0; }).map(function (s) {
-        return "<tr><td>" + s.date + "</td><td style='text-align:right'>" + s.views + "</td><td style='text-align:right'>" + s.unique + "</td></tr>";
+      var tableRows = (d.series || []).slice().reverse().filter(function (s) { return s.views > 0; }).map(function (s) {
+        return "<tr><td>" + s.date + "</td><td class='num'>" + s.views + "</td><td class='num'>" + s.unique + "</td></tr>";
       }).join("") || "<tr><td colspan='3' class='empty'>Henüz ziyaret kaydı yok.</td></tr>";
       el.wrap.innerHTML =
         '<div class="stat-grid">' +
@@ -774,8 +885,9 @@
         card("Son 7 Gün", d.cards.week, "görüntüleme") +
         card("Toplam", d.cards.total, "tüm zamanlar") +
         "</div>" +
-        '<div class="panel"><div class="panel-head"><h3>Günlük Görüntüleme (30 gün)</h3></div><div class="panel-body"><div class="chart">' + bars + "</div></div></div>" +
-        '<div class="panel"><div class="panel-head"><h3>Gün Gün Detay</h3></div><div class="table-wrap"><table><thead><tr><th>Tarih</th><th style="text-align:right">Görüntüleme</th><th style="text-align:right">Tekil</th></tr></thead><tbody>' + tableRows + "</tbody></table></div></div>";
+        analyticsPanels(d) +
+        '<div class="panel"><div class="panel-head"><h3>Gün gün detay</h3></div><div class="table-wrap"><table><thead><tr><th>Tarih</th><th style="text-align:right">Görüntüleme</th><th style="text-align:right">Tekil</th></tr></thead><tbody>' + tableRows + "</tbody></table></div></div>";
+      bindVisitorRows();
     });
   };
 
@@ -1275,13 +1387,9 @@
           '<option value="1"' + ((s.nav_araclar || "0") === "1" ? " selected" : "") + ">Açık</option>" +
         "</select></div>" +
         "</div>" +
-        '<h3 style="margin:22px 0 4px;font-size:15px">Arşivlenebilir içerikler</h3>' +
-        '<p class="hint" style="margin:0 0 12px">Geçmiş kampanyalar varsayılan olarak pasiftir. İleride tekrar kullanmak için buradan açabilirsiniz.</p>' +
+        '<h3 style="margin:22px 0 4px;font-size:15px">İçerik görünürlüğü</h3>' +
+        '<p class="hint" style="margin:0 0 12px">Dr. Mete Akyol ve Metematiksel Analiz kitabı/hediyeleri varsayılan olarak pasiftir. İleride tekrar kullanmak için buradan açabilirsiniz.</p>' +
         '<div class="form-grid">' +
-        '<div class="field"><label>13–17 Nisan 2026 eğitimi</label><select name="feature_nisan_2026">' +
-          '<option value="0"' + ((s.feature_nisan_2026 || "0") !== "1" ? " selected" : "") + ">Pasif</option>" +
-          '<option value="1"' + ((s.feature_nisan_2026 || "0") === "1" ? " selected" : "") + ">Aktif</option>" +
-        "</select></div>" +
         '<div class="field"><label>Dr. Mete Akyol</label><select name="feature_mete_akyol">' +
           '<option value="0"' + ((s.feature_mete_akyol || "0") !== "1" ? " selected" : "") + ">Pasif</option>" +
           '<option value="1"' + ((s.feature_mete_akyol || "0") === "1" ? " selected" : "") + ">Aktif</option>" +
@@ -1349,7 +1457,7 @@
       document.getElementById("setForm").onsubmit = function (e) {
         e.preventDefault();
         var f = e.target, out = {};
-        ["marka", "sehir", "telefon", "whatsapp", "instagram", "twitter", "banka", "hesap_adi", "iban", "instructor_share_pct", "emailjs_public", "emailjs_service", "emailjs_template", "emailjs_to", "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from", "smtp_from_name", "sub_enabled", "sub_title", "sub_price", "sub_blurb", "sub_instructor_id", "satici_unvan", "satici_adres", "satici_vergi", "satici_mersis", "nav_hakkimizda", "nav_sss", "nav_iletisim", "nav_araclar", "feature_nisan_2026", "feature_mete_akyol", "feature_metematiksel_hediye"].forEach(function (k) { if (f[k]) out[k] = f[k].value; });
+        ["marka", "sehir", "telefon", "whatsapp", "instagram", "twitter", "banka", "hesap_adi", "iban", "instructor_share_pct", "emailjs_public", "emailjs_service", "emailjs_template", "emailjs_to", "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from", "smtp_from_name", "sub_enabled", "sub_title", "sub_price", "sub_blurb", "sub_instructor_id", "satici_unvan", "satici_adres", "satici_vergi", "satici_mersis", "nav_hakkimizda", "nav_sss", "nav_iletisim", "nav_araclar", "feature_mete_akyol", "feature_metematiksel_hediye"].forEach(function (k) { if (f[k]) out[k] = f[k].value; });
         post("settings_save", out).then(function (r) { toast(r.ok ? "Ayarlar kaydedildi" : (r.error || "Hata"), r.ok ? "ok" : "err"); });
       };
       document.getElementById("pwForm").onsubmit = function (e) {
