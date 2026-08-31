@@ -110,6 +110,10 @@ function egitmen_add_column_if_missing(PDO $pdo, $table, $column, $definition) {
     try {
         $pdo->query("SELECT `$column` FROM `$table` LIMIT 1");
     } catch (Throwable $e) {
-        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `$column` $definition");
+        try {
+            $pdo->exec("ALTER TABLE `$table` ADD COLUMN `$column` $definition");
+        } catch (Throwable $e2) {
+            error_log("kolon eklenemedi $table.$column: " . $e2->getMessage());
+        }
     }
 }

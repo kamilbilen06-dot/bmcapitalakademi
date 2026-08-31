@@ -11,20 +11,29 @@ function analytics_ensure_schema(PDO $pdo): void {
     }
     $done = true;
 
-    $pdo->exec("CREATE TABLE IF NOT EXISTS page_views (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        ip VARCHAR(45),
-        path VARCHAR(255),
-        ua VARCHAR(255),
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_created (created_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS page_views (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            ip VARCHAR(45),
+            path VARCHAR(255),
+            ua VARCHAR(255),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (Throwable $e) {
+        error_log('analytics page_views: ' . $e->getMessage());
+        return;
+    }
 
-    egitmen_add_column_if_missing($pdo, 'page_views', 'visitor_id', "VARCHAR(16) NOT NULL DEFAULT '' AFTER ip");
-    egitmen_add_column_if_missing($pdo, 'page_views', 'referrer', "VARCHAR(255) NOT NULL DEFAULT '' AFTER path");
-    egitmen_add_column_if_missing($pdo, 'page_views', 'source', "VARCHAR(40) NOT NULL DEFAULT '' AFTER referrer");
-    egitmen_add_column_if_missing($pdo, 'page_views', 'city', "VARCHAR(80) NOT NULL DEFAULT '' AFTER source");
-    egitmen_add_column_if_missing($pdo, 'page_views', 'title', "VARCHAR(160) NOT NULL DEFAULT '' AFTER city");
+    try {
+        egitmen_add_column_if_missing($pdo, 'page_views', 'visitor_id', "VARCHAR(16) NOT NULL DEFAULT '' AFTER ip");
+        egitmen_add_column_if_missing($pdo, 'page_views', 'referrer', "VARCHAR(255) NOT NULL DEFAULT '' AFTER path");
+        egitmen_add_column_if_missing($pdo, 'page_views', 'source', "VARCHAR(40) NOT NULL DEFAULT '' AFTER referrer");
+        egitmen_add_column_if_missing($pdo, 'page_views', 'city', "VARCHAR(80) NOT NULL DEFAULT '' AFTER source");
+        egitmen_add_column_if_missing($pdo, 'page_views', 'title', "VARCHAR(160) NOT NULL DEFAULT '' AFTER city");
+    } catch (Throwable $e) {
+        error_log('analytics kolon: ' . $e->getMessage());
+    }
 
     try {
         $pdo->exec("CREATE INDEX idx_pv_visitor ON page_views (visitor_id, created_at)");
@@ -35,12 +44,16 @@ function analytics_ensure_schema(PDO $pdo): void {
     } catch (Throwable $e) {
     }
 
-    $pdo->exec("CREATE TABLE IF NOT EXISTS ip_geo (
-        ip VARCHAR(45) PRIMARY KEY,
-        city VARCHAR(80) NOT NULL DEFAULT '',
-        country VARCHAR(80) NOT NULL DEFAULT '',
-        fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS ip_geo (
+            ip VARCHAR(45) PRIMARY KEY,
+            city VARCHAR(80) NOT NULL DEFAULT '',
+            country VARCHAR(80) NOT NULL DEFAULT '',
+            fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (Throwable $e) {
+        error_log('analytics ip_geo: ' . $e->getMessage());
+    }
 }
 
 function analytics_visitor_key(array $row): string {
