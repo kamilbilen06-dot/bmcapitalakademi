@@ -79,36 +79,19 @@ function site_core_ensure_tables(PDO $pdo): void {
 }
 
 function site_bootstrap_admin(PDO $pdo): void {
-    $user = 'admin';
-    $pass = 'admin123';
-    $fp = 'admin123-v1';
-    try {
-        $st = $pdo->query("SELECT v FROM settings WHERE k = 'admin_pass_fp' LIMIT 1");
-        $cur = $st ? (string)$st->fetchColumn() : '';
-        $n = (int)$pdo->query("SELECT COUNT(*) FROM admin_users WHERE username = 'admin'")->fetchColumn();
-        if ($cur === $fp && $n > 0) {
-            return;
-        }
-    } catch (Throwable $e) {
-        $n = 0;
+    $n = (int) $pdo->query('SELECT COUNT(*) FROM admin_users')->fetchColumn();
+    if ($n > 0) {
+        return;
     }
-
-    $hash = password_hash($pass, PASSWORD_DEFAULT);
-    try {
-        $n = (int)$pdo->query("SELECT COUNT(*) FROM admin_users WHERE username = 'admin'")->fetchColumn();
-        if ($n === 0) {
-            $pdo->prepare(
-                "INSERT INTO admin_users (username, password_hash, role) VALUES (?, ?, 'admin')"
-            )->execute([$user, $hash]);
-        } else {
-            $pdo->prepare("UPDATE admin_users SET password_hash = ? WHERE username = ?")
-                ->execute([$hash, $user]);
-        }
-        $pdo->prepare("INSERT INTO settings (k, v) VALUES ('admin_pass_fp', ?) ON DUPLICATE KEY UPDATE v = VALUES(v)")
-            ->execute([$fp]);
-    } catch (Throwable $e) {
-        error_log('admin sifre: ' . $e->getMessage());
+    $user = defined('BOOTSTRAP_ADMIN_USER') ? trim((string) BOOTSTRAP_ADMIN_USER) : '';
+    $pass = defined('BOOTSTRAP_ADMIN_PASS') ? (string) BOOTSTRAP_ADMIN_PASS : '';
+    if ($user === '' || strlen($pass) < 6) {
+        return;
     }
+    $stmt = $pdo->prepare(
+        "INSERT INTO admin_users (username, password_hash, role) VALUES (?, ?, 'admin')"
+    );
+    $stmt->execute([$user, password_hash($pass, PASSWORD_DEFAULT)]);
 }
 
 function site_bootstrap(PDO $pdo): void {
