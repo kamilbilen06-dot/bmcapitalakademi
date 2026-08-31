@@ -46,7 +46,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = db();
             students_ensure_schema($pdo);
             // Telefon ödeme adımında isteniyor; kayıtta sorulmuyor.
-            $res = student_register($pdo, $name, $email, $password, '', $marketing);
+            $res = student_register(
+                $pdo,
+                $name,
+                $email,
+                $password,
+                '',
+                $marketing,
+                $_COOKIE['bm_vid'] ?? ''
+            );
             if ($res['error'] === 'unverified_exists' || ($res['error'] === '' && !empty($res['row']))) {
                 $_SESSION['verify_need_send'] = 1;
                 $_SESSION['verify_email'] = (string)$res['row']['email'];

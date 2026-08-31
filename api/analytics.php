@@ -302,6 +302,34 @@ function analytics_session_public(array $session): array {
     ];
 }
 
+function analytics_registered_accounts(PDO $pdo): array {
+    $st = $pdo->query(
+        "SELECT s.id, s.name, s.email, s.visitor_id, s.created_at, s.last_login_at,
+                COUNT(pv.id) AS page_count, MAX(pv.created_at) AS last_activity
+         FROM students s
+         LEFT JOIN page_views pv
+           ON s.visitor_id <> '' AND pv.visitor_id = s.visitor_id
+         WHERE s.status = 'active'
+         GROUP BY s.id, s.name, s.email, s.visitor_id, s.created_at, s.last_login_at
+         ORDER BY s.created_at DESC
+         LIMIT 100"
+    );
+    $accounts = [];
+    while ($row = $st->fetch()) {
+        $accounts[] = [
+            'id' => (int)$row['id'],
+            'name' => trim((string)$row['name']) !== '' ? (string)$row['name'] : 'İsimsiz hesap',
+            'email' => (string)$row['email'],
+            'visitorId' => (string)$row['visitor_id'],
+            'created' => (string)$row['created_at'],
+            'lastLogin' => (string)($row['last_login_at'] ?? ''),
+            'lastActivity' => (string)($row['last_activity'] ?? ''),
+            'pageCount' => (int)$row['page_count'],
+        ];
+    }
+    return $accounts;
+}
+
 function analytics_dashboard(PDO $pdo): array {
     analytics_ensure_schema($pdo);
     $uniq = analytics_unique_expr();
@@ -389,6 +417,22 @@ function analytics_dashboard(PDO $pdo): array {
         'analytics_session_public',
         array_slice(array_reverse(analytics_build_sessions($todayRows)), 0, 40)
     );
+    $accounts = analytics_registered_accounts($pdo);
+    $accountsByVisitor = [];
+    foreach ($accounts as $account) {
+        if ($account['visitorId'] !== '') {
+            $accountsByVisitor[$account['visitorId']] = $account;
+        }
+    }
+    foreach ($visitors as &$visitor) {
+        $account = $accountsByVisitor[$visitor['id']] ?? null;
+        if ($account) {
+            $visitor['label'] = $account['name'];
+            $visitor['accountName'] = $account['name'];
+            $visitor['accountId'] = $account['id'];
+        }
+    }
+    unset($visitor);
 
     return [
         'series' => $series,
@@ -396,6 +440,7 @@ function analytics_dashboard(PDO $pdo): array {
         'sources' => $sources,
         'cities' => $cities,
         'visitors' => $visitors,
+        'accounts' => $accounts,
         'cardsExtra' => [
             'today' => $today,
             'uniqueToday' => $uniqToday,

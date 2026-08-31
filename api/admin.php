@@ -47,7 +47,7 @@ try {
                 'total' => $x['total'], 'unread' => $unread, 'modules' => $modCount, 'faqs' => $faqCount,
             ], 'series' => $analytics['series'], 'topPages' => $analytics['topPages'],
                'sources' => $analytics['sources'], 'cities' => $analytics['cities'],
-               'visitors' => $analytics['visitors']]);
+               'visitors' => $analytics['visitors'], 'accounts' => $analytics['accounts']]);
         }
 
         case 'visitor_detail': {

@@ -24,6 +24,7 @@ function students_ensure_schema(PDO $pdo) {
     $pdo->exec("CREATE TABLE IF NOT EXISTS students (
         id INT AUTO_INCREMENT PRIMARY KEY,
         email VARCHAR(190) NOT NULL,
+        visitor_id VARCHAR(16) NOT NULL DEFAULT '',
         password_hash VARCHAR(255) NOT NULL DEFAULT '',
         name VARCHAR(160) NOT NULL DEFAULT '',
         phone VARCHAR(40) NOT NULL DEFAULT '',
@@ -35,6 +36,15 @@ function students_ensure_schema(PDO $pdo) {
         UNIQUE KEY uq_students_email (email),
         INDEX idx_students_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // Site analitiğindeki anonim ziyaretçi kimliğiyle hesabı ilişkilendirir.
+    egitmen_add_column_if_missing(
+        $pdo,
+        'students',
+        'visitor_id',
+        "VARCHAR(16) NOT NULL DEFAULT '' AFTER email"
+    );
+    students_add_index_if_missing($pdo, 'students', 'idx_students_visitor', 'visitor_id');
 
     // KVKK açık rızası (pazarlama) — kayıt formundaki isteğe bağlı onay
     egitmen_add_column_if_missing(

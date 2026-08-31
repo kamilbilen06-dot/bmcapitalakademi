@@ -73,15 +73,23 @@ a{text-decoration:none;color:inherit}
 .bar .tip{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;font-size:11px;padding:4px 8px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:.15s;margin-bottom:6px;z-index:5}
 .bar:hover .tip{opacity:1}
 .chart-x{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-top:6px}
+.chart-shell{position:relative;padding:8px 0 0}
 .line-chart{display:block;width:100%;height:auto;min-height:220px;overflow:visible}
 .chart-grid{stroke:#e8edf3;stroke-width:1}
 .chart-axis{fill:#8595a8;font-size:11px}
 .chart-line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
 .chart-line.views{stroke:var(--gold)}
 .chart-line.unique{stroke:var(--gold)}
+.chart-area{fill:url(#analyticsAreaFill)}
+.chart-hover-line{stroke:var(--gold);stroke-width:1;stroke-dasharray:4 4;opacity:.8}
 .chart-dot{stroke:#fff;stroke-width:2}
 .chart-dot.views{fill:var(--gold)}
 .chart-dot.unique{fill:var(--gold)}
+.chart-hit{fill:transparent;stroke:none;cursor:crosshair}
+.chart-point:hover .chart-dot.unique{r:6}
+.chart-tooltip{position:absolute;z-index:3;transform:translate(-50%,-115%);padding:9px 12px;border-radius:9px;background:#253449;color:#fff;box-shadow:0 8px 22px rgba(27,45,67,.22);pointer-events:none;white-space:nowrap}
+.chart-tooltip strong{display:block;font-size:13px}
+.chart-tooltip span{display:block;margin-top:3px;color:#cbd5e1;font-size:11px}
 .chart-legend{display:flex;gap:16px;color:var(--muted);font-size:12px}
 .chart-legend span:before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:currentColor}
 .legend-views{color:var(--gold)}

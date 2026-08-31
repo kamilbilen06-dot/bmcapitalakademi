@@ -89,7 +89,8 @@ try {
         (string)($info['email'] ?? ''),
         (string)($info['name'] ?? ''),
         !empty($info['email_verified']),
-        (string)($info['picture'] ?? '')
+        (string)($info['picture'] ?? ''),
+        (string)($_COOKIE['bm_vid'] ?? '')
     );
 
     if (!$result['row']) {

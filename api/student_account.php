@@ -18,6 +18,22 @@ function student_normalize_email($email) {
     return mb_strtolower(trim((string)$email));
 }
 
+function student_normalize_visitor_id($visitorId): string {
+    $clean = strtoupper(preg_replace('/[^a-f0-9]/i', '', (string)$visitorId) ?? '');
+    return strlen($clean) >= 8 ? substr($clean, 0, 16) : '';
+}
+
+function student_bind_visitor(PDO $pdo, int $studentId, $visitorId): void {
+    $visitorId = student_normalize_visitor_id($visitorId);
+    if ($studentId <= 0 || $visitorId === '') {
+        return;
+    }
+    $pdo->prepare(
+        "UPDATE students SET visitor_id = ?
+         WHERE id = ? AND (visitor_id IS NULL OR visitor_id = '')"
+    )->execute([$visitorId, $studentId]);
+}
+
 function student_find_by_email(PDO $pdo, $email) {
     $st = $pdo->prepare("SELECT * FROM students WHERE email = ? LIMIT 1");
     $st->execute([student_normalize_email($email)]);
@@ -55,20 +71,23 @@ function student_validate_registration($name, $email, $password, $password2) {
  * Yeni öğrenci oluştur. Başarılıysa satır, değilse hata metni döner.
  * @return array{row:?array, error:string}
  */
-function student_register(PDO $pdo, $name, $email, $password, $phone = '', $marketingConsent = false) {
+function student_register(PDO $pdo, $name, $email, $password, $phone = '', $marketingConsent = false, $visitorId = '') {
     $email = student_normalize_email($email);
+    $visitorId = student_normalize_visitor_id($visitorId);
     $existing = student_find_by_email($pdo, $email);
     if ($existing) {
+        student_bind_visitor($pdo, (int)$existing['id'], $visitorId);
         if (empty($existing['email_verified_at'])) {
             return ['row' => $existing, 'error' => 'unverified_exists'];
         }
         return ['row' => null, 'error' => 'Bu e-posta ile bir hesap zaten var. Giriş yapmayı deneyin.'];
     }
     $pdo->prepare(
-        "INSERT INTO students (email, password_hash, name, phone, status, marketing_consent, created_at)
-         VALUES (?,?,?,?, 'active', ?, NOW())"
+        "INSERT INTO students (email, visitor_id, password_hash, name, phone, status, marketing_consent, created_at)
+         VALUES (?,?,?,?,?,'active',?,NOW())"
     )->execute([
         $email,
+        $visitorId,
         password_hash($password, PASSWORD_DEFAULT),
         mb_substr(trim((string)$name), 0, 160),
         mb_substr(trim((string)$phone), 0, 40),
@@ -143,7 +162,8 @@ function student_login_with_identity(
     string $email,
     string $name = '',
     bool $emailVerified = false,
-    string $avatarUrl = ''
+    string $avatarUrl = '',
+    string $visitorId = ''
 ): array {
     $provider = mb_strtolower(trim($provider));
     $providerUid = trim($providerUid);
@@ -171,6 +191,7 @@ function student_login_with_identity(
         }
         student_identity_touch($pdo, $provider, $providerUid);
         student_fill_profile_gaps($pdo, $row, $name, $avatarUrl);
+        student_bind_visitor($pdo, (int)$row['id'], $visitorId);
         $pdo->prepare("UPDATE students SET last_login_at = NOW() WHERE id = ?")->execute([(int)$row['id']]);
         student_link_enrollments($pdo, (int)$row['id'], (string)$row['email']);
         return ['row' => student_find_by_id($pdo, (int)$row['id']), 'error' => '', 'created' => false];
@@ -221,6 +242,7 @@ function student_login_with_identity(
     $pdo->prepare("UPDATE students SET last_login_at = NOW(), email_verified_at = COALESCE(email_verified_at, NOW()) WHERE id = ?")
         ->execute([(int)$existing['id']]);
     student_link_enrollments($pdo, (int)$existing['id'], $email);
+    student_bind_visitor($pdo, (int)$existing['id'], $visitorId);
 
     return ['row' => student_find_by_id($pdo, (int)$existing['id']), 'error' => '', 'created' => $created];
 }
