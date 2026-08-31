@@ -25,7 +25,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         try {
             $pdo = db();
-            auth_ensure_schema($pdo);
+            try {
+                site_bootstrap_admin($pdo);
+            } catch (Throwable $e) {
+                error_log('admin login bootstrap: ' . $e->getMessage());
+            }
             $stmt = $pdo->prepare("SELECT * FROM admin_users WHERE username = ? LIMIT 1");
             $stmt->execute([$user]);
             $row = $stmt->fetch();

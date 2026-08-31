@@ -8,8 +8,11 @@ require_once __DIR__ . '/core_schema.php';
 function db() {
     static $pdo = null;
     if ($pdo === null) {
-        // Windows'ta "localhost" named pipe'a takılabiliyor; TCP daha güvenilir.
-        $host = DB_HOST === 'localhost' ? '127.0.0.1' : DB_HOST;
+        // Windows'ta localhost named pipe'a takılır; cPanel'de localhost soket gerekir.
+        $host = DB_HOST;
+        if ($host === 'localhost' && strncasecmp(PHP_OS, 'WIN', 3) === 0) {
+            $host = '127.0.0.1';
+        }
         $dsn = 'mysql:host=' . $host . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
         $opt = [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
@@ -18,9 +21,26 @@ function db() {
             PDO::ATTR_TIMEOUT            => 5,
         ];
         $pdo = new PDO($dsn, DB_USER, DB_PASS, $opt);
-        site_db_apply_timezone($pdo);
-        site_bootstrap($pdo);
-        site_migrate_datetimes_to_istanbul($pdo);
+        try {
+            site_db_apply_timezone($pdo);
+        } catch (Throwable $e) {
+            error_log('saat dilimi: ' . $e->getMessage());
+        }
+        try {
+            site_bootstrap($pdo);
+        } catch (Throwable $e) {
+            error_log('bootstrap: ' . $e->getMessage());
+        }
+        try {
+            site_migrate_datetimes_to_istanbul($pdo);
+        } catch (Throwable $e) {
+            error_log('tz migrate: ' . $e->getMessage());
+        }
+        try {
+            site_bootstrap_admin($pdo);
+        } catch (Throwable $e) {
+            error_log('admin bootstrap: ' . $e->getMessage());
+        }
     }
     return $pdo;
 }

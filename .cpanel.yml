@@ -2,7 +2,12 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/ucrjblb7bbh4/public_html
-    - /bin/cp -R * $DEPLOYPATH
+    - |
+      if [ -x /usr/bin/rsync ]; then
+        /usr/bin/rsync -a --exclude '.git' --exclude '*.local.php' --exclude 'uploads/courses' --exclude 'data/login_guard' ./ "$DEPLOYPATH"/
+      else
+        /bin/cp -R * "$DEPLOYPATH"
+      fi
     - /bin/cp -f .htaccess $DEPLOYPATH
     # cp silinen dosyaları kaldırmıyor; kullanımdan çıkanları elle temizle
     - /bin/rm -f $DEPLOYPATH/api/mail_worker.php
