@@ -108,7 +108,7 @@
     kasım: "11", aralik: "12", aralık: "12",
   };
 
-  /** "13 Nisan 2026 Pazartesi / 20:00-24:00" → "2026-04-13" */
+  /** Türkçe tarih metnini ISO tarihine dönüştür. */
   function parseTrDate(text) {
     if (!text) return null;
     var m = String(text).match(/(\d{1,2})\s+([A-Za-zÇĞİÖŞÜçğıöşü]+)\s+(\d{4})/);

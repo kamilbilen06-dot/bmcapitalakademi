@@ -27,7 +27,6 @@ function seed_faqs($pdo) {
         ['Eğitimler nasıl yapılıyor?', 'Eğitimlerimiz canlı online veya İzmir\'de yüz yüze yapılabilir. Belirtilen tarih ve saatlerde interaktif olarak katılır, sorularınızı canlı sorabilirsiniz. Grup dersi veya birebir özel ders seçenekleri mevcuttur.'],
         ['İzmir\'de borsa eğitimi veriyor musunuz?', 'Evet. BM Capital Akademi, İzmir\'de yüz yüze borsa eğitimi ve tüm Türkiye\'ye canlı online eğitim sunar. Teknik & temel analiz, takas/AKD analizi ve algoritmik trade eğitimlerine online veya İzmir yüz yüze katılabilirsiniz.'],
         ['Eğitimler yüz yüze mi online mı?', 'İkisi de. Canlı online (uzaktan) veya İzmir\'de yüz yüze eğitim alabilirsiniz. Kayıt sırasında tercihinizi belirtmeniz yeterlidir; birebir özel ders de mümkündür.'],
-        ['2026 Nisan döneminde teknik-temel eğitim ne zaman?', 'Teknik - Temel Analiz & Algoritmik Trade Eğitimi\'nin sabit grup tarihleri 13–17 Nisan 2026\'tır (her gün 20:00–24:00). Bu tarihlerde canlı online veya İzmir yüz yüze katılım mümkündür. Tarihler uymuyorsa birebir özel ders seçeneği de mevcuttur.'],
         ['Ön bilgi gerekiyor mu?', 'Hayır. Eğitim A\'dan Z\'ye kurgulanmıştır; sıfırdan başlayanlar da rahatlıkla takip edebilir.'],
         ['Ödeme nasıl yapılıyor?', 'Kart ile ödeme iyzico üzerinden yapılır (odeme.php). Havale/EFT seçerseniz dekontu iletmeniz gerekir; yönetici onayından sonra erişim açılır.'],
         ['Sertifika veriliyor mu?', 'Evet, eğitimi tamamlayan katılımcılara katılım sertifikası verilir.'],
@@ -37,6 +36,16 @@ function seed_faqs($pdo) {
     ];
     $stmt = $pdo->prepare("INSERT INTO faqs (question, answer, sort_order) VALUES (?, ?, ?)");
     foreach ($faqs as $i => $f) { $stmt->execute([$f[0], $f[1], $i]); }
+}
+
+/** Tarihsiz eğitim için eski kampanya SSS kaydını mevcut kurulumlardan kaldır. */
+function remove_archived_training_faq(PDO $pdo): void {
+    try {
+        $pdo->prepare("DELETE FROM faqs WHERE question = ?")
+            ->execute(['2026 Nisan döneminde teknik-temel eğitim ne zaman?']);
+    } catch (Throwable $e) {
+        error_log('eski eğitim SSS temizleme: ' . $e->getMessage());
+    }
 }
 
 function seed_modules($pdo) {
@@ -99,15 +108,13 @@ function seed_modules($pdo) {
             'short_desc' => "Temel analizden algoritmik trade sistemlerine kadar A'dan Z'ye yatırımcı eğitimi. Canlı online veya İzmir yüz yüze, uygulamalı.",
             'image' => 'assets/img/egitim-analiz.svg', 'video' => null, 'video_poster' => null,
             'price' => '20.000 TL', 'price_note' => '(KDV dahil)', 'duration' => '20 saat',
-            'egitim_turu' => 'Canlı Online veya İzmir Yüz Yüze Eğitim', 'instructors' => 'Dr. Mete AKYOL, Dr. Kamil BİLEN', 'etiket' => null,
-            'katilim_not' => 'Sabit tarihli grup eğitimi (online veya İzmir yüz yüze) veya size uygun zamanda birebir özel ders olarak alınabilir.',
-            'tarih_not' => 'Eğitim 5 gün sürecektir.', 'featured' => 1, 'sort_order' => 1,
+            'egitim_turu' => 'Canlı Online veya İzmir Yüz Yüze Eğitim', 'instructors' => 'Dr. Kamil BİLEN', 'etiket' => null,
+            'katilim_not' => 'Canlı online veya İzmir yüz yüze · Grup dersi veya birebir özel ders olarak alınabilir.',
+            'tarih_not' => null, 'featured' => 1, 'sort_order' => 1,
             'data' => [
                 'ozellikler' => ['Temel analiz ile şirket değerini doğru okuma','Teknik analiz ile doğru zamanlama yapabilme','AKD ve takas analizi ile kurumsal para hareketlerini yorumlama','Algoritmik düşünce yapısı kazanma','Kendi sisteminizi oluşturma ve test etme becerisi'],
                 'aciklama' => ['Finansal piyasalarda başarılı olmak tesadüf değildir.','Bilimsel yöntem, veri analizi ve disiplinli sistem gerektirir.','Bu eğitim, yatırım kararlarınızı duygusal değil analitik temelde alabilmeniz için tasarlanmıştır. Riskini yöneten ve sürdürülebilir getiri hedefleyen yatırımcılar için idealdir.'],
-                'hediye' => ['Dr. Mete Akyol\'un "Metematiksel Analiz" Kitabı','1 Aylık Ücretsiz WhatsApp Analiz Grubu Üyeliği'],
-                'hediyeGorsel' => 'https://img.kitapyurdu.com/v1/getImage/fn:12073531/wi:220/wh:cb88d3c67',
-                'tarihler' => ['13 Nisan 2026 Pazartesi / 20:00-24:00','14 Nisan 2026 Salı / 20:00-24:00','15 Nisan 2026 Çarşamba / 20:00-24:00','16 Nisan 2026 Perşembe / 20:00-24:00','17 Nisan 2026 Cuma / 20:00-24:00+'],
+                'hediye' => [], 'hediyeGorsel' => '', 'tarihler' => [],
                 'mufredat' => $mufredat1,
             ],
         ],
@@ -199,6 +206,48 @@ function seed_modules($pdo) {
             ':featured' => $m['featured'], ':sort_order' => $m['sort_order'],
             ':data' => json_encode($m['data'], JSON_UNESCAPED_UNICODE),
         ]);
+    }
+}
+
+/** Tarihli kampanya eğitimini normal, tarihsiz Kamil Bilen eğitimine dönüştür. */
+function normalize_technical_basic_course(PDO $pdo): void {
+    try {
+        $st = $pdo->prepare(
+            "SELECT id, instructors, katilim_not, tarih_not, data
+             FROM modules WHERE slug = ? LIMIT 1"
+        );
+        $st->execute(['teknik-temel-algoritmik']);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return;
+        }
+
+        $data = json_decode((string)($row['data'] ?? ''), true);
+        if (!is_array($data)) {
+            $data = [];
+        }
+        $data['hediye'] = [];
+        $data['hediyeGorsel'] = '';
+        $data['tarihler'] = [];
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+        $katilimNot = 'Canlı online veya İzmir yüz yüze · Grup dersi veya birebir özel ders olarak alınabilir.';
+
+        if (
+            (string)$row['instructors'] === 'Dr. Kamil BİLEN'
+            && (string)$row['katilim_not'] === $katilimNot
+            && trim((string)$row['tarih_not']) === ''
+            && (string)$row['data'] === (string)$json
+        ) {
+            return;
+        }
+
+        $pdo->prepare(
+            "UPDATE modules
+             SET instructors = ?, katilim_not = ?, tarih_not = NULL, data = ?
+             WHERE id = ?"
+        )->execute(['Dr. Kamil BİLEN', $katilimNot, $json, (int)$row['id']]);
+    } catch (Throwable $e) {
+        error_log('teknik eğitim normalleştirme: ' . $e->getMessage());
     }
 }
 

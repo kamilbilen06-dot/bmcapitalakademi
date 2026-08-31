@@ -14,6 +14,8 @@ header('Access-Control-Allow-Origin: *');
 
 try {
     $pdo = db();
+    normalize_technical_basic_course($pdo);
+    remove_archived_training_faq($pdo);
     egitmen_ensure_schema($pdo);
     instructors_ensure_schema($pdo);
     auth_ensure_schema($pdo);
