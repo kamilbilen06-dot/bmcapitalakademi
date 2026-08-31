@@ -29,6 +29,13 @@ if (!defined('DB_CHARSET')) {
     define('DB_CHARSET', 'utf8mb4');
 }
 
+if (!defined('BOOTSTRAP_ADMIN_USER')) {
+    define('BOOTSTRAP_ADMIN_USER', 'admin');
+}
+if (!defined('BOOTSTRAP_ADMIN_PASS')) {
+    define('BOOTSTRAP_ADMIN_PASS', 'admin123');
+}
+
 if (!defined('INSTALL_LOCKED')) {
     define('INSTALL_LOCKED', true);
 }
