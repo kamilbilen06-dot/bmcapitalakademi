@@ -385,13 +385,23 @@
   }
 
   // --- Ziyaretçi takibi (yönetim paneli istatistikleri) ---
+  function readVisitorId() {
+    var match = document.cookie.match(/(?:^|;\s*)bm_vid=([A-Fa-f0-9]{8,16})/);
+    return match ? match[1] : "";
+  }
+
   function trackVisit() {
     if (!window.fetch) return;
     try {
       fetch(apiBase + "track.php", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: location.pathname }),
+        body: JSON.stringify({
+          path: location.pathname,
+          title: document.title,
+          referrer: document.referrer,
+          visitor_id: readVisitorId(),
+        }),
         credentials: "same-origin",
         keepalive: true,
       }).catch(function () {});

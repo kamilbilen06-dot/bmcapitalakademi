@@ -267,7 +267,7 @@ $img = trim((string)($course['image_path'] ?? ''));
   <script src="assets/js/feature-flags.js"></script>
   <script src="assets/js/data.js"></script>
   <script src="assets/js/catalog.js"></script>
-  <script src="assets/js/main.js?v=20260830c"></script>
+  <script src="assets/js/main.js?v=20260831a"></script>
   <script>
   (function () {
     var form = document.getElementById("payForm");

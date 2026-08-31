@@ -13,6 +13,7 @@ require_once __DIR__ . '/instructor_account.php';
 require_once __DIR__ . '/subscriptions.php';
 require_once __DIR__ . '/students_schema.php';
 require_once __DIR__ . '/student_account.php';
+require_once __DIR__ . '/analytics.php';
 
 require_site_admin();
 $sessionAdminId = (int)($_SESSION['admin_id'] ?? 0);
@@ -28,46 +29,34 @@ auth_ensure_schema($pdo);
 payments_ensure_schema($pdo);
 subscriptions_ensure_schema($pdo);
 students_ensure_schema($pdo);
+analytics_ensure_schema($pdo);
 
 try {
     switch ($action) {
 
         // ---------- DASHBOARD ----------
         case 'stats': {
-            $today = (int)$pdo->query("SELECT COUNT(*) FROM page_views WHERE DATE(created_at) = CURDATE()")->fetchColumn();
-            $uniqToday = (int)$pdo->query("SELECT COUNT(DISTINCT ip) FROM page_views WHERE DATE(created_at) = CURDATE()")->fetchColumn();
-            $week = (int)$pdo->query("SELECT COUNT(*) FROM page_views WHERE created_at > (NOW() - INTERVAL 7 DAY)")->fetchColumn();
-            $total = (int)$pdo->query("SELECT COUNT(*) FROM page_views")->fetchColumn();
+            $analytics = analytics_dashboard($pdo);
+            $x = $analytics['cardsExtra'];
             $unread = (int)$pdo->query("SELECT COUNT(*) FROM contacts WHERE is_read = 0")->fetchColumn();
             $modCount = (int)$pdo->query("SELECT COUNT(*) FROM modules")->fetchColumn();
             $faqCount = (int)$pdo->query("SELECT COUNT(*) FROM faqs")->fetchColumn();
 
-            // Son 30 gün günlük görüntüleme
-            $daily = [];
-            $rows = $pdo->query("SELECT DATE(created_at) d, COUNT(*) c, COUNT(DISTINCT ip) u
-                FROM page_views WHERE created_at > (NOW() - INTERVAL 30 DAY)
-                GROUP BY DATE(created_at) ORDER BY d ASC")->fetchAll();
-            foreach ($rows as $r) { $daily[$r['d']] = ['views' => (int)$r['c'], 'unique' => (int)$r['u']]; }
-
-            $series = [];
-            for ($i = 29; $i >= 0; $i--) {
-                $d = date('Y-m-d', strtotime("-$i day"));
-                $series[] = [
-                    'date' => $d,
-                    'views' => $daily[$d]['views'] ?? 0,
-                    'unique' => $daily[$d]['unique'] ?? 0,
-                ];
-            }
-
-            // En çok görüntülenen sayfalar (son 30 gün)
-            $topPages = $pdo->query("SELECT path, COUNT(*) c FROM page_views
-                WHERE created_at > (NOW() - INTERVAL 30 DAY) AND path <> ''
-                GROUP BY path ORDER BY c DESC LIMIT 8")->fetchAll();
-
             json_out(['ok' => true, 'csrf' => $csrfToken, 'cards' => [
-                'today' => $today, 'uniqueToday' => $uniqToday, 'week' => $week,
-                'total' => $total, 'unread' => $unread, 'modules' => $modCount, 'faqs' => $faqCount,
-            ], 'series' => $series, 'topPages' => $topPages]);
+                'today' => $x['today'], 'uniqueToday' => $x['uniqueToday'], 'week' => $x['week'],
+                'total' => $x['total'], 'unread' => $unread, 'modules' => $modCount, 'faqs' => $faqCount,
+            ], 'series' => $analytics['series'], 'topPages' => $analytics['topPages'],
+               'sources' => $analytics['sources'], 'cities' => $analytics['cities'],
+               'visitors' => $analytics['visitors']]);
+        }
+
+        case 'visitor_detail': {
+            $id = (string)($_GET['id'] ?? '');
+            $item = analytics_visitor_detail($pdo, $id);
+            if (!$item) {
+                json_out(['ok' => false, 'error' => 'Ziyaretçi bulunamadı'], 404);
+            }
+            json_out(['ok' => true, 'item' => $item]);
         }
 
         case 'csrf': {

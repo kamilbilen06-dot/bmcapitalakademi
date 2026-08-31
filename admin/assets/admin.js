@@ -18,6 +18,7 @@
 
   var VIEWS = {
     dashboard: "Panel",
+    istatistik: "Ziyaretçi Analizi",
     egitimler: "Eğitimler",
     egitmenler: "Eğitmenler",
     ogrenciler: "Öğrenciler",
@@ -212,36 +213,134 @@
   renderers.dashboard = function () {
     get("stats").then(function (d) {
       if (!d.ok) return;
-      var c = d.cards;
-      updateUnread(c.unread);
-      var max = 1;
-      d.series.forEach(function (s) { if (s.views > max) max = s.views; });
-      var bars = d.series.map(function (s) {
-        var h = Math.round((s.views / max) * 100);
-        var lbl = s.date.slice(8) + "." + s.date.slice(5, 7);
-        return '<div class="bar" style="height:' + h + '%"><span class="tip">' + lbl + ": " + s.views + " görüntüleme · " + s.unique + " tekil</span></div>";
-      }).join("");
-      var first = d.series[0].date, last = d.series[d.series.length - 1].date;
-      var topRows = d.topPages.length
-        ? d.topPages.map(function (p) { return "<tr><td>" + esc(p.path || "/") + '</td><td style="text-align:right">' + p.c + "</td></tr>"; }).join("")
-        : '<tr><td colspan="2" class="empty">Henüz veri yok</td></tr>';
-
-      el.wrap.innerHTML =
-        '<div class="stat-grid">' +
-        card("Bugün", c.today, c.uniqueToday + " tekil ziyaretçi", true) +
-        card("Son 7 Gün", c.week, "sayfa görüntüleme") +
-        card("Toplam", c.total, "tüm zamanlar") +
-        card("İçerik", c.modules, c.faqs + " S.S.S.") +
-        "</div>" +
-        '<div class="panel"><div class="panel-head"><h3>Son 30 Gün · Günlük Görüntüleme</h3></div><div class="panel-body">' +
-        '<div class="chart">' + bars + "</div>" +
-        '<div class="chart-x"><span>' + first.slice(5) + "</span><span>" + last.slice(5) + "</span></div>" +
-        "</div></div>" +
-        '<div class="panel"><div class="panel-head"><h3>En Çok Görüntülenen Sayfalar</h3></div><div class="panel-body table-wrap">' +
-        '<table><thead><tr><th>Sayfa</th><th style="text-align:right">Görüntüleme</th></tr></thead><tbody>' + topRows + "</tbody></table>" +
-        "</div></div>";
+      renderAnalytics(d, true);
     });
   };
+
+  function formatDuration(seconds) {
+    seconds = Math.max(0, parseInt(seconds, 10) || 0);
+    var minutes = Math.floor(seconds / 60);
+    var rest = seconds % 60;
+    if (!minutes) return rest + " sn";
+    return minutes + " dk" + (rest ? " " + rest + " sn" : "");
+  }
+
+  function statusLabel(status) {
+    if (status === "İnceliyor") return "🎓 İnceliyor";
+    if (status === "Ürün baktı") return "🛒 Ürün baktı";
+    if (status === "Geziyor") return "👀 Geziyor";
+    return "❌ Ayrıldı";
+  }
+
+  function lineChart(series) {
+    series = series || [];
+    var width = 920, height = 280, left = 48, right = 18, top = 20, bottom = 38;
+    var plotW = width - left - right, plotH = height - top - bottom;
+    var max = 1;
+    series.forEach(function (s) {
+      max = Math.max(max, Number(s.views) || 0, Number(s.unique) || 0);
+    });
+    function x(i) {
+      return left + (series.length <= 1 ? plotW / 2 : i * plotW / (series.length - 1));
+    }
+    function y(value) {
+      return top + plotH - ((Number(value) || 0) / max) * plotH;
+    }
+    function polyline(key) {
+      return series.map(function (s, i) { return x(i).toFixed(1) + "," + y(s[key]).toFixed(1); }).join(" ");
+    }
+    function dots(key, cls) {
+      return series.map(function (s, i) {
+        return '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(s[key]).toFixed(1) + '" r="3" class="chart-dot ' + cls + '">' +
+          '<title>' + esc(String(s.date || "")) + ": " + (Number(s[key]) || 0) + "</title></circle>";
+      }).join("");
+    }
+    var grid = [0, 0.25, 0.5, 0.75, 1].map(function (ratio) {
+      var gy = top + plotH - ratio * plotH;
+      return '<line x1="' + left + '" y1="' + gy + '" x2="' + (width - right) + '" y2="' + gy + '" class="chart-grid"></line>' +
+        '<text x="' + (left - 8) + '" y="' + (gy + 4) + '" text-anchor="end" class="chart-axis">' + Math.round(max * ratio) + "</text>";
+    }).join("");
+    var labels = series.map(function (s, i) {
+      if (i !== 0 && i !== series.length - 1 && i % 5 !== 0) return "";
+      return '<text x="' + x(i) + '" y="' + (height - 10) + '" text-anchor="middle" class="chart-axis">' +
+        esc(String(s.date || "").slice(5)) + "</text>";
+    }).join("");
+    return '<svg class="line-chart" viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="Günlük sayfa görüntüleme ve tekil ziyaretçi grafiği">' +
+      grid + labels +
+      '<polyline points="' + polyline("views") + '" class="chart-line views"></polyline>' +
+      '<polyline points="' + polyline("unique") + '" class="chart-line unique"></polyline>' +
+      dots("views", "views") + dots("unique", "unique") +
+      "</svg>";
+  }
+
+  function visitorRows(visitors) {
+    if (!visitors || !visitors.length) {
+      return "<tr><td colspan='7' class='empty'>Bugün henüz ziyaretçi yok.</td></tr>";
+    }
+    return visitors.map(function (v) {
+      return '<tr class="visitor-row" data-visitor-detail="' + esc(v.id || "") + '">' +
+        "<td><strong>" + esc(v.label || "Ziyaretçi") + "</strong></td>" +
+        "<td>" + esc(fmtDate(v.first || "").slice(-5)) + "</td>" +
+        "<td>" + esc(fmtDate(v.last || "").slice(-5)) + "</td>" +
+        "<td>" + esc(v.lastPage || "—") + "</td>" +
+        "<td>" + esc(formatDuration(v.durationSeconds)) + "</td>" +
+        "<td>" + esc(statusLabel(v.status)) + "</td>" +
+        "<td>" + (v.purchase ? "✓" : "—") + "</td></tr>";
+    }).join("");
+  }
+
+  function renderAnalytics(d, includeCards) {
+    var c = d.cards || {};
+    updateUnread(c.unread || 0);
+    var sources = (d.sources || []).map(function (s) {
+      return '<div class="source-row"><div><span>' + esc(s.name) + '</span><strong>' + (Number(s.pct) || 0) + '%</strong></div>' +
+        '<div class="source-track"><span style="width:' + Math.min(100, Number(s.pct) || 0) + '%"></span></div></div>';
+    }).join("") || '<p class="empty">Henüz kaynak verisi yok.</p>';
+    var cities = (d.cities || []).map(function (city) {
+      return "<tr><td>" + esc(city.name || "Bilinmiyor") + "</td><td class='num'>" + (Number(city.count) || 0) + "</td></tr>";
+    }).join("") || "<tr><td colspan='2' class='empty'>Henüz şehir verisi yok.</td></tr>";
+    var topRows = (d.topPages || []).map(function (p) {
+      return "<tr><td>" + esc(p.path || "/") + "</td><td class='num'>" + (Number(p.c) || 0) + "</td></tr>";
+    }).join("") || '<tr><td colspan="2" class="empty">Henüz veri yok</td></tr>';
+    var cards = includeCards
+      ? '<div class="stat-grid">' +
+        card("Bugün", c.today || 0, (c.uniqueToday || 0) + " tekil ziyaretçi", true) +
+        card("Son 7 Gün", c.week || 0, "sayfa görüntüleme") +
+        card("Toplam", c.total || 0, "tüm zamanlar") +
+        card("İçerik", c.modules || 0, (c.faqs || 0) + " S.S.S.") +
+        "</div>"
+      : "";
+
+    el.wrap.innerHTML = cards +
+      '<div class="panel"><div class="panel-head"><h3>Son 30 Gün · Sayfa Görüntüleme ve Tekil Ziyaretçi</h3><div class="chart-legend"><span class="legend-views">Sayfa görüntüleme</span><span class="legend-unique">Tekil ziyaretçi</span></div></div><div class="panel-body">' +
+      lineChart(d.series) + "</div></div>" +
+      '<div class="analytics-grid">' +
+      '<div class="panel"><div class="panel-head"><h3>Ziyaretçi Nereden Geliyor?</h3></div><div class="panel-body source-list">' + sources + "</div></div>" +
+      '<div class="panel"><div class="panel-head"><h3>Şehir</h3></div><div class="panel-body table-wrap"><table><thead><tr><th>Şehir</th><th class="num">Ziyaretçi</th></tr></thead><tbody>' + cities + "</tbody></table></div></div>" +
+      "</div>" +
+      '<div class="panel"><div class="panel-head"><h3>Son Ziyaretçiler</h3><span class="hint">Detay için satıra tıklayın</span></div><div class="panel-body table-wrap"><table><thead><tr><th>Ziyaretçi</th><th>İlk geliş</th><th>Son aktivite</th><th>Gezdiği sayfa</th><th>Süre</th><th>Durum</th><th>Satın alma</th></tr></thead><tbody>' +
+      visitorRows(d.visitors) + "</tbody></table></div></div>" +
+      '<div class="panel"><div class="panel-head"><h3>En Çok Görüntülenen Sayfalar</h3></div><div class="panel-body table-wrap"><table><thead><tr><th>Sayfa</th><th class="num">Görüntüleme</th></tr></thead><tbody>' + topRows + "</tbody></table></div></div>";
+
+    el.wrap.querySelectorAll("[data-visitor-detail]").forEach(function (row) {
+      row.addEventListener("click", function () {
+        get("visitor_detail", { id: row.getAttribute("data-visitor-detail") }).then(function (result) {
+          if (result.ok) {
+            var item = result.item;
+            var events = (item.events || []).map(function (event) {
+              return "<tr><td>" + esc(fmtDate(event.time)) + "</td><td>" + esc(event.page) + "</td></tr>";
+            }).join("");
+            openModal(item.label || "Ziyaretçi", '<div class="visitor-summary"><strong>Toplam süre:</strong> ' + esc(formatDuration(item.durationSeconds)) +
+              ' · <strong>Sayfa:</strong> ' + esc(item.pageCount) + ' · <strong>Satın alma:</strong> ' + (item.purchase ? "✓ Evet" : "✕ Hayır") +
+              '</div><div class="table-wrap"><table><thead><tr><th>Zaman</th><th>Sayfa</th></tr></thead><tbody>' + events + "</tbody></table></div>");
+          } else {
+            toast(result.error || "Ziyaretçi detayı alınamadı", "err");
+          }
+        });
+      });
+    });
+  }
+
   function card(label, num, sub, gold) {
     return '<div class="stat-card' + (gold ? " gold" : "") + '"><div class="label">' + label + '</div><div class="num">' + num + '</div><div class="sub">' + sub + "</div></div>";
   }
@@ -759,23 +858,7 @@
   renderers.istatistik = function () {
     get("stats").then(function (d) {
       if (!d.ok) return;
-      var max = 1; d.series.forEach(function (s) { if (s.views > max) max = s.views; });
-      var bars = d.series.map(function (s) {
-        var h = Math.round((s.views / max) * 100);
-        var lbl = s.date.slice(8) + "." + s.date.slice(5, 7);
-        return '<div class="bar" style="height:' + h + '%"><span class="tip">' + lbl + ": " + s.views + " · " + s.unique + " tekil</span></div>";
-      }).join("");
-      var tableRows = d.series.slice().reverse().filter(function (s) { return s.views > 0; }).map(function (s) {
-        return "<tr><td>" + s.date + "</td><td style='text-align:right'>" + s.views + "</td><td style='text-align:right'>" + s.unique + "</td></tr>";
-      }).join("") || "<tr><td colspan='3' class='empty'>Henüz ziyaret kaydı yok.</td></tr>";
-      el.wrap.innerHTML =
-        '<div class="stat-grid">' +
-        card("Bugün", d.cards.today, d.cards.uniqueToday + " tekil", true) +
-        card("Son 7 Gün", d.cards.week, "görüntüleme") +
-        card("Toplam", d.cards.total, "tüm zamanlar") +
-        "</div>" +
-        '<div class="panel"><div class="panel-head"><h3>Günlük Görüntüleme (30 gün)</h3></div><div class="panel-body"><div class="chart">' + bars + "</div></div></div>" +
-        '<div class="panel"><div class="panel-head"><h3>Gün Gün Detay</h3></div><div class="table-wrap"><table><thead><tr><th>Tarih</th><th style="text-align:right">Görüntüleme</th><th style="text-align:right">Tekil</th></tr></thead><tbody>' + tableRows + "</tbody></table></div></div>";
+      renderAnalytics(d, true);
     });
   };
 

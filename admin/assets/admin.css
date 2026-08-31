@@ -73,6 +73,28 @@ a{text-decoration:none;color:inherit}
 .bar .tip{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;font-size:11px;padding:4px 8px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:.15s;margin-bottom:6px;z-index:5}
 .bar:hover .tip{opacity:1}
 .chart-x{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-top:6px}
+.line-chart{display:block;width:100%;height:auto;min-height:220px;overflow:visible}
+.chart-grid{stroke:#e8edf3;stroke-width:1}
+.chart-axis{fill:#8595a8;font-size:11px}
+.chart-line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.chart-line.views{stroke:var(--gold)}
+.chart-line.unique{stroke:#3276d2}
+.chart-dot{stroke:#fff;stroke-width:2}
+.chart-dot.views{fill:var(--gold)}
+.chart-dot.unique{fill:#3276d2}
+.chart-legend{display:flex;gap:16px;color:var(--muted);font-size:12px}
+.chart-legend span:before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:currentColor}
+.legend-views{color:var(--gold)}
+.legend-unique{color:#3276d2}
+.analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.source-list{display:flex;flex-direction:column;gap:14px}
+.source-row>div:first-child{display:flex;justify-content:space-between;gap:12px;font-size:14px}
+.source-row strong{color:var(--navy)}
+.source-track{height:7px;background:#edf1f6;border-radius:10px;margin-top:7px;overflow:hidden}
+.source-track span{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-2));border-radius:10px}
+.visitor-row{cursor:pointer}
+.visitor-row:hover td{background:#fff9ed}
+.visitor-summary{padding:0 0 18px;color:#48566a;font-size:14px}
 
 /* ---------- TABLE ---------- */
 .table-wrap{overflow-x:auto}
@@ -154,4 +176,6 @@ td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
   .content{margin-left:0}
   .menu-toggle{display:block}
   .form-grid{grid-template-columns:1fr}
+  .analytics-grid{grid-template-columns:1fr}
+  .chart-legend{flex-wrap:wrap;margin-top:8px}
 }
