@@ -345,17 +345,20 @@ window.BM_DATA.tumModuller = function () {
   return [].concat(window.BM_DATA.egitimler, window.BM_DATA.urunler);
 };
 
-/** API kullanılamazsa pasif özellikleri yedek veriden temizle. */
+/** Mete pasifken yedek veriyi temizle (aktif için feature-flags.js + api/feature_flags.php). */
 (function applyMeteDataFilter() {
   var flags = window.BM_FLAGS || {};
+  if (flags.meteAkyolActive) return;
   var D = window.BM_DATA;
   if (!D) return;
 
-  var meteActive = !!flags.meteAkyolActive;
-  var giftActive = !!flags.metematikselHediyeActive;
-  var nisanActive = !!flags.nisan2026Active;
+  // Arşiv — aktif edilince bu değerler tekrar kullanılır (data.js kaynak + flag true)
+  D._meteArchive = {
+    instagram: D.site && D.site.instagram,
+    twitter: D.site && D.site.twitter,
+  };
 
-  if (!meteActive && D.site) {
+  if (D.site) {
     var ig = D.site.instagram || "";
     var tw = D.site.twitter || "";
     if (/meteakyol|DrMeteAkyol/i.test(ig)) D.site.instagram = "";
@@ -373,25 +376,17 @@ window.BM_DATA.tumModuller = function () {
   }
 
   (D.egitimler || []).forEach(function (e) {
-    if (!meteActive && e.egitmenler) e.egitmenler = stripMeteInstructors(e.egitmenler);
-    if (!giftActive) {
-      e.hediye = [];
-      e.hediyeGorsel = "";
-    }
+    if (e.egitmenler) e.egitmenler = stripMeteInstructors(e.egitmenler);
+    e.hediye = [];
+    e.hediyeGorsel = "";
   });
-  if (!nisanActive) {
-    D.egitimler = (D.egitimler || []).filter(function (e) {
-      return e.id !== "teknik-temel-algoritmik";
-    });
-  }
 
   if (Array.isArray(D.sss)) {
     D.sss = D.sss.filter(function (f) {
       var q = String((f && f.soru) || "").toLowerCase();
       var a = String((f && f.cevap) || "").toLowerCase();
-      if (!giftActive && q.indexOf("hediye") !== -1) return false;
-      if (!meteActive && !giftActive &&
-          (a.indexOf("mete") !== -1 || a.indexOf("metematiksel") !== -1)) return false;
+      if (q.indexOf("hediye") !== -1) return false;
+      if (a.indexOf("mete") !== -1 || a.indexOf("metematiksel") !== -1) return false;
       return true;
     });
   }

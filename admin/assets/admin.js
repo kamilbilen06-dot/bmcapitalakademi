@@ -1275,22 +1275,6 @@
           '<option value="1"' + ((s.nav_araclar || "0") === "1" ? " selected" : "") + ">Açık</option>" +
         "</select></div>" +
         "</div>" +
-        '<h3 style="margin:22px 0 4px;font-size:15px">Arşivlenebilir içerikler</h3>' +
-        '<p class="hint" style="margin:0 0 12px">Geçmiş kampanyalar varsayılan olarak pasiftir. İleride tekrar kullanmak için buradan açabilirsiniz.</p>' +
-        '<div class="form-grid">' +
-        '<div class="field"><label>13–17 Nisan 2026 eğitimi</label><select name="feature_nisan_2026">' +
-          '<option value="0"' + ((s.feature_nisan_2026 || "0") !== "1" ? " selected" : "") + ">Pasif</option>" +
-          '<option value="1"' + ((s.feature_nisan_2026 || "0") === "1" ? " selected" : "") + ">Aktif</option>" +
-        "</select></div>" +
-        '<div class="field"><label>Dr. Mete Akyol</label><select name="feature_mete_akyol">' +
-          '<option value="0"' + ((s.feature_mete_akyol || "0") !== "1" ? " selected" : "") + ">Pasif</option>" +
-          '<option value="1"' + ((s.feature_mete_akyol || "0") === "1" ? " selected" : "") + ">Aktif</option>" +
-        "</select></div>" +
-        '<div class="field"><label>Metematiksel Analiz kitabı / hediyeler</label><select name="feature_metematiksel_hediye">' +
-          '<option value="0"' + ((s.feature_metematiksel_hediye || "0") !== "1" ? " selected" : "") + ">Pasif</option>" +
-          '<option value="1"' + ((s.feature_metematiksel_hediye || "0") === "1" ? " selected" : "") + ">Aktif</option>" +
-        "</select></div>" +
-        "</div>" +
         '<h3 style="margin:22px 0 4px;font-size:15px">WhatsApp grubu aboneliği</h3>' +
         '<p class="hint" style="margin:0 0 12px">iyzico Subscription ile karttan periyodik çekim. Sandbox’ta günlük, canlıda aylık. Grup linki sitede yayınlanmaz; üyeleri Abonelikler sekmesinden görürsünüz.</p>' +
         '<div class="form-grid">' +
@@ -1349,7 +1333,7 @@
       document.getElementById("setForm").onsubmit = function (e) {
         e.preventDefault();
         var f = e.target, out = {};
-        ["marka", "sehir", "telefon", "whatsapp", "instagram", "twitter", "banka", "hesap_adi", "iban", "instructor_share_pct", "emailjs_public", "emailjs_service", "emailjs_template", "emailjs_to", "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from", "smtp_from_name", "sub_enabled", "sub_title", "sub_price", "sub_blurb", "sub_instructor_id", "satici_unvan", "satici_adres", "satici_vergi", "satici_mersis", "nav_hakkimizda", "nav_sss", "nav_iletisim", "nav_araclar", "feature_nisan_2026", "feature_mete_akyol", "feature_metematiksel_hediye"].forEach(function (k) { if (f[k]) out[k] = f[k].value; });
+        ["marka", "sehir", "telefon", "whatsapp", "instagram", "twitter", "banka", "hesap_adi", "iban", "instructor_share_pct", "emailjs_public", "emailjs_service", "emailjs_template", "emailjs_to", "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from", "smtp_from_name", "sub_enabled", "sub_title", "sub_price", "sub_blurb", "sub_instructor_id", "satici_unvan", "satici_adres", "satici_vergi", "satici_mersis", "nav_hakkimizda", "nav_sss", "nav_iletisim", "nav_araclar"].forEach(function (k) { if (f[k]) out[k] = f[k].value; });
         post("settings_save", out).then(function (r) { toast(r.ok ? "Ayarlar kaydedildi" : (r.error || "Hata"), r.ok ? "ok" : "err"); });
       };
       document.getElementById("pwForm").onsubmit = function (e) {

@@ -264,10 +264,10 @@ $img = trim((string)($course['image_path'] ?? ''));
   <div id="site-footer"></div>
   <div id="site-floaters"></div>
 
-  <script src="assets/js/feature-flags.js?v=20260830b"></script>
+  <script src="assets/js/feature-flags.js"></script>
   <script src="assets/js/data.js"></script>
   <script src="assets/js/catalog.js"></script>
-  <script src="assets/js/main.js?v=20260830d"></script>
+  <script src="assets/js/main.js?v=20260830c"></script>
   <script>
   (function () {
     var form = document.getElementById("payForm");

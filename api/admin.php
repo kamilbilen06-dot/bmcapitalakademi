@@ -494,17 +494,12 @@ try {
                     $s[$nk] = $nk === 'nav_araclar' ? '1' : '0';
                 }
             }
-            foreach (['feature_nisan_2026', 'feature_mete_akyol', 'feature_metematiksel_hediye'] as $fk) {
-                if (!isset($s[$fk]) || trim((string)$s[$fk]) === '') {
-                    $s[$fk] = '0';
-                }
-            }
             json_out(['ok' => true, 'settings' => $s, 'instructors' => admin_filter_instructors($pdo)]);
         }
 
         case 'settings_save': {
             $in = body_json();
-            $allowed = ['marka','sehir','telefon','whatsapp','instagram','twitter','iban','banka','hesap_adi','emailjs_public','emailjs_service','emailjs_template','emailjs_to','smtp_host','smtp_port','smtp_secure','smtp_user','smtp_pass','smtp_from','smtp_from_name','instructor_share_pct','sub_enabled','sub_title','sub_price','sub_blurb','sub_instructor_id','satici_unvan','satici_adres','satici_vergi','satici_mersis','nav_hakkimizda','nav_sss','nav_iletisim','nav_araclar','feature_nisan_2026','feature_mete_akyol','feature_metematiksel_hediye'];
+            $allowed = ['marka','sehir','telefon','whatsapp','instagram','twitter','iban','banka','hesap_adi','emailjs_public','emailjs_service','emailjs_template','emailjs_to','smtp_host','smtp_port','smtp_secure','smtp_user','smtp_pass','smtp_from','smtp_from_name','instructor_share_pct','sub_enabled','sub_title','sub_price','sub_blurb','sub_instructor_id','satici_unvan','satici_adres','satici_vergi','satici_mersis','nav_hakkimizda','nav_sss','nav_iletisim','nav_araclar'];
             $stmt = $pdo->prepare("INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)");
             foreach ($allowed as $k) {
                 if (!array_key_exists($k, $in)) {
@@ -530,10 +525,6 @@ try {
                     continue;
                 }
                 if ($k === 'sub_enabled' || str_starts_with($k, 'nav_')) {
-                    $stmt->execute([$k, trim((string)$in[$k]) === '1' ? '1' : '0']);
-                    continue;
-                }
-                if (in_array($k, ['feature_nisan_2026', 'feature_mete_akyol', 'feature_metematiksel_hediye'], true)) {
                     $stmt->execute([$k, trim((string)$in[$k]) === '1' ? '1' : '0']);
                     continue;
                 }
