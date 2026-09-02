@@ -137,7 +137,7 @@ $js = str_replace('</script>', '<\/script>', $js);
     }, 3000);
   </script>
   <script src="/assets/js/photo-crop.js?v=20260801a"></script>
-  <script type="module" src="/egitmen/assets/video-compress.js?v=20260902a"></script>
+  <script type="module" src="/egitmen/assets/video-compress.js?v=20260902b"></script>
   <script>window.BM_ADMIN_CSRF = <?= json_encode($csrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_SLASHES) ?>;</script>
   <script>
 <?= $js ?>

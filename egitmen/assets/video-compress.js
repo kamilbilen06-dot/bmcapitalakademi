@@ -53,7 +53,10 @@ function ensureFfmpeg(onProgress) {
   if (loadPromise) return loadPromise;
   loadPromise = (async function () {
     if (onProgress) onProgress(0, "Sıkıştırma aracı yükleniyor…");
-    ffmpeg = new FFmpeg();
+    var workerUrl =
+      (typeof location !== "undefined" ? location.origin : "") +
+      "/egitmen/assets/ffmpeg/esm/worker.js";
+    ffmpeg = new FFmpeg({ classWorkerURL: workerUrl });
     ffmpeg.on("progress", function (ev) {
       var p = ev && ev.progress;
       if (onProgress && p >= 0 && p <= 1) {
