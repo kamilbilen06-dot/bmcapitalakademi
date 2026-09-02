@@ -167,16 +167,27 @@
   function loadCourses() {
     return api("courses_list").then(function (d) {
       state.courses = d.items || [];
+      var current = parseInt(state.courseId, 10) || 0;
       var saved = 0;
       try {
         saved = parseInt(localStorage.getItem("egitmen_course_id") || "0", 10);
       } catch (e) {}
-      if (saved && state.courses.some(function (c) { return Number(c.id) === saved; })) {
-        state.courseId = saved;
+      var pick = 0;
+      if (current && state.courses.some(function (c) { return Number(c.id) === current; })) {
+        pick = current;
+      } else if (saved && state.courses.some(function (c) { return Number(c.id) === saved; })) {
+        pick = saved;
       } else if (state.courses[0]) {
-        state.courseId = state.courses[0].id;
-      } else {
-        state.courseId = 0;
+        pick = state.courses[0].id;
+      } else if (current) {
+        // Eski courses_list yanıtı geç gelirse seçili kursu koru
+        pick = current;
+      }
+      state.courseId = pick;
+      if (pick) {
+        try {
+          localStorage.setItem("egitmen_course_id", String(pick));
+        } catch (e) {}
       }
       refreshPicker();
       updateNavEnabled();
@@ -1143,7 +1154,11 @@
       toast("Dosya seçin", true);
       return;
     }
-    if (!state.courseId) return;
+    var courseId = parseInt(state.courseId, 10) || 0;
+    if (!courseId) {
+      toast("Önce bir kurs seçin veya oluşturun", true);
+      return;
+    }
 
     var showBar = kind === "image" || kind === "promo";
     var isLecture = kind === "lecture";
@@ -1157,7 +1172,7 @@
     var send = function (dur) {
       var fd = new FormData();
       fd.append("file", file);
-      fd.append("course_id", String(state.courseId));
+      fd.append("course_id", String(courseId));
       fd.append("kind", kind);
       if (lectureId) fd.append("lecture_id", String(lectureId));
       if (dur > 0) fd.append("duration_sec", String(dur));
@@ -1930,11 +1945,16 @@
         var resLecId = parseInt(resFile, 10);
         var resF = t.files && t.files[0];
         if (!resF) return;
+        var resCourseId = parseInt(state.courseId, 10) || 0;
+        if (!resCourseId) {
+          toast("Önce bir kurs seçin veya oluşturun", true);
+          return;
+        }
         expandedLecIds[resLecId] = true;
         expandedLecIds[resLecId + ":res"] = true;
         var fd = new FormData();
         fd.append("file", resF);
-        fd.append("course_id", String(state.courseId));
+        fd.append("course_id", String(resCourseId));
         fd.append("kind", "resource");
         fd.append("lecture_id", String(resLecId));
         api("upload", { form: fd })

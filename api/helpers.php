@@ -277,6 +277,23 @@ function clean($v) {
 }
 
 /**
+ * post_max_size aşıldığında PHP $_POST ve $_FILES boş döner; course_id gibi alanlar kaybolur.
+ * @return string|null Kullanıcıya gösterilecek hata metni veya null
+ */
+function upload_multipart_overflow_message(): ?string {
+    if (strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? '')) !== 'POST') {
+        return null;
+    }
+    $len = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+    if ($len <= 0 || !empty($_POST) || !empty($_FILES)) {
+        return null;
+    }
+    $limit = (string)(ini_get('post_max_size') ?: '8M');
+    return 'Dosya istek boyutu PHP post_max_size limitini aşıyor (' . $limit . '). '
+        . 'cPanel > Select PHP Version > Options içinde post_max_size ve upload_max_filesize değerlerini yükseltin (ör. 256M).';
+}
+
+/**
  * GET/POST değeri dizi gelebilir (www/https yönlendirmesi token=...&token=...).
  * Dizi stringe çevrilirse PHP "Array to string conversion" uyarısı basar ve jeton bozulur.
  */

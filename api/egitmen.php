@@ -108,6 +108,10 @@ try {
         }
 
         case 'profile_upload': {
+            $overflow = upload_multipart_overflow_message();
+            if ($overflow !== null) {
+                json_out(['ok' => false, 'error' => $overflow], 413);
+            }
             egitmen_profile_id($sessionRole, $sessionInstructorId, $pdo);
             $res = save_instructor_photo($_FILES['file'] ?? []);
             if (empty($res['ok'])) {
@@ -639,10 +643,16 @@ try {
         }
 
         case 'upload': {
+            $overflow = upload_multipart_overflow_message();
+            if ($overflow !== null) {
+                json_out(['ok' => false, 'error' => $overflow], 413);
+            }
             $courseId = (int)($_POST['course_id'] ?? 0);
             $kind = clean($_POST['kind'] ?? ''); // image | promo | lecture
             $lectureId = (int)($_POST['lecture_id'] ?? 0);
-            if ($courseId <= 0) json_out(['ok' => false, 'error' => 'course_id gerekli'], 422);
+            if ($courseId <= 0) {
+                json_out(['ok' => false, 'error' => 'Kurs seçilemedi. Sayfayı yenileyip tekrar deneyin.'], 422);
+            }
             assert_course_access($pdo, $courseId, $sessionRole, $sessionInstructorId);
             if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
                 $err = (int)($_FILES['file']['error'] ?? -1);
