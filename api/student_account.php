@@ -118,6 +118,7 @@ function student_authenticate(PDO $pdo, $email, $password) {
     }
     $pdo->prepare("UPDATE students SET last_login_at = NOW() WHERE id = ?")->execute([(int)$row['id']]);
     student_link_enrollments($pdo, (int)$row['id'], (string)$row['email']);
+    student_bind_visitor($pdo, (int)$row['id'], $_COOKIE['bm_vid'] ?? '');
     return ['row' => $row, 'error' => ''];
 }
 

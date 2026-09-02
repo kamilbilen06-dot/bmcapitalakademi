@@ -288,7 +288,7 @@ function analytics_session_public(array $session): array {
         }
     }
     return [
-        'id' => $session['visitorId'] !== '' ? $session['visitorId'] : substr($session['visitor'], -8),
+        'id' => $session['visitorId'] !== '' ? strtoupper($session['visitorId']) : substr($session['visitor'], -8),
         'label' => '#' . substr($session['visitorId'] !== '' ? $session['visitorId'] : $session['visitor'], -4),
         'first' => $session['first'],
         'last' => $session['last'],
@@ -300,6 +300,107 @@ function analytics_session_public(array $session): array {
         'city' => $session['city'] !== '' ? $session['city'] : 'Bilinmiyor',
         'source' => $session['source'] !== '' ? $session['source'] : 'Direct',
     ];
+}
+
+function analytics_period_config(string $period): array {
+    $period = strtolower(trim($period));
+    if ($period === '7d' || $period === '7') {
+        return ['key' => '7d', 'days' => 7, 'bucket' => 'day', 'label' => 'Son 7 gün'];
+    }
+    if (in_array($period, ['365d', '12m', '12', 'year'], true)) {
+        return ['key' => '365d', 'days' => 365, 'bucket' => 'month', 'label' => 'Son 12 ay'];
+    }
+    return ['key' => '30d', 'days' => 30, 'bucket' => 'day', 'label' => 'Son 30 gün'];
+}
+
+function analytics_build_series(PDO $pdo, array $cfg): array {
+    analytics_ensure_schema($pdo);
+    $uniq = analytics_unique_expr();
+    $days = (int)$cfg['days'];
+
+    if (($cfg['bucket'] ?? 'day') === 'month') {
+        $daily = [];
+        $rows = $pdo->query(
+            "SELECT DATE_FORMAT(created_at, '%Y-%m') d, COUNT(DISTINCT $uniq) u
+             FROM page_views
+             WHERE created_at > (NOW() - INTERVAL $days DAY)
+             GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+             ORDER BY d ASC"
+        )->fetchAll();
+        foreach ($rows as $row) {
+            $daily[$row['d']] = (int)$row['u'];
+        }
+        $series = [];
+        for ($i = 11; $i >= 0; $i--) {
+            $date = date('Y-m', strtotime("first day of -$i month"));
+            $series[] = [
+                'date' => $date,
+                'views' => 0,
+                'unique' => $daily[$date] ?? 0,
+            ];
+        }
+        return $series;
+    }
+
+    $daily = [];
+    $rows = $pdo->query(
+        "SELECT DATE(created_at) d, COUNT(*) c, COUNT(DISTINCT $uniq) u
+         FROM page_views
+         WHERE created_at > (NOW() - INTERVAL $days DAY)
+         GROUP BY DATE(created_at)
+         ORDER BY d ASC"
+    )->fetchAll();
+    foreach ($rows as $row) {
+        $daily[$row['d']] = ['views' => (int)$row['c'], 'unique' => (int)$row['u']];
+    }
+    $series = [];
+    for ($i = $days - 1; $i >= 0; $i--) {
+        $date = date('Y-m-d', strtotime("-$i day"));
+        $series[] = [
+            'date' => $date,
+            'views' => $daily[$date]['views'] ?? 0,
+            'unique' => $daily[$date]['unique'] ?? 0,
+        ];
+    }
+    return $series;
+}
+
+function analytics_accounts_by_visitor(PDO $pdo): array {
+    $map = [];
+    $st = $pdo->query(
+        "SELECT id, name, email, visitor_id
+         FROM students
+         WHERE status = 'active' AND visitor_id <> ''"
+    );
+    while ($row = $st->fetch()) {
+        $vid = strtoupper(trim((string)$row['visitor_id']));
+        if ($vid === '') {
+            continue;
+        }
+        $name = trim((string)$row['name']);
+        $map[$vid] = [
+            'id' => (int)$row['id'],
+            'name' => $name !== '' ? $name : 'İsimsiz hesap',
+            'email' => (string)$row['email'],
+            'visitorId' => $vid,
+        ];
+    }
+    return $map;
+}
+
+function analytics_attach_account_labels(array &$visitors, array $accountsByVisitor): void {
+    foreach ($visitors as &$visitor) {
+        $key = strtoupper(trim((string)($visitor['id'] ?? '')));
+        $account = $accountsByVisitor[$key] ?? null;
+        if (!$account) {
+            continue;
+        }
+        $visitor['label'] = $account['name'];
+        $visitor['accountName'] = $account['name'];
+        $visitor['accountId'] = $account['id'];
+        $visitor['accountEmail'] = $account['email'];
+    }
+    unset($visitor);
 }
 
 function analytics_registered_accounts(PDO $pdo): array {
@@ -330,8 +431,10 @@ function analytics_registered_accounts(PDO $pdo): array {
     return $accounts;
 }
 
-function analytics_dashboard(PDO $pdo): array {
+function analytics_dashboard(PDO $pdo, string $period = '30d'): array {
     analytics_ensure_schema($pdo);
+    $cfg = analytics_period_config($period);
+    $days = (int)$cfg['days'];
     $uniq = analytics_unique_expr();
     $today = (int)$pdo->query("SELECT COUNT(*) FROM page_views WHERE DATE(created_at) = CURDATE()")->fetchColumn();
     $uniqToday = (int)$pdo->query(
@@ -342,28 +445,11 @@ function analytics_dashboard(PDO $pdo): array {
     )->fetchColumn();
     $total = (int)$pdo->query("SELECT COUNT(*) FROM page_views")->fetchColumn();
 
-    $daily = [];
-    $rows = $pdo->query(
-        "SELECT DATE(created_at) d, COUNT(*) c, COUNT(DISTINCT $uniq) u
-         FROM page_views WHERE created_at > (NOW() - INTERVAL 30 DAY)
-         GROUP BY DATE(created_at) ORDER BY d ASC"
-    )->fetchAll();
-    foreach ($rows as $row) {
-        $daily[$row['d']] = ['views' => (int)$row['c'], 'unique' => (int)$row['u']];
-    }
-    $series = [];
-    for ($i = 29; $i >= 0; $i--) {
-        $date = date('Y-m-d', strtotime("-$i day"));
-        $series[] = [
-            'date' => $date,
-            'views' => $daily[$date]['views'] ?? 0,
-            'unique' => $daily[$date]['unique'] ?? 0,
-        ];
-    }
+    $series = analytics_build_series($pdo, $cfg);
 
     $topPages = $pdo->query(
         "SELECT path, COUNT(*) c FROM page_views
-         WHERE created_at > (NOW() - INTERVAL 30 DAY) AND path <> ''
+         WHERE created_at > (NOW() - INTERVAL $days DAY) AND path <> ''
          GROUP BY path ORDER BY c DESC LIMIT 8"
     )->fetchAll();
 
@@ -418,24 +504,13 @@ function analytics_dashboard(PDO $pdo): array {
         array_slice(array_reverse(analytics_build_sessions($todayRows)), 0, 40)
     );
     $accounts = analytics_registered_accounts($pdo);
-    $accountsByVisitor = [];
-    foreach ($accounts as $account) {
-        if ($account['visitorId'] !== '') {
-            $accountsByVisitor[$account['visitorId']] = $account;
-        }
-    }
-    foreach ($visitors as &$visitor) {
-        $account = $accountsByVisitor[$visitor['id']] ?? null;
-        if ($account) {
-            $visitor['label'] = $account['name'];
-            $visitor['accountName'] = $account['name'];
-            $visitor['accountId'] = $account['id'];
-        }
-    }
-    unset($visitor);
+    $accountsByVisitor = analytics_accounts_by_visitor($pdo);
+    analytics_attach_account_labels($visitors, $accountsByVisitor);
 
     return [
         'series' => $series,
+        'period' => $cfg['key'],
+        'periodLabel' => $cfg['label'],
         'topPages' => $topPages,
         'sources' => $sources,
         'cities' => $cities,
@@ -484,8 +559,13 @@ function analytics_visitor_detail(PDO $pdo, string $visitorId): ?array {
     }
     $first = strtotime((string)$rows[0]['created_at']) ?: time();
     $last = strtotime((string)$rows[count($rows) - 1]['created_at']) ?: $first;
+    $label = '#' . substr($visitorId, -4);
+    $accountsByVisitor = analytics_accounts_by_visitor($pdo);
+    if (isset($accountsByVisitor[$visitorId])) {
+        $label = $accountsByVisitor[$visitorId]['name'];
+    }
     return [
-        'label' => '#' . substr($visitorId, -4),
+        'label' => $label,
         'first' => (string)$rows[0]['created_at'],
         'last' => (string)$rows[count($rows) - 1]['created_at'],
         'durationSeconds' => max(0, $last - $first),

@@ -210,11 +210,23 @@
 
   // ---------- DASHBOARD ----------
   var renderers = {};
-  renderers.dashboard = function () {
-    get("stats").then(function (d) {
+  var analyticsPeriod = "30d";
+  var ANALYTICS_PERIODS = {
+    "7d": "Son 7 gün",
+    "30d": "Son 30 gün",
+    "365d": "Son 12 ay",
+  };
+
+  function loadAnalytics(includeCards) {
+    return get("stats", { period: analyticsPeriod }).then(function (d) {
       if (!d.ok) return;
-      renderAnalytics(d, true);
+      if (d.period) analyticsPeriod = d.period;
+      renderAnalytics(d, includeCards);
     });
+  }
+
+  renderers.dashboard = function () {
+    loadAnalytics(true);
   };
 
   function formatDuration(seconds) {
@@ -241,11 +253,17 @@
   function chartMonthLabel(dateStr) {
     var months = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
     var parts = String(dateStr || "").split("-");
-    if (parts.length < 3) return dateStr;
-    return months[(parseInt(parts[1], 10) || 1) - 1] + " '" + parts[0].slice(2);
+    if (parts.length < 2) return dateStr;
+    return months[(parseInt(parts[1], 10) || 1) - 1] + " '" + String(parts[0]).slice(2);
   }
 
-  function lineChart(series) {
+  function chartDayLabel(dateStr) {
+    var parts = String(dateStr || "").split("-");
+    if (parts.length < 3) return chartMonthLabel(dateStr);
+    return parts[2] + "." + parts[1];
+  }
+
+  function lineChart(series, period, periodLabel) {
     series = series || [];
     var width = 920, height = 300, left = 52, right = 24, top = 16, bottom = 44;
     var plotW = width - left - right, plotH = height - top - bottom;
@@ -283,19 +301,23 @@
         '<text x="' + (left - 10) + '" y="' + (gy + 4) + '" text-anchor="end" class="chart-axis">' + label + "</text>"
       );
     }
+    var labelStep = period === "7d" ? 1 : period === "365d" ? 1 : 5;
     var labels = series.map(function (s, i) {
-      if (i !== 0 && i !== series.length - 1 && i % 5 !== 0) return "";
+      if (i !== 0 && i !== series.length - 1 && i % labelStep !== 0) return "";
+      var lbl = period === "365d" ? chartMonthLabel(s.date) : chartDayLabel(s.date);
       return '<text x="' + x(i) + '" y="' + (height - 12) + '" text-anchor="middle" class="chart-axis chart-axis-x">' +
-        esc(chartMonthLabel(s.date)) + "</text>";
+        esc(lbl) + "</text>";
     }).join("");
     var base = top + plotH;
     var payload = esc(JSON.stringify(points.map(function (p) {
       return { x: p.x, y: p.y, date: p.date, value: p.value };
     })));
+    var avgLabel = period === "365d" ? "Aylık ortalama" : "Günlük ortalama";
+    var lastLabel = period === "365d" ? "Son ay tekil" : "Son gün tekil";
     return '<div class="chart-kpis">' +
-      '<div class="chart-kpi is-active"><div class="chart-kpi-num">' + (series.length ? (series[series.length - 1].unique || 0) : 0) + '</div><div class="chart-kpi-label">Bugün tekil</div><div class="chart-kpi-sub">' + total + " toplam · son 30 gün</div></div>" +
-      '<div class="chart-kpi"><div class="chart-kpi-num">' + peak + '</div><div class="chart-kpi-label">En yüksek gün</div><div class="chart-kpi-sub">Günlük zirve</div></div>' +
-      '<div class="chart-kpi"><div class="chart-kpi-num">' + avg + '</div><div class="chart-kpi-label">Günlük ortalama</div><div class="chart-kpi-sub">30 günlük ortalama</div></div>' +
+      '<div class="chart-kpi is-active"><div class="chart-kpi-num">' + (series.length ? (series[series.length - 1].unique || 0) : 0) + '</div><div class="chart-kpi-label">' + lastLabel + '</div><div class="chart-kpi-sub">' + total + " toplam · " + esc(periodLabel || "Son 30 gün") + "</div></div>" +
+      '<div class="chart-kpi"><div class="chart-kpi-num">' + peak + '</div><div class="chart-kpi-label">En yüksek</div><div class="chart-kpi-sub">Dönem zirvesi</div></div>' +
+      '<div class="chart-kpi"><div class="chart-kpi-num">' + avg + '</div><div class="chart-kpi-label">' + avgLabel + '</div><div class="chart-kpi-sub">' + esc(periodLabel || "Son 30 gün") + "</div></div>" +
       "</div>" +
       '<div class="chart-shell" data-analytics-chart data-chart-width="' + width + '" data-chart-height="' + height + '" data-chart-top="' + top + '" data-chart-base="' + base + '" data-chart-points="' + payload + '">' +
       '<svg class="line-chart" viewBox="0 0 ' + width + " " + height + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Günlük tekil ziyaretçi grafiği">' +
@@ -335,7 +357,9 @@
       dot.setAttribute("cx", point.x);
       dot.setAttribute("cy", point.y);
       dot.style.display = "block";
-      tip.innerHTML = "<strong>" + esc(String(point.value)) + " tekil ziyaretçi</strong><span>" + esc(chartMonthLabel(point.date)) + " · " + esc(point.date) + "</span>";
+      tip.innerHTML = "<strong>" + esc(String(point.value)) + " tekil ziyaretçi</strong><span>" +
+        esc(String(point.date || "").split("-").length === 3 ? chartDayLabel(point.date) : chartMonthLabel(point.date)) +
+        " · " + esc(point.date) + "</span>";
       var shellRect = chart.getBoundingClientRect();
       var svg = chart.querySelector(".line-chart");
       var svgRect = svg.getBoundingClientRect();
@@ -366,8 +390,13 @@
       return "<tr><td colspan='7' class='empty'>Bugün henüz ziyaretçi yok.</td></tr>";
     }
     return visitors.map(function (v) {
+      var isAccount = !!v.accountName;
+      var mainLabel = esc(v.label || "Ziyaretçi");
+      var subLabel = isAccount
+        ? '<div class="small">' + esc(v.accountEmail || "Hesap sahibi") + "</div>"
+        : "";
       return '<tr class="visitor-row" data-visitor-detail="' + esc(v.id || "") + '">' +
-        "<td><strong>" + esc(v.label || "Ziyaretçi") + "</strong></td>" +
+        "<td><strong>" + mainLabel + "</strong>" + subLabel + "</td>" +
         "<td>" + esc(fmtDate(v.first || "").slice(-5)) + "</td>" +
         "<td>" + esc(fmtDate(v.last || "").slice(-5)) + "</td>" +
         "<td>" + esc(v.lastPage || "—") + "</td>" +
@@ -408,8 +437,14 @@
       : "";
 
     el.wrap.innerHTML = cards +
-      '<div class="panel"><div class="panel-head"><h3>Son 30 Gün · Tekil Ziyaretçi</h3></div><div class="panel-body">' +
-      lineChart(d.series) + "</div></div>" +
+      '<div class="panel"><div class="panel-head panel-head-chart"><div><h3>Tekil Ziyaretçi</h3></div>' +
+      '<div class="chart-period"><label for="analyticsPeriod">Tarih Aralığı:</label>' +
+      '<select id="analyticsPeriod" data-analytics-period>' +
+      Object.keys(ANALYTICS_PERIODS).map(function (key) {
+        return '<option value="' + key + '"' + (key === (d.period || analyticsPeriod) ? " selected" : "") + ">" + ANALYTICS_PERIODS[key] + "</option>";
+      }).join("") +
+      "</select></div></div><div class=\"panel-body\">" +
+      lineChart(d.series, d.period || analyticsPeriod, d.periodLabel) + "</div></div>" +
       '<div class="panel"><div class="panel-head"><h3>Son Ziyaretçiler</h3><span class="hint">Detay için satıra tıklayın</span></div><div class="panel-body table-wrap"><table><thead><tr><th>Ziyaretçi</th><th>İlk geliş</th><th>Son aktivite</th><th>Gezdiği sayfa</th><th>Süre</th><th>Durum</th><th>Satın alma</th></tr></thead><tbody>' +
       visitorRows(d.visitors) + "</tbody></table></div></div>" +
       '<div class="panel"><div class="panel-head"><h3>Hesap Açanlar</h3><span class="hint">Anonim ziyaretçi hesabıyla eşleşen kayıtlar</span></div><div class="panel-body table-wrap"><table><thead><tr><th>Ad Soyad</th><th>E-posta</th><th>Hesap tarihi</th><th>Son aktivite</th><th class="num">Sayfa</th></tr></thead><tbody>' +
@@ -435,6 +470,13 @@
     });
     var chart = el.wrap.querySelector("[data-analytics-chart]");
     initAnalyticsChartHover(chart);
+    var periodSelect = el.wrap.querySelector("[data-analytics-period]");
+    if (periodSelect) {
+      periodSelect.addEventListener("change", function () {
+        analyticsPeriod = periodSelect.value || "30d";
+        loadAnalytics(includeCards);
+      });
+    }
   }
 
   function card(label, num, sub, gold) {
@@ -952,10 +994,7 @@
 
   // ---------- STATS ----------
   renderers.istatistik = function () {
-    get("stats").then(function (d) {
-      if (!d.ok) return;
-      renderAnalytics(d, true);
-    });
+    loadAnalytics(true);
   };
 
   // ---------- PAYMENTS (iyzico işlem listesi) ----------

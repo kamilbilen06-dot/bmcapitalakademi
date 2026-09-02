@@ -36,7 +36,8 @@ try {
 
         // ---------- DASHBOARD ----------
         case 'stats': {
-            $analytics = analytics_dashboard($pdo);
+            $period = (string)($_GET['period'] ?? '30d');
+            $analytics = analytics_dashboard($pdo, $period);
             $x = $analytics['cardsExtra'];
             $unread = (int)$pdo->query("SELECT COUNT(*) FROM contacts WHERE is_read = 0")->fetchColumn();
             $modCount = (int)$pdo->query("SELECT COUNT(*) FROM modules")->fetchColumn();
@@ -45,7 +46,8 @@ try {
             json_out(['ok' => true, 'csrf' => $csrfToken, 'cards' => [
                 'today' => $x['today'], 'uniqueToday' => $x['uniqueToday'], 'week' => $x['week'],
                 'total' => $x['total'], 'unread' => $unread, 'modules' => $modCount, 'faqs' => $faqCount,
-            ], 'series' => $analytics['series'], 'topPages' => $analytics['topPages'],
+            ], 'series' => $analytics['series'], 'period' => $analytics['period'],
+               'periodLabel' => $analytics['periodLabel'], 'topPages' => $analytics['topPages'],
                'sources' => $analytics['sources'], 'cities' => $analytics['cities'],
                'visitors' => $analytics['visitors'], 'accounts' => $analytics['accounts']]);
         }
