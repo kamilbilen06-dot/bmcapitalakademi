@@ -900,7 +900,7 @@
       "</div>" +
       '<div class="media-copy">' +
       "<h3>Tanıtım videosu</h3>" +
-      "<p>Öğrencilerin kursunuzu tanıması için kısa bir tanıtım videosu yükleyin. mp4 veya webm · en fazla 256 MB.</p>" +
+      "<p>Öğrencilerin kursunuzu tanıması için kısa bir tanıtım videosu yükleyin. mp4 veya webm · büyük dosyalar tarayıcıda 720p'ye optimize edilir.</p>" +
       '<div class="media-actions">' +
       '<input type="file" id="promoFile" accept="video/mp4,video/webm" hidden>' +
       '<button type="button" class="btn-outline" id="btnPromo">Dosya Yükle</button>' +
@@ -944,8 +944,58 @@
             ? '<img src="' + url + '" alt="Önizleme">'
             : '<video src="' + url + '" controls></video>';
       }
-      uploadFile(kind, file);
+      uploadVideoFile(kind, file);
     };
+  }
+
+  function formatFileSize(n) {
+    n = Number(n) || 0;
+    if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+    return (n / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  var UPLOAD_SAFE_BYTES = 118 * 1024 * 1024;
+
+  function uploadVideoFile(kind, file, lectureId) {
+    var isLecture = kind === "lecture";
+    if (isLecture && lectureId) {
+      expandedLecIds[lectureId] = true;
+      expandedLecIds[lectureId + ":content"] = true;
+    }
+    function ui(pct, msg, isErr) {
+      if (isLecture && lectureId) setLectureUploadUi(lectureId, pct, msg, !!isErr);
+      else if (kind === "promo") setUploadUi("promo", pct, msg, !!isErr);
+    }
+    function startUpload(videoFile, dur) {
+      getVideoDurationFromFile(videoFile).then(function (d) {
+        uploadFile(kind, videoFile, lectureId, (d > 0 ? d : dur) || 0);
+      });
+    }
+    var vc = window.BMVideoCompress;
+    if (!vc || !vc.shouldCompress(file)) {
+      ui(0, "Hazırlanıyor… " + (file.name || ""), false);
+      startUpload(file, 0);
+      return;
+    }
+    ui(0, "Video optimize ediliyor (720p)…", false);
+    vc.compress(file, function (pct, msg) {
+      ui(pct, msg || "Optimize ediliyor…", false);
+    })
+      .then(function (out) {
+        var note = formatFileSize(file.size) + " → " + formatFileSize(out.size);
+        ui(100, "Optimize edildi · " + note, false);
+        toast("Video optimize edildi (" + note + ")");
+        startUpload(out, 0);
+      })
+      .catch(function (err) {
+        if (file.size <= UPLOAD_SAFE_BYTES) {
+          toast("Optimize edilemedi, orijinal yükleniyor…", true);
+          startUpload(file, 0);
+          return;
+        }
+        ui(0, err.message || "Optimize edilemedi", true);
+        toast(err.message || "Video optimize edilemedi", true);
+      });
   }
 
   function mediaStreamUrl(kind, id) {
@@ -1166,7 +1216,7 @@
     if (isLecture && lectureId) {
       expandedLecIds[lectureId] = true;
       expandedLecIds[lectureId + ":content"] = true;
-      setLectureUploadUi(lectureId, 0, "Hazırlanıyor… " + (file.name || ""), false);
+      setLectureUploadUi(lectureId, 0, "Sunucuya yükleniyor… " + (file.name || ""), false);
     }
 
     var send = function (dur) {
@@ -1419,7 +1469,7 @@
     var totalSec = curriculumTotalSec(cur);
     var totalLabel = formatDurationLabel(totalSec);
     $("viewWrap").innerHTML =
-      '<p class="page-lead">Bölüm ve derslerinizi oluşturun. Derslerin üzerine gelince düzenle/sil görünür; sürükleyerek sıralayabilir veya başka bölüme taşıyabilirsiniz. Toplam süre videolardan otomatik hesaplanır.</p>' +
+      '<p class="page-lead">Bölüm ve derslerinizi oluşturun. Büyük videolar tarayıcıda 720p\'ye optimize edilerek yüklenir; disk ve sunucu limiti korunur. Derslerin üzerine gelince düzenle/sil görünür; sürükleyerek sıralayabilir veya başka bölüme taşıyabilirsiniz. Toplam süre videolardan otomatik hesaplanır.</p>' +
       '<div class="cur-toolbar">' +
       '<button type="button" class="btn-outline" id="btnAddSec">+ Bölüm ekle</button>' +
       '<span class="cur-total" id="curTotal">' +
@@ -1981,10 +2031,7 @@
         viewCurriculum();
       }
       setTimeout(function () {
-        setLectureUploadUi(lecId, 1, "Dosya okunuyor… " + file.name, false);
-        getVideoDurationFromFile(file).then(function (dur) {
-          uploadFile("lecture", file, lecId, dur || 0);
-        });
+        uploadVideoFile("lecture", file, lecId);
       }, 30);
     };
 
