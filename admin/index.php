@@ -11,7 +11,7 @@ $csrfToken = admin_csrf_token();
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yönetim Paneli — BM Capital</title>
-  <link rel="stylesheet" href="assets/admin.css?v=20260825f">
+  <link rel="stylesheet" href="assets/admin.css?v=20260902a">
 </head>
 <body>
   <div class="admin-shell">
@@ -65,6 +65,6 @@ $csrfToken = admin_csrf_token();
 
   <script src="../assets/js/photo-crop.js"></script>
   <script>window.BM_ADMIN_CSRF = <?= json_encode($csrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_SLASHES) ?>;</script>
-  <script src="assets/admin.js?v=20260831d"></script>
+  <script src="assets/admin.js?v=20260902a"></script>
 </body>
 </html>

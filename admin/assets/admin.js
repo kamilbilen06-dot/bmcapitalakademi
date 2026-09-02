@@ -232,14 +232,31 @@
     return "❌ Ayrıldı";
   }
 
+  function chartNiceMax(value) {
+    value = Math.max(1, Number(value) || 0);
+    var step = value <= 5 ? 1 : value <= 20 ? 5 : value <= 50 ? 10 : value <= 100 ? 20 : 50;
+    return Math.ceil(value / step) * step;
+  }
+
+  function chartMonthLabel(dateStr) {
+    var months = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
+    var parts = String(dateStr || "").split("-");
+    if (parts.length < 3) return dateStr;
+    return months[(parseInt(parts[1], 10) || 1) - 1] + " '" + parts[0].slice(2);
+  }
+
   function lineChart(series) {
     series = series || [];
-    var width = 920, height = 280, left = 48, right = 18, top = 20, bottom = 38;
+    var width = 920, height = 300, left = 52, right = 24, top = 16, bottom = 44;
     var plotW = width - left - right, plotH = height - top - bottom;
-    var max = 1;
+    var peak = 0, total = 0;
     series.forEach(function (s) {
-      max = Math.max(max, Number(s.unique) || 0);
+      var v = Number(s.unique) || 0;
+      peak = Math.max(peak, v);
+      total += v;
     });
+    var max = chartNiceMax(peak * 1.15 || 1);
+    var avg = series.length ? Math.round(total / series.length) : 0;
     function x(i) {
       return left + (series.length <= 1 ? plotW / 2 : i * plotW / (series.length - 1));
     }
@@ -247,48 +264,101 @@
       return top + plotH - ((Number(value) || 0) / max) * plotH;
     }
     var points = series.map(function (s, i) {
-      return { x: x(i), y: y(s.unique), date: String(s.date || ""), value: Number(s.unique) || 0 };
+      return {
+        x: x(i),
+        y: y(s.unique),
+        date: String(s.date || ""),
+        value: Number(s.unique) || 0,
+      };
     });
-    function smoothPath() {
-      if (!points.length) return "";
-      var d = "M " + points[0].x.toFixed(1) + " " + points[0].y.toFixed(1);
-      for (var i = 1; i < points.length; i++) {
-        var previous = points[i - 1], current = points[i];
-        var next = points[i + 1] || current;
-        var cp1x = (previous.x + current.x) / 2;
-        var cp2x = (current.x + next.x) / 2;
-        d += " C " + cp1x.toFixed(1) + " " + previous.y.toFixed(1) + " " +
-          cp2x.toFixed(1) + " " + current.y.toFixed(1) + " " +
-          current.x.toFixed(1) + " " + current.y.toFixed(1);
-      }
-      return d;
-    }
-    var grid = [0, 0.25, 0.5, 0.75, 1].map(function (ratio) {
+    var polyline = points.map(function (p) { return p.x.toFixed(1) + "," + p.y.toFixed(1); }).join(" ");
+    var tickCount = 4;
+    var grid = [];
+    for (var t = 0; t <= tickCount; t++) {
+      var ratio = t / tickCount;
       var gy = top + plotH - ratio * plotH;
-      return '<line x1="' + left + '" y1="' + gy + '" x2="' + (width - right) + '" y2="' + gy + '" class="chart-grid"></line>' +
-        '<text x="' + (left - 8) + '" y="' + (gy + 4) + '" text-anchor="end" class="chart-axis">' + Math.round(max * ratio) + "</text>";
-    }).join("");
+      var label = Math.round(max * ratio);
+      grid.push(
+        '<line x1="' + left + '" y1="' + gy + '" x2="' + (width - right) + '" y2="' + gy + '" class="chart-grid"></line>' +
+        '<text x="' + (left - 10) + '" y="' + (gy + 4) + '" text-anchor="end" class="chart-axis">' + label + "</text>"
+      );
+    }
     var labels = series.map(function (s, i) {
       if (i !== 0 && i !== series.length - 1 && i % 5 !== 0) return "";
-      return '<text x="' + x(i) + '" y="' + (height - 10) + '" text-anchor="middle" class="chart-axis">' +
-        esc(String(s.date || "").slice(5)) + "</text>";
+      return '<text x="' + x(i) + '" y="' + (height - 12) + '" text-anchor="middle" class="chart-axis chart-axis-x">' +
+        esc(chartMonthLabel(s.date)) + "</text>";
     }).join("");
-    var line = smoothPath();
     var base = top + plotH;
-    var area = line + (points.length
-      ? " L " + points[points.length - 1].x.toFixed(1) + " " + base + " L " + points[0].x.toFixed(1) + " " + base + " Z"
-      : "");
-    var hoverPoints = points.map(function (point, i) {
-      return '<g class="chart-point" data-chart-index="' + i + '" data-x="' + point.x.toFixed(1) + '" data-y="' + point.y.toFixed(1) + '">' +
-        '<line x1="' + point.x.toFixed(1) + '" y1="' + top + '" x2="' + point.x.toFixed(1) + '" y2="' + base + '" class="chart-hover-line" style="display:none"></line>' +
-        '<circle cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) + '" r="4" class="chart-dot unique"></circle>' +
-        '<circle cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) + '" r="14" class="chart-hit"></circle></g>';
-    }).join("");
-    return '<div class="chart-shell" data-analytics-chart data-chart-width="' + width + '">' +
-      '<svg class="line-chart" viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="Günlük tekil ziyaretçi grafiği">' +
-      '<defs><linearGradient id="analyticsAreaFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#d39a3c" stop-opacity=".32"></stop><stop offset="100%" stop-color="#d39a3c" stop-opacity=".02"></stop></linearGradient></defs>' +
-      grid + labels + '<path d="' + area + '" class="chart-area"></path><path d="' + line + '" class="chart-line unique"></path>' +
-      hoverPoints + "</svg><div class=\"chart-tooltip\" data-chart-tooltip hidden></div></div>";
+    var payload = esc(JSON.stringify(points.map(function (p) {
+      return { x: p.x, y: p.y, date: p.date, value: p.value };
+    })));
+    return '<div class="chart-kpis">' +
+      '<div class="chart-kpi is-active"><div class="chart-kpi-num">' + (series.length ? (series[series.length - 1].unique || 0) : 0) + '</div><div class="chart-kpi-label">Bugün tekil</div><div class="chart-kpi-sub">' + total + " toplam · son 30 gün</div></div>" +
+      '<div class="chart-kpi"><div class="chart-kpi-num">' + peak + '</div><div class="chart-kpi-label">En yüksek gün</div><div class="chart-kpi-sub">Günlük zirve</div></div>' +
+      '<div class="chart-kpi"><div class="chart-kpi-num">' + avg + '</div><div class="chart-kpi-label">Günlük ortalama</div><div class="chart-kpi-sub">30 günlük ortalama</div></div>' +
+      "</div>" +
+      '<div class="chart-shell" data-analytics-chart data-chart-width="' + width + '" data-chart-height="' + height + '" data-chart-top="' + top + '" data-chart-base="' + base + '" data-chart-points="' + payload + '">' +
+      '<svg class="line-chart" viewBox="0 0 ' + width + " " + height + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Günlük tekil ziyaretçi grafiği">' +
+      grid.join("") + labels +
+      '<line class="chart-hover-line" x1="0" y1="' + top + '" x2="0" y2="' + base + '" style="display:none"></line>' +
+      '<circle class="chart-active-dot" cx="0" cy="0" r="5" style="display:none"></circle>' +
+      '<polyline class="chart-line unique" points="' + polyline + '"></polyline>' +
+      '<rect class="chart-overlay" x="' + left + '" y="' + top + '" width="' + plotW + '" height="' + plotH + '"></rect>' +
+      "</svg><div class=\"chart-tooltip\" data-chart-tooltip hidden></div></div>";
+  }
+
+  function initAnalyticsChartHover(chart) {
+    if (!chart) return;
+    var tip = chart.querySelector("[data-chart-tooltip]");
+    var guide = chart.querySelector(".chart-hover-line");
+    var dot = chart.querySelector(".chart-active-dot");
+    var overlay = chart.querySelector(".chart-overlay");
+    if (!tip || !guide || !dot || !overlay) return;
+    var points = [];
+    try {
+      points = JSON.parse(chart.getAttribute("data-chart-points") || "[]");
+    } catch (e) {
+      return;
+    }
+    if (!points.length) return;
+    var top = Number(chart.getAttribute("data-chart-top")) || 16;
+    var base = Number(chart.getAttribute("data-chart-base")) || 256;
+
+    function showPoint(index) {
+      var point = points[index];
+      if (!point) return;
+      guide.setAttribute("x1", point.x);
+      guide.setAttribute("x2", point.x);
+      guide.setAttribute("y1", top);
+      guide.setAttribute("y2", base);
+      guide.style.display = "block";
+      dot.setAttribute("cx", point.x);
+      dot.setAttribute("cy", point.y);
+      dot.style.display = "block";
+      tip.innerHTML = "<strong>" + esc(String(point.value)) + " tekil ziyaretçi</strong><span>" + esc(chartMonthLabel(point.date)) + " · " + esc(point.date) + "</span>";
+      var shellRect = chart.getBoundingClientRect();
+      var svg = chart.querySelector(".line-chart");
+      var svgRect = svg.getBoundingClientRect();
+      var scale = svgRect.width / (Number(chart.getAttribute("data-chart-width")) || 920);
+      var px = (point.x * scale) + (svgRect.left - shellRect.left);
+      tip.style.left = Math.max(48, Math.min(shellRect.width - 48, px)) + "px";
+      tip.style.top = Math.max(12, (point.y * scale) + (svgRect.top - shellRect.top) - 48) + "px";
+      tip.hidden = false;
+    }
+
+    function hidePoint() {
+      guide.style.display = "none";
+      dot.style.display = "none";
+      tip.hidden = true;
+    }
+
+    overlay.addEventListener("mousemove", function (event) {
+      var rect = overlay.getBoundingClientRect();
+      var ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+      var index = Math.round(ratio * (points.length - 1));
+      showPoint(index);
+    });
+    overlay.addEventListener("mouseleave", hidePoint);
   }
 
   function visitorRows(visitors) {
@@ -364,29 +434,7 @@
       });
     });
     var chart = el.wrap.querySelector("[data-analytics-chart]");
-    if (chart) {
-      var chartTip = chart.querySelector("[data-chart-tooltip]");
-      chart.querySelectorAll("[data-chart-index]").forEach(function (point) {
-        var index = parseInt(point.getAttribute("data-chart-index"), 10);
-        var item = (d.series || [])[index] || {};
-        point.addEventListener("mouseenter", function () {
-          chart.querySelectorAll(".chart-hover-line").forEach(function (line) { line.style.display = "none"; });
-          var guide = point.querySelector(".chart-hover-line");
-          if (guide) guide.style.display = "block";
-          chartTip.innerHTML = "<strong>" + esc(String(item.unique || 0)) + " tekil ziyaretçi</strong><span>" + esc(String(item.date || "")) + "</span>";
-          var xPercent = (Number(point.getAttribute("data-x")) / Number(chart.getAttribute("data-chart-width"))) * 100;
-          var yPercent = (Number(point.getAttribute("data-y")) / 280) * 100;
-          chartTip.style.left = Math.max(8, Math.min(92, xPercent)) + "%";
-          chartTip.style.top = Math.max(5, yPercent) + "%";
-          chartTip.hidden = false;
-        });
-        point.addEventListener("mouseleave", function () {
-          var guide = point.querySelector(".chart-hover-line");
-          if (guide) guide.style.display = "none";
-          chartTip.hidden = true;
-        });
-      });
-    }
+    initAnalyticsChartHover(chart);
   }
 
   function card(label, num, sub, gold) {
