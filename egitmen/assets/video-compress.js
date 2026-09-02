@@ -1,10 +1,10 @@
 /**
- * Tarayıcıda ders/tanıtım videosunu 720p mp4'e sıkıştırır (FFmpeg.wasm).
- * Sunucu post_max_size limitine takılmadan yükleme için.
+ * Tarayıcıda ders/tanıtım videosunu 720p mp4'e sıkıştırır.
+ * Worker kullanmaz (CORS sorunu yok) — FFmpeg ana thread'de çalışır.
  */
-import { FFmpeg } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/+esm";
 import { fetchFile, toBlobURL } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/+esm";
 
+var CORE = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
 var SKIP_BYTES = 28 * 1024 * 1024;
 var SAFE_UPLOAD_BYTES = 118 * 1024 * 1024;
 
@@ -49,26 +49,45 @@ function outName(name) {
   return base + "_720p.mp4";
 }
 
+function execArgs(args) {
+  ffmpeg.exec.apply(ffmpeg, args);
+  var code = ffmpeg.ret;
+  ffmpeg.reset();
+  if (code !== 0) {
+    throw new Error("Video dönüştürme başarısız (kod " + code + ")");
+  }
+}
+
 function ensureFfmpeg(onProgress) {
+  if (ffmpeg) return Promise.resolve();
   if (loadPromise) return loadPromise;
   loadPromise = (async function () {
     if (onProgress) onProgress(0, "Sıkıştırma aracı yükleniyor…");
-    var workerUrl =
-      (typeof location !== "undefined" ? location.origin : "") +
-      "/egitmen/assets/ffmpeg/esm/worker.js";
-    ffmpeg = new FFmpeg({ classWorkerURL: workerUrl });
-    ffmpeg.on("progress", function (ev) {
-      var p = ev && ev.progress;
-      if (onProgress && p >= 0 && p <= 1) {
+    var coreURL = await toBlobURL(CORE + "/ffmpeg-core.js", "text/javascript");
+    var wasmURL = await toBlobURL(CORE + "/ffmpeg-core.wasm", "application/wasm");
+    var mod = await import(
+      "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.js"
+    );
+    var createFFmpegCore = mod.default;
+    if (typeof createFFmpegCore !== "function") {
+      throw new Error("FFmpeg çekirdeği yüklenemedi");
+    }
+    ffmpeg = await createFFmpegCore({
+      mainScriptUrlOrBlob:
+        coreURL + "#" + btoa(JSON.stringify({ wasmURL: wasmURL })),
+    });
+    ffmpeg.setProgress(function (data) {
+      var p = data && data.progress;
+      if (onProgress && typeof p === "number" && p >= 0 && p <= 1) {
         onProgress(Math.round(p * 100), "720p'ye dönüştürülüyor…");
       }
     });
-    var base = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
-    await ffmpeg.load({
-      coreURL: await toBlobURL(base + "/ffmpeg-core.js", "text/javascript"),
-      wasmURL: await toBlobURL(base + "/ffmpeg-core.wasm", "application/wasm"),
-    });
   })();
+  loadPromise = loadPromise.catch(function (err) {
+    loadPromise = null;
+    ffmpeg = null;
+    throw err;
+  });
   return loadPromise;
 }
 
@@ -91,10 +110,9 @@ window.BMVideoCompress = {
         var outFile = "out_" + Date.now() + ".mp4";
         if (onProgress) onProgress(1, "Dosya okunuyor…");
         return fetchFile(file).then(function (data) {
-          return ffmpeg.writeFile(inName, data);
-        }).then(function () {
+          ffmpeg.FS.writeFile(inName, data);
           if (onProgress) onProgress(3, "720p'ye dönüştürülüyor…");
-          return ffmpeg.exec([
+          execArgs([
             "-i",
             inName,
             "-vf",
@@ -118,23 +136,22 @@ window.BMVideoCompress = {
             "-y",
             outFile,
           ]);
-        }).then(function () {
-          return ffmpeg.readFile(outFile);
-        }).then(function (data) {
-          return Promise.all([
-            ffmpeg.deleteFile(inName).catch(function () {}),
-            ffmpeg.deleteFile(outFile).catch(function () {}),
-          ]).then(function () {
-            var blob = new Blob([data.buffer], { type: "video/mp4" });
-            if (blob.size > SAFE_UPLOAD_BYTES) {
-              throw new Error(
-                "Sıkıştırma sonrası dosya hâlâ büyük (" +
-                  Math.round(blob.size / 1048576) +
-                  " MB). Videoyu kısaltın."
-              );
-            }
-            return new File([blob], outName(file.name), { type: "video/mp4" });
-          });
+          var out = ffmpeg.FS.readFile(outFile);
+          try {
+            ffmpeg.FS.unlink(inName);
+          } catch (e1) {}
+          try {
+            ffmpeg.FS.unlink(outFile);
+          } catch (e2) {}
+          var blob = new Blob([out.buffer], { type: "video/mp4" });
+          if (blob.size > SAFE_UPLOAD_BYTES) {
+            throw new Error(
+              "Sıkıştırma sonrası dosya hâlâ büyük (" +
+                Math.round(blob.size / 1048576) +
+                " MB). Videoyu kısaltın."
+            );
+          }
+          return new File([blob], outName(file.name), { type: "video/mp4" });
         });
       });
     });

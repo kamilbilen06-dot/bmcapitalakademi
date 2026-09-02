@@ -972,7 +972,17 @@
       });
     }
     var vc = window.BMVideoCompress;
-    if (!vc || !vc.shouldCompress(file)) {
+    if (!vc) {
+      if (file.size > UPLOAD_SAFE_BYTES) {
+        ui(0, "Video optimize aracı yüklenemedi. Sayfayı yenileyin (Ctrl+F5).", true);
+        toast("Optimize aracı yüklenemedi — sayfayı yenileyin", true);
+        return;
+      }
+      ui(0, "Hazırlanıyor… " + (file.name || ""), false);
+      startUpload(file, 0);
+      return;
+    }
+    if (!vc.shouldCompress(file)) {
       ui(0, "Hazırlanıyor… " + (file.name || ""), false);
       startUpload(file, 0);
       return;
