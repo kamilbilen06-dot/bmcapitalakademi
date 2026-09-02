@@ -188,7 +188,7 @@ window.BM_DATA = {
       baslik: "Takas & Aracı Kurum Dağılımı (AKD) Analizi Eğitimi",
       kisaAciklama:
         "Kurumsal para hareketlerini takip edin. Takas verisi ve aracı kurum dağılımı ile büyük oyuncuların adımlarını okuyun.",
-      gorsel: "assets/img/egitim-takas.svg",
+      gorsel: "assets/img/egitim-takas-akd.png",
       fiyat: "10.000 TL",
       fiyatNot: "(KDV dahil)",
       sure: "Modüler",

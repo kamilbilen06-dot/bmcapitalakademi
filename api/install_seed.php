@@ -122,7 +122,7 @@ function seed_modules($pdo) {
             'type' => 'egitim', 'slug' => 'takas-akd-analizi',
             'title' => 'Takas & Aracı Kurum Dağılımı (AKD) Analizi Eğitimi',
             'short_desc' => 'Kurumsal para hareketlerini takip edin. Takas verisi ve aracı kurum dağılımı ile büyük oyuncuların adımlarını okuyun.',
-            'image' => 'assets/img/egitim-takas.svg', 'video' => null, 'video_poster' => null,
+            'image' => 'assets/img/egitim-takas-akd.png', 'video' => null, 'video_poster' => null,
             'price' => '10.000 TL', 'price_note' => '(KDV dahil)', 'duration' => 'Modüler',
             'egitim_turu' => 'Canlı Online veya İzmir Yüz Yüze Eğitim', 'instructors' => 'Dr. Mete AKYOL, Dr. Kamil BİLEN', 'etiket' => null,
             'katilim_not' => 'Canlı online veya İzmir yüz yüze · Grup dersi veya birebir özel ders olarak alınabilir.',
@@ -243,6 +243,23 @@ function normalize_technical_basic_course(PDO $pdo): void {
         )->execute([$json, (int)$row['id']]);
     } catch (Throwable $e) {
         error_log('teknik eğitim normalleştirme: ' . $e->getMessage());
+    }
+}
+
+/** Takas & AKD eğitimi kapak görselini yeni profesyonel PNG ile günceller. */
+function normalize_takas_akd_course_image(PDO $pdo): void {
+    try {
+        $image = 'assets/img/egitim-takas-akd.png';
+        $st = $pdo->prepare("SELECT id, image FROM modules WHERE slug = ? LIMIT 1");
+        $st->execute(['takas-akd-analizi']);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row || (string)$row['image'] === $image) {
+            return;
+        }
+        $pdo->prepare("UPDATE modules SET image = ? WHERE id = ?")
+            ->execute([$image, (int)$row['id']]);
+    } catch (Throwable $e) {
+        error_log('takas-akd kapak güncelleme: ' . $e->getMessage());
     }
 }
 
