@@ -38,7 +38,7 @@ function instructors_ensure_schema(PDO $pdo) {
             'kamil-bilen',
             'Dr. Kamil BİLEN',
             'Analiz & Yatırım Eğitmeni · SPL Düzey 3 & Türev',
-            '',
+            'assets/img/instructor-kamil-bilen.jpg',
             $bio,
             $socials,
             0,
@@ -60,6 +60,18 @@ function instructors_ensure_schema(PDO $pdo) {
     );
 
     feature_sync_mete_instructor($pdo);
+    normalize_kamil_instructor_photo($pdo);
+}
+
+function normalize_kamil_instructor_photo(PDO $pdo): void {
+    try {
+        $photo = 'assets/img/instructor-kamil-bilen.jpg';
+        $pdo->prepare(
+            "UPDATE instructors SET photo_path = ? WHERE slug = 'kamil-bilen' AND (photo_path IS NULL OR photo_path = '' OR photo_path <> ?)"
+        )->execute([$photo, $photo]);
+    } catch (Throwable $e) {
+        error_log('kamil eğitmen foto güncelleme: ' . $e->getMessage());
+    }
 }
 
 function instructor_decode_socials($raw) {

@@ -1534,6 +1534,11 @@
         '<div class="field"><label>Şifre</label><input type="password" name="smtp_pass" value="" autocomplete="new-password" placeholder="' + (s.smtp_pass_set ? "Kayıtlı (değiştirmek için yazın)" : "") + '"></div>' +
         fld("smtp_from", "Gönderen e-posta") + fld("smtp_from_name", "Gönderen adı") +
         "</div>" +
+        '<h3 style="margin:22px 0 4px;font-size:15px">Google Analytics (GA4)</h3>' +
+        '<p class="hint" style="margin:0 0 12px">Google Ads / Search Console için ölçüm kimliği. analytics.google.com → Yönetim → Veri akışı → <strong>G-XXXXXXXXXX</strong>. Boş bırakılırsa Analytics yüklenmez.</p>' +
+        '<div class="form-grid">' +
+        fld("ga_measurement_id", "Ölçüm Kimliği (G-...)") +
+        "</div>" +
         '<h3 style="margin:22px 0 4px;font-size:15px">İletişim formu (EmailJS)</h3>' +
         '<div class="form-grid">' +
         fld("emailjs_public", "Public Key") + fld("emailjs_service", "Service ID") +
@@ -1551,7 +1556,7 @@
       document.getElementById("setForm").onsubmit = function (e) {
         e.preventDefault();
         var f = e.target, out = {};
-        ["marka", "sehir", "telefon", "whatsapp", "instagram", "twitter", "banka", "hesap_adi", "iban", "instructor_share_pct", "emailjs_public", "emailjs_service", "emailjs_template", "emailjs_to", "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from", "smtp_from_name", "sub_enabled", "sub_title", "sub_price", "sub_blurb", "sub_instructor_id", "satici_unvan", "satici_adres", "satici_vergi", "satici_mersis", "nav_hakkimizda", "nav_sss", "nav_iletisim", "nav_araclar"].forEach(function (k) { if (f[k]) out[k] = f[k].value; });
+        ["marka", "sehir", "telefon", "whatsapp", "instagram", "twitter", "banka", "hesap_adi", "iban", "instructor_share_pct", "ga_measurement_id", "emailjs_public", "emailjs_service", "emailjs_template", "emailjs_to", "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from", "smtp_from_name", "sub_enabled", "sub_title", "sub_price", "sub_blurb", "sub_instructor_id", "satici_unvan", "satici_adres", "satici_vergi", "satici_mersis", "nav_hakkimizda", "nav_sss", "nav_iletisim", "nav_araclar"].forEach(function (k) { if (f[k]) out[k] = f[k].value; });
         post("settings_save", out).then(function (r) { toast(r.ok ? "Ayarlar kaydedildi" : (r.error || "Hata"), r.ok ? "ok" : "err"); });
       };
       document.getElementById("pwForm").onsubmit = function (e) {

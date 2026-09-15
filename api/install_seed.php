@@ -105,15 +105,15 @@ function seed_modules($pdo) {
         [
             'type' => 'egitim', 'slug' => 'teknik-temel-algoritmik',
             'title' => 'Teknik - Temel Analiz & Algoritmik Trade Eğitimi',
-            'short_desc' => "Temel analizden algoritmik trade sistemlerine kadar A'dan Z'ye yatırımcı eğitimi. Canlı online veya İzmir yüz yüze, uygulamalı.",
+            'short_desc' => "Profesyonel teknik analiz, temel analiz ve algoritmik trade sistemlerini kapsayan uygulamalı hisse analizi eğitimi. Türkiye'nin tüm illerinden canlı online, İzmir'de yüz yüze.",
             'image' => 'assets/img/egitim-analiz.svg', 'video' => null, 'video_poster' => null,
             'price' => '20.000 TL', 'price_note' => '(KDV dahil)', 'duration' => '20 saat',
             'egitim_turu' => 'Canlı Online veya İzmir Yüz Yüze Eğitim', 'instructors' => 'Dr. Kamil BİLEN', 'etiket' => null,
             'katilim_not' => 'Canlı online veya İzmir yüz yüze · Grup dersi veya birebir özel ders olarak alınabilir.',
             'tarih_not' => null, 'featured' => 1, 'sort_order' => 1,
             'data' => [
-                'ozellikler' => ['Temel analiz ile şirket değerini doğru okuma','Teknik analiz ile doğru zamanlama yapabilme','AKD ve takas analizi ile kurumsal para hareketlerini yorumlama','Algoritmik düşünce yapısı kazanma','Kendi sisteminizi oluşturma ve test etme becerisi'],
-                'aciklama' => ['Finansal piyasalarda başarılı olmak tesadüf değildir.','Bilimsel yöntem, veri analizi ve disiplinli sistem gerektirir.','Bu eğitim, yatırım kararlarınızı duygusal değil analitik temelde alabilmeniz için tasarlanmıştır. Riskini yöneten ve sürdürülebilir getiri hedefleyen yatırımcılar için idealdir.'],
+                'ozellikler' => ['Temel analiz ile bilanço okuma ve şirket değerini doğru hesaplama','Profesyonel teknik analiz ile BIST 100 hisselerinde doğru zamanlama','Uygulamalı hisse analizi ve veriye dayalı hisse seçimi','AKD ve takas analizi ile kurumsal yatırımcı hareketlerini yorumlama','Algoritmik düşünce yapısı kazanma ve stratejiyi kurallaştırma','Kendi yatırım stratejinizi oluşturma ve geriye dönük test etme becerisi'],
+                'aciklama' => ['Finansal piyasalarda başarılı olmak tesadüf değildir.','Bilimsel yöntem, veri analizi ve disiplinli sistem gerektirir.',"Bu program, Borsa İstanbul'da hisse senedi analizi yapmak isteyen yatırımcılar için hazırlanmış ileri seviye bir borsa eğitimidir. Temel analizden başlayıp profesyonel teknik analiz ve algoritmik strateji kurma aşamalarına ilerler.",'Bu eğitim, yatırım kararlarınızı duygusal değil analitik temelde alabilmeniz için tasarlanmıştır. Riskini yöneten ve sürdürülebilir getiri hedefleyen yatırımcılar için idealdir.',"Eğitim canlı online verildiği için Türkiye'nin 81 ilinden katılabilirsiniz; İzmir'de yüz yüze, İstanbul ve Ankara'da grup talebine göre düzenlenir."],
                 'hediye' => [], 'hediyeGorsel' => '', 'tarihler' => [],
                 'mufredat' => $mufredat1,
             ],
@@ -121,15 +121,15 @@ function seed_modules($pdo) {
         [
             'type' => 'egitim', 'slug' => 'takas-akd-analizi',
             'title' => 'Takas & Aracı Kurum Dağılımı (AKD) Analizi Eğitimi',
-            'short_desc' => 'Kurumsal para hareketlerini takip edin. Takas verisi ve aracı kurum dağılımı ile büyük oyuncuların adımlarını okuyun.',
+            'short_desc' => 'BIST takas analizi ve aracı kurum analizi ile kurumsal yatırımcı hareketlerini okuyun. Kurum alım satım analizi, para giriş çıkış analizi ve BIST kurum dağılımı uygulamalı işlenir.',
             'image' => 'assets/img/egitim-takas-akd.png', 'video' => null, 'video_poster' => null,
             'price' => '10.000 TL', 'price_note' => '(KDV dahil)', 'duration' => 'Modüler',
-            'egitim_turu' => 'Canlı Online veya İzmir Yüz Yüze Eğitim', 'instructors' => 'Dr. Mete AKYOL, Dr. Kamil BİLEN', 'etiket' => null,
+            'egitim_turu' => 'Canlı Online veya İzmir Yüz Yüze Eğitim', 'instructors' => 'Dr. Kamil BİLEN', 'etiket' => null,
             'katilim_not' => 'Canlı online veya İzmir yüz yüze · Grup dersi veya birebir özel ders olarak alınabilir.',
             'tarih_not' => null, 'featured' => 1, 'sort_order' => 2,
             'data' => [
-                'ozellikler' => ['Aracı kurum dağılımı (AKD) verisini okuma','Takas analizi ile kurumsal alım-satım tespiti','Para giriş/çıkış ve maliyet analizi','AKD ve takas analizini birlikte kullanma'],
-                'aciklama' => ['Piyasada büyük hacimli kurumsal oyuncuların hareketlerini takip etmek, doğru zamanlama için kritik bir avantajdır.','Bu eğitimde takas verisini ve aracı kurum dağılımını okuyarak paranın nereye aktığını yorumlamayı öğrenirsiniz.'],
+                'ozellikler' => ['Aracı kurum dağılımı (AKD) verisini okuma ve net pozisyon hesaplama','BIST takas analizi ile kurum alım satım analizi yapma','Kurumsal yatırımcı analizi: yerli ve yabancı kurum davranışını ayırt etme','Para giriş çıkış analizi ve ortalama maliyet yorumu','BIST kurum dağılımı verisini fiyat hareketiyle birlikte okuma','AKD ve takas analizini birlikte kullanarak birikim ve dağıtım tespiti'],
+                'aciklama' => ['Piyasada büyük hacimli kurumsal oyuncuların hareketlerini takip etmek, doğru zamanlama için kritik bir avantajdır.','Bu eğitimde BIST takas verisini ve aracı kurum dağılımını okuyarak paranın nereye aktığını yorumlamayı öğrenirsiniz. Aracı kurum analizi, kurum alım satım analizi ve para giriş çıkış analizi canlı BIST verisi üzerinde uygulamalı işlenir.','Türkiye\'de bu konuyu uygulamalı işleyen program sayısı azdır; eğitim teknik analiz bilgisini kurumsal yatırımcı analizi katmanıyla tamamlamak isteyenler için tasarlanmıştır.',"Eğitim canlı online verildiği için Türkiye'nin 81 ilinden katılabilirsiniz."],
                 'hediye' => [], 'hediyeGorsel' => '', 'tarihler' => [],
                 'mufredat' => [['baslik' => 'Takas & AKD Analizi', 'bolumler' => [
                     ['baslik' => '1. ARACI KURUM DAĞILIMI ANALİZİNE GİRİŞ', 'maddeler' => []],
@@ -260,6 +260,56 @@ function normalize_takas_akd_course_image(PDO $pdo): void {
             ->execute([$image, (int)$row['id']]);
     } catch (Throwable $e) {
         error_log('takas-akd kapak güncelleme: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Arama ve AI motorlarının sık karşılaştığı soruları SSS'e ekler.
+ * Mevcut kurulumlarda da çalışır; aynı soru varsa dokunmaz.
+ */
+function seed_seo_faqs(PDO $pdo): void {
+    $faqs = [
+        ['Türkiye\'nin hangi şehirlerinden eğitime katılabilirim?', 'Eğitimler canlı online verildiği için Türkiye\'nin 81 ilinden katılabilirsiniz. İnternet bağlantısı olan bir bilgisayar veya tablet yeterlidir; şehir değiştirmeniz gerekmez. İlinize özel katılım koşullarını "Şehirlere Göre Borsa Eğitimi" sayfasından görebilirsiniz.'],
+        ['İstanbul\'dan borsa eğitimine katılabilir miyim?', 'Evet. İstanbul\'dan bireysel katılım canlı online olarak sağlanır; ders saatinde eğitmenle doğrudan iletişim kurabilirsiniz. İstanbul\'da en az 6 kişilik grup talebi oluştuğunda yüz yüze oturum ayrıca organize edilir. İstanbul\'da sabit şubemiz bulunmaz.'],
+        ['Ankara\'da yüz yüze borsa eğitimi var mı?', 'Ankara\'da sabit bir şubemiz yoktur. Ankara\'dan bireysel katılım canlı online yürütülür; en az 6 kişilik grup talebi oluştuğunda Ankara\'da yüz yüze oturum düzenlenir. Düzenli yüz yüze sınıf eğitimi İzmir\'de yapılır.'],
+        ['Eğitim ücreti ne kadar?', 'Ücret; seçtiğiniz modül sayısına, eğitimin grup veya birebir olmasına ve süresine göre değişir. Güncel fiyat ve kontenjan bilgisi için iletişim formundan veya WhatsApp üzerinden bize ulaşabilirsiniz.'],
+        ['Sıfırdan başlayanlar için uygun mu?', 'Uygundur. Müfredat borsanın temel işleyişinden başlar: hisse senedi nedir, emir tipleri nasıl çalışır, grafik nasıl okunur. Sonrasında teknik analiz, temel analiz ve AKD/takas analizi gibi ileri seviye başlıklara geçilir.'],
+        ['AKD analizi nedir?', 'AKD analizi (aracı kurum dağılımı analizi), bir hisse senedinde belirli bir dönemde hangi aracı kurumun ne kadar alış ve satış yaptığını, bu işlemleri hangi ortalama fiyattan gerçekleştirdiğini inceleyen veri analizi yöntemidir. Amaç, fiyat hareketinin arkasındaki alıcı ve satıcı profilini görmektir.'],
+        ['Takas analizi ile AKD analizi arasındaki fark nedir?', 'AKD analizi akışı ölçer: dönem içinde kimin alıp sattığını gösterir. Takas analizi ise stoku ölçer: takas sonrası hangi kurumun saklamasında ne kadar pay bulunduğunu gösterir. İkisi birlikte kullanıldığında birikim ve dağıtım süreçleri daha net okunur.'],
+        ['Online eğitim nasıl işliyor?', 'Dersler belirlenen saatte canlı işlenir. Eğitmen ekran paylaşımıyla o günün BIST verisi üzerinde uygulama yapar; katılımcılar ders sırasında soru sorabilir. Kaçırdığınız oturumu ders kaydından tamamlayabilirsiniz.'],
+        ['Canlı derse katılamazsam ne olur?', 'Tüm oturumlar kayda alınır ve katılımcı panelinizden tekrar izlenebilir. Konuyu kayıttan tamamlayıp sorularınızı bir sonraki canlı oturumda sorabilirsiniz.'],
+    ];
+
+    try {
+        $check = $pdo->prepare("SELECT COUNT(*) FROM faqs WHERE question = ? LIMIT 1");
+        $insert = $pdo->prepare("INSERT INTO faqs (question, answer, sort_order) VALUES (?, ?, ?)");
+        $maxOrder = (int)$pdo->query("SELECT COALESCE(MAX(sort_order), 0) FROM faqs")->fetchColumn();
+        foreach ($faqs as $f) {
+            $check->execute([$f[0]]);
+            if ((int)$check->fetchColumn() > 0) {
+                continue;
+            }
+            $insert->execute([$f[0], $f[1], ++$maxOrder]);
+        }
+    } catch (Throwable $e) {
+        error_log('SEO SSS tohumlama: ' . $e->getMessage());
+    }
+}
+
+/** Takas & AKD eğitiminde yalnızca Dr. Kamil BİLEN eğitmen olarak görünsün. */
+function normalize_takas_akd_instructor(PDO $pdo): void {
+    try {
+        $instructor = 'Dr. Kamil BİLEN';
+        $st = $pdo->prepare("SELECT id, instructors FROM modules WHERE slug = ? LIMIT 1");
+        $st->execute(['takas-akd-analizi']);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row || trim((string)$row['instructors']) === $instructor) {
+            return;
+        }
+        $pdo->prepare("UPDATE modules SET instructors = ? WHERE id = ?")
+            ->execute([$instructor, (int)$row['id']]);
+    } catch (Throwable $e) {
+        error_log('takas-akd eğitmen güncelleme: ' . $e->getMessage());
     }
 }
 

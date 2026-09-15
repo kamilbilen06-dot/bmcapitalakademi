@@ -8,22 +8,32 @@
 
   // Aktif sayfa dosya adı (nav vurgusu için)
   var path = location.pathname.split("/").pop() || "index.html";
-  // Alt klasördeki (yasal/, araclar/) sayfalar için kök dizine göre önek
-  var base = /\/(yasal|araclar)\//.test(location.pathname) ? "../" : "";
+  // Kök dizine göre önek: dizin derinliği kadar "../"
+  // /araclar/temettu.html → "../", /borsa-egitimi/manisa → "../", /rehber/ → "../"
+  var base = (function () {
+    var segments = location.pathname.split("/").filter(Boolean);
+    var depth = /\/$/.test(location.pathname) ? segments.length : segments.length - 1;
+    return depth > 0 ? new Array(depth + 1).join("../") : "";
+  })();
   // API kök dizini (PHP endpoint'leri)
   var apiBase = base + "api/";
   var inAraclar = /araclar/.test(location.pathname);
+  var inRehber = /^\/rehber(\/|$)/.test(location.pathname);
+  var inCity = /^\/borsa-egitimi(\/|$)/.test(location.pathname);
 
   function navOn(flag) {
     return flag === true || flag === 1 || flag === "1";
   }
 
   function navLink(href, label) {
-    var active =
-      href === path || (href === "araclar.html" && inAraclar)
-        ? ' class="active"'
-        : "";
-    return '<li><a href="' + base + href + '"' + active + ">" + label + "</a></li>";
+    var isActive =
+      (href === path && !inRehber && !inCity) ||
+      (href === "araclar.html" && inAraclar) ||
+      (href === "rehber/" && inRehber) ||
+      (href === "egitimler.html" && inCity);
+    return (
+      '<li><a href="' + base + href + '"' + (isActive ? ' class="active"' : "") + ">" + label + "</a></li>"
+    );
   }
 
   function brandHtml() {
@@ -105,12 +115,49 @@
       navLink("index.html", "Ana Sayfa") +
       navLink("egitimler.html", "Eğitimler") +
       navLink("urunler.html", "Ürünler") +
+      navLink("rehber/", "Rehber") +
       (navOn(S.navAraclar) ? navLink("araclar.html", "Araçlar") : "") +
       (navOn(S.navHakkimizda) ? navLink("hakkimizda.html", "Hakkımızda") : "") +
       (navOn(S.navSss) ? navLink("sss.html", "S.S.S.") : "") +
       (navOn(S.navIletisim) ? navLink("iletisim.html", "İletişim") : "") +
       studentNavGuest() +
       "</ul></div></header>"
+    );
+  }
+
+  // Şehir ve rehber sayfalarına iç link satırı (tarama derinliğini azaltır)
+  var FOOTER_CITY_SLUGS = [
+    ["istanbul", "İstanbul"], ["ankara", "Ankara"], ["izmir", "İzmir"],
+    ["bursa", "Bursa"], ["antalya", "Antalya"], ["adana", "Adana"],
+    ["konya", "Konya"], ["kocaeli", "Kocaeli"], ["manisa", "Manisa"],
+    ["gaziantep", "Gaziantep"], ["kayseri", "Kayseri"], ["samsun", "Samsun"],
+    ["eskisehir", "Eskişehir"], ["denizli", "Denizli"], ["trabzon", "Trabzon"],
+  ];
+
+  var FOOTER_GUIDES = [
+    ["akd-analizi-nedir.html", "AKD analizi nedir?"],
+    ["bist-takas-analizi.html", "BIST takas analizi"],
+    ["hisse-senedi-analizi-nasil-yapilir.html", "Hisse senedi analizi"],
+    ["bist-100-nedir.html", "BIST 100 nedir?"],
+    ["borsa-yatirim-stratejileri.html", "Borsa yatırım stratejileri"],
+    ["borsa-egitimi-nasil-secilir.html", "Borsa eğitimi nasıl seçilir?"],
+  ];
+
+  function buildFooterSeoRow() {
+    var cities = FOOTER_CITY_SLUGS.map(function (c) {
+      return '<a href="' + base + "borsa-egitimi/" + c[0] + '">' + c[1] + " Borsa Eğitimi</a>";
+    }).join("");
+    var guides = FOOTER_GUIDES.map(function (g) {
+      return '<a href="' + base + "rehber/" + g[0] + '">' + g[1] + "</a>";
+    }).join("");
+    return (
+      '<div class="footer-seo">' +
+      "<h5>Şehirlere göre borsa eğitimi</h5>" +
+      '<div class="footer-seo-links">' + cities +
+      '<a href="' + base + 'borsa-egitimi/">Tüm iller →</a></div>' +
+      "<h5>Rehberler</h5>" +
+      '<div class="footer-seo-links">' + guides + "</div>" +
+      "</div>"
     );
   }
 
@@ -154,6 +201,8 @@
       '<li><a href="' + base + 'egitimler.html">Eğitimler</a></li>' +
       '<li><a href="' + base + 'urunler.html">Ürünler</a></li>' +
       (navOn(S.navAraclar) ? '<li><a href="' + base + 'araclar.html">Borsa Araçları</a></li>' : "") +
+      '<li><a href="' + base + 'rehber/">Rehber</a></li>' +
+      '<li><a href="' + base + 'borsa-egitimi/">Şehirlere Göre Eğitim</a></li>' +
       '<li><a href="' + base + 'odeme.php">Kayıt / Ödeme</a></li>' +
       "</ul></div>" +
       "<div><h4>Yasal</h4><ul class=\"footer-links\">" +
@@ -164,6 +213,7 @@
       '<li><a href="' + base + 'yasal/cerez.html">Çerez Politikası</a></li>' +
       "</ul></div>" +
       "</div>" +
+      buildFooterSeoRow() +
       '<div class="footer-bottom">© 2026 ' + (S.marka || "BM Capital") +
       ". Tüm hakları saklıdır. &nbsp;|&nbsp; İletişim: " +
       '<a href="' + (S.telefonHref || "#") + '" style="color:#f39c12;text-decoration:none;">' +
@@ -430,32 +480,33 @@
   }
 
   function start() {
-    paintChrome();
-    if (window.BM_CATALOG) window.BM_CATALOG.init();
-    bindUi();
-    injectOrgSchema();
-    injectBreadcrumb();
-
-    if (window.BM_CART) {
-      initStudentNav();
-    } else {
-      var cs = document.createElement("script");
-      cs.src = base + "assets/js/cart.js";
-      cs.onload = function () { initStudentNav(); };
-      cs.onerror = function () { initStudentNav(); };
-      document.head.appendChild(cs);
-    }
-
-    loadContent(function () {
-      // Ayarlar API'den asenkron gelir; başlık/footer ilk çizimde data.js
-      // varsayılanlarını kullanır. Güncel menü bayraklarını görünür yapmak
-      // için içerik geldikten sonra chrome'u yeniden çiz.
+    loadGaConfig(function () {
+      initGoogleAnalytics();
       paintChrome();
-      initMenu();
-      initStudentNav();
       if (window.BM_CATALOG) window.BM_CATALOG.init();
+      bindUi();
+      injectOrgSchema();
+      injectBreadcrumb();
+
+      if (window.BM_CART) {
+        initStudentNav();
+      } else {
+        var cs = document.createElement("script");
+        cs.src = base + "assets/js/cart.js";
+        cs.onload = function () { initStudentNav(); };
+        cs.onerror = function () { initStudentNav(); };
+        document.head.appendChild(cs);
+      }
+
+      loadContent(function () {
+        paintChrome();
+        initMenu();
+        initStudentNav();
+        if (resolveGaMeasurementId()) initGoogleAnalytics();
+        if (window.BM_CATALOG) window.BM_CATALOG.init();
+      });
+      trackVisit();
     });
-    trackVisit();
   }
 
   if (document.readyState === "loading") {
@@ -465,13 +516,53 @@
   }
 
   // --- SEO/GEO: Kuruluş yapısal verisi (her sayfada) ---
+  // Aynı tipte JSON-LD tekrar basılırsa eskisini değiştirir (init iki kez çağrılıyor)
   function addJsonLd(obj) {
     try {
+      var key = obj && obj["@type"] ? String(obj["@type"]) : "Thing";
+      var old = document.head.querySelector('script[data-bm-ld="' + key + '"]');
+      if (old) old.remove();
       var s = document.createElement("script");
       s.type = "application/ld+json";
+      s.setAttribute("data-bm-ld", key);
       s.textContent = JSON.stringify(obj);
       document.head.appendChild(s);
     } catch (e) {}
+  }
+
+  // Hizmet alanı: canlı online olduğu için Türkiye geneli + öne çıkan büyükşehirler
+  var SERVED_CITIES = [
+    "İzmir", "İstanbul", "Ankara", "Bursa", "Antalya", "Adana", "Konya",
+    "Gaziantep", "Kocaeli", "Mersin", "Kayseri", "Eskişehir", "Samsun",
+    "Denizli", "Manisa", "Aydın", "Balıkesir", "Muğla", "Trabzon", "Diyarbakır",
+  ];
+
+  var KNOWS_ABOUT = [
+    "Borsa eğitimi",
+    "Borsa İstanbul",
+    "BIST 100",
+    "Hisse senedi analizi",
+    "Teknik analiz",
+    "Temel analiz",
+    "AKD analizi",
+    "Aracı kurum dağılımı analizi",
+    "BIST takas analizi",
+    "Kurumsal yatırımcı analizi",
+    "Algoritmik trade",
+    "Borsa yatırım stratejileri",
+    "Risk yönetimi",
+    "Portföy yönetimi",
+  ];
+
+  function instructorPerson(origin) {
+    return {
+      "@type": "Person",
+      "@id": origin + "/egitmen-profil.html?id=kamil-bilen",
+      name: "Dr. Kamil Bilen",
+      jobTitle: "Borsa Eğitmeni",
+      url: origin + "/egitmen-profil.html?id=kamil-bilen",
+      knowsAbout: KNOWS_ABOUT.slice(0, 10),
+    };
   }
 
   function injectOrgSchema() {
@@ -479,28 +570,50 @@
     var name = S.marka || "BM Capital Akademi";
     var alt = S.brandShort || "BM Capital";
     var city = S.sehir || "İzmir";
+    var served = SERVED_CITIES.map(function (c) {
+      return { "@type": "City", name: c };
+    });
+    served.push({ "@type": "Country", name: "Türkiye" });
+
     addJsonLd({
       "@context": "https://schema.org",
       "@type": "EducationalOrganization",
+      "@id": origin + "/#organization",
       name: name,
       alternateName: alt,
       description:
-        city +
-        " ve tüm Türkiye'ye canlı online ve yüz yüze borsa eğitimi: teknik & temel analiz, takas/AKD analizi ve algoritmik trade.",
+        "BM Capital Akademi, Türkiye'nin tüm illerinden canlı online katılıma açık profesyonel borsa eğitimi veren bir eğitim kuruluşudur. Müfredat; BIST 100 ve hisse senedi analizi, teknik analiz, temel analiz, AKD (aracı kurum dağılımı) ve takas analizi ile algoritmik trade konularını kapsar. " +
+        city + " merkezli olarak yüz yüze eğitim de verilir.",
       url: origin + "/",
-      logo: origin + "/assets/img/og-cover.png",
-      image: origin + "/assets/img/og-cover.png",
+      logo: origin + "/assets/img/og-cover.jpg",
+      image: origin + "/assets/img/og-cover.jpg",
       telephone: S.telefonHref || S.telefon || "",
       email: (S.emailjs && S.emailjs.toEmail) || "",
-      areaServed: [
-        { "@type": "City", name: city },
-        { "@type": "Country", name: "Türkiye" },
-      ],
+      areaServed: served,
+      knowsAbout: KNOWS_ABOUT,
+      founder: instructorPerson(origin),
+      employee: [instructorPerson(origin)],
       address: {
         "@type": "PostalAddress",
         addressLocality: city,
         addressRegion: city,
         addressCountry: "TR",
+      },
+      hasOfferCatalog: {
+        "@type": "OfferCatalog",
+        name: "Borsa Eğitimleri",
+        itemListElement: [
+          {
+            "@type": "Course",
+            name: "Teknik, Temel ve Algoritmik Analiz Eğitimi",
+            url: origin + "/egitim-detay.html?id=teknik-temel-algoritmik",
+          },
+          {
+            "@type": "Course",
+            name: "Takas ve Aracı Kurum Dağılımı (AKD) Analizi Eğitimi",
+            url: origin + "/egitim-detay.html?id=takas-akd-analizi",
+          },
+        ],
       },
       sameAs: [S.instagram, S.twitter].filter(Boolean),
     });
@@ -534,6 +647,22 @@
       "kk-vs-tk.html": "Konut Kredisi vs Tasarruf Finansmanı",
     };
     var items = [{ "@type": "ListItem", position: 1, name: "Ana Sayfa", item: origin + "/" }];
+
+    // Sayfa kendi izini bildirdiyse (şehir/rehber sayfaları) onu kullan
+    if (Array.isArray(window.BM_PAGE_BREADCRUMB) && window.BM_PAGE_BREADCRUMB.length) {
+      window.BM_PAGE_BREADCRUMB.forEach(function (entry, i) {
+        if (!entry || !entry.name) return;
+        items.push({
+          "@type": "ListItem",
+          position: i + 2,
+          name: entry.name,
+          item: origin + (entry.path || "/"),
+        });
+      });
+      addJsonLd({ "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: items });
+      return;
+    }
+
     if (inAraclar && path !== "araclar.html") {
       items.push({ "@type": "ListItem", position: 2, name: "Borsa Araçları", item: origin + "/araclar.html" });
       if (labels[path]) {
@@ -559,18 +688,26 @@
   }
 
   function initCookieBanner() {
+    var hasGa = !!resolveGaMeasurementId();
     try {
-      if (localStorage.getItem("bmcap_cookie_ok") === "1") return;
+      if (localStorage.getItem("bmcap_cookie_ok") === "1") {
+        grantAnalyticsConsent();
+        return;
+      }
     } catch (e) {}
     if (document.getElementById("cookieBanner")) return;
     var bar = document.createElement("div");
     bar.id = "cookieBanner";
     bar.className = "cookie-banner";
     bar.innerHTML =
-      "<p>Sitemiz oturum, güvenlik ve sepet için zorunlu çerez kullanır. Google Analytics yoktur. Ayrıntı: <a href=\"" +
+      "<p>Sitemiz oturum, güvenlik ve sepet için zorunlu çerez kullanır." +
+      (hasGa
+        ? " Analitik çerezler (Google Analytics) yalnızca onayınızla yüklenir."
+        : "") +
+      " Ayrıntı: <a href=\"" +
       base +
       'yasal/cerez.html">Çerez Politikası</a>.</p>' +
-      '<button type="button" class="btn btn-primary btn-sm" id="cookieOk">Tamam</button>';
+      '<button type="button" class="btn btn-primary btn-sm" id="cookieOk">Kabul et</button>';
     document.body.appendChild(bar);
     var btn = document.getElementById("cookieOk");
     if (btn) {
@@ -578,10 +715,92 @@
         try {
           localStorage.setItem("bmcap_cookie_ok", "1");
         } catch (e) {}
+        grantAnalyticsConsent();
         bar.remove();
       };
     }
   }
+
+  var gaBooted = false;
+
+  function resolveGaMeasurementId() {
+    var id = window.BM_GA_MEASUREMENT_ID || "";
+    if (!id && window.BM_DATA && window.BM_DATA.site) {
+      id = window.BM_DATA.site.gaMeasurementId || "";
+    }
+    id = String(id || "").trim().toUpperCase();
+    return /^G-[A-Z0-9]{6,12}$/.test(id) ? id : "";
+  }
+
+  function ensureGtag(fn) {
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+    if (typeof fn === "function") fn();
+  }
+
+  function grantAnalyticsConsent() {
+    var id = resolveGaMeasurementId();
+    if (!id) return;
+    ensureGtag(function () {
+      window.gtag("consent", "update", {
+        analytics_storage: "granted",
+        ad_storage: "granted",
+        ad_user_data: "granted",
+        ad_personalization: "granted",
+      });
+      if (!gaBooted) {
+        window.gtag("js", new Date());
+        window.gtag("config", id, { anonymize_ip: true, send_page_view: true });
+        gaBooted = true;
+      } else {
+        window.gtag("event", "page_view", { page_path: location.pathname, page_title: document.title });
+      }
+    });
+  }
+
+  function initGoogleAnalytics() {
+    var id = resolveGaMeasurementId();
+    if (!id) return;
+    if (document.getElementById("bmGaTag")) return;
+
+    ensureGtag(function () {
+      window.gtag("consent", "default", {
+        analytics_storage: "denied",
+        ad_storage: "denied",
+        ad_user_data: "denied",
+        ad_personalization: "denied",
+        wait_for_update: 500,
+      });
+    });
+
+    var s = document.createElement("script");
+    s.id = "bmGaTag";
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(id);
+    s.onload = function () {
+      try {
+        if (localStorage.getItem("bmcap_cookie_ok") === "1") {
+          grantAnalyticsConsent();
+        }
+      } catch (e) {}
+    };
+    document.head.appendChild(s);
+  }
+
+  function loadGaConfig(cb) {
+    cb = cb || function () {};
+    if (window.BM_GA_MEASUREMENT_ID !== undefined) {
+      cb();
+      return;
+    }
+    var s = document.createElement("script");
+    s.src = apiBase + "ga_config.php";
+    s.onload = cb;
+    s.onerror = cb;
+    document.head.appendChild(s);
+  }
+
+  window.BM_GA = { grant: grantAnalyticsConsent };
 
   window.BM_SEO = { addJsonLd: addJsonLd };
 

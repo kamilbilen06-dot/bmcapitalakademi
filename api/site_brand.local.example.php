@@ -21,3 +21,8 @@ define('PUBLIC_SITE_URL', 'https://www.bmcapitalakademi.com');
 
 // Marka + domain kesinleşince true → PayTR / iyzico başvurusuna geçilebilir
 define('BRAND_DOMAIN_READY', true);
+
+// --- 3) Google Analytics 4 (Google Ads / Search Console) ---
+// analytics.google.com → Yönetim → Veri akışı → Ölçüm Kimliği
+// Boş bırakılırsa admin panel → Ayarlar'dan da girilebilir.
+define('GA_MEASUREMENT_ID', ''); // örn. G-XXXXXXXXXX

@@ -16,7 +16,9 @@ try {
     $pdo = db();
     normalize_technical_basic_course($pdo);
     normalize_takas_akd_course_image($pdo);
+    normalize_takas_akd_instructor($pdo);
     remove_archived_training_faq($pdo);
+    seed_seo_faqs($pdo);
     egitmen_ensure_schema($pdo);
     instructors_ensure_schema($pdo);
     auth_ensure_schema($pdo);
@@ -47,6 +49,15 @@ try {
 
     require_once __DIR__ . '/site_brand.php';
     $brand = site_brand_payload();
+    $gaId = trim((string)($settings['ga_measurement_id'] ?? ''));
+    if ($gaId === '') {
+        $gaId = ga_measurement_id();
+    } else {
+        $gaId = strtoupper($gaId);
+        if (!preg_match('/^G-[A-Z0-9]{6,12}$/', $gaId)) {
+            $gaId = '';
+        }
+    }
 
     $site = [
         'marka' => trim((string)($settings['marka'] ?? '')) !== ''
@@ -75,6 +86,7 @@ try {
         'navSss' => (($settings['nav_sss'] ?? '0') === '1'),
         'navIletisim' => (($settings['nav_iletisim'] ?? '0') === '1'),
         'navAraclar' => (($settings['nav_araclar'] ?? '1') === '1'),
+        'gaMeasurementId' => $gaId,
         'emailjs' => [
             'publicKey' => $settings['emailjs_public'] ?? '',
             'serviceId' => $settings['emailjs_service'] ?? '',

@@ -38,7 +38,7 @@ def page(meta_title, meta_desc, canonical, crumb, h1, lead, tool_id, shell, expl
     og_block = ""
     if og:
         og_block = f"""  <meta property="og:title" content="{meta_title}">
-  <meta property="og:image" content="https://www.bmcapitalakademi.com/assets/img/og-cover.png">
+  <meta property="og:image" content="https://www.bmcapitalakademi.com/assets/img/og-cover.jpg">
 """
     return f"""<!DOCTYPE html>
 <html lang="tr">

@@ -19,6 +19,18 @@ if ($uri !== '/' && is_file($file)) {
     return false; // serve as-is
 }
 
+// Şehir sayfaları: /borsa-egitimi/manisa → borsa-egitimi/il.php?il=manisa
+if (preg_match('#^/borsa-egitimi/([a-z0-9-]+)(/?)$#', $uri, $m)) {
+    if ($m[2] === '/') {
+        // Relative asset yolları sondaki eğik çizgiyle bozulur — kanonik biçime yönlendir
+        header('Location: /borsa-egitimi/' . $m[1], true, 301);
+        exit;
+    }
+    $_GET['il'] = $m[1];
+    require __DIR__ . '/borsa-egitimi/il.php';
+    return true;
+}
+
 // Directory → index.php / index.html
 if (is_dir($file)) {
     if (substr($uri, -1) !== '/') {

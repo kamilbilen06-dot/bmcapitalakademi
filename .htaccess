@@ -11,6 +11,16 @@ ErrorDocument 404 /404.html
   RewriteCond %{HTTP_HOST} !^www\. [NC]
   RewriteCond %{HTTP_HOST} !^localhost [NC]
   RewriteRule ^ https://www.%{HTTP_HOST}%{REQUEST_URI} [L,R=301,QSA]
+
+  # Şehir sayfalarında tek kanonik biçim: sondaki eğik çizgiyi at
+  # (relative asset yolları /borsa-egitimi/manisa/ altında bozulur)
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^(borsa-egitimi/[a-z0-9-]+)/$ /$1 [L,R=301]
+
+  # Şehir bazlı borsa eğitimi sayfaları: /borsa-egitimi/manisa → borsa-egitimi/il.php?il=manisa
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^borsa-egitimi/([a-z0-9-]+)/?$ borsa-egitimi/il.php?il=$1 [L,QSA]
 </IfModule>
 
 <IfModule mod_deflate.c>

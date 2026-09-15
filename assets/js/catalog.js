@@ -53,13 +53,38 @@
   }
   function applyDetailMeta(item) {
     if (!item) return;
-    var t = item.baslik + " - BM Capital Akademi";
+    var origin = siteOrigin();
+    var t = item.baslik + " - " + brandName();
+    var desc = item.kisaAciklama || (item.aciklama && item.aciklama[0]) || "";
+    var img = item.gorsel
+      ? origin + "/" + String(item.gorsel).replace(/^\//, "")
+      : origin + "/assets/img/og-cover.jpg";
+
     document.title = t;
-    var desc = item.kisaAciklama || "";
     setName("description", desc);
+    setName("robots", "index, follow, max-image-preview:large");
+    setProp("og:type", item.tip === "egitim" ? "article" : "product");
     setProp("og:title", t);
     setProp("og:description", desc);
+    setProp("og:url", location.href.split("#")[0]);
+    setProp("og:image", img);
+    setName("twitter:card", "summary_large_image");
+    setName("twitter:title", t);
+    setName("twitter:description", desc);
+    setName("twitter:image", img);
     setCanonical();
+
+    document.querySelectorAll("[data-page-h1]").forEach(function (el) {
+      el.textContent = item.baslik;
+    });
+    document.querySelectorAll("[data-page-crumb]").forEach(function (el) {
+      el.textContent = item.baslik;
+    });
+  }
+
+  // ?id= yoksa veya kayıt bulunamazsa sayfa dizine eklenmesin
+  function markDetailNoindex() {
+    setName("robots", "noindex, follow");
   }
 
   function card(item) {
@@ -131,6 +156,52 @@
     return { start: dates[0], end: dates[dates.length - 1] };
   }
 
+  // Eğitmen adlarını Person referansına çevirir; profil sayfası varsa bağlar.
+  function courseInstructors(item, origin) {
+    var raw = String(item.egitmenler || item.instructors || "").trim();
+    if (!raw) return undefined;
+    return resolveInstructors(raw).map(function (ins) {
+      var person = { "@type": "Person", name: ins.name };
+      if (ins.id && ins.id.indexOf("custom-") !== 0) {
+        person["@id"] = origin + "/egitmen-profil.html?id=" + ins.id;
+        person.url = person["@id"];
+      }
+      if (ins.title) person.jobTitle = ins.title;
+      return person;
+    });
+  }
+
+  // Müfredat başlıklarından "teaches" listesi üretir.
+  function courseTeaches(item) {
+    var out = [];
+    (item.mufredat || []).forEach(function (gun) {
+      (gun.bolumler || []).forEach(function (b) {
+        var t = String(b.baslik || "").replace(/^\s*\d+\.\s*/, "").trim();
+        if (t && out.indexOf(t) === -1) out.push(t);
+      });
+    });
+    return out.length ? out.slice(0, 25) : undefined;
+  }
+
+  var COURSE_TOPICS = {
+    "takas-akd-analizi": [
+      "AKD analizi", "Aracı kurum dağılımı", "BIST takas analizi",
+      "Kurumsal yatırımcı analizi", "Para giriş çıkış analizi", "BIST kurum dağılımı",
+    ],
+    "teknik-temel-algoritmik": [
+      "Teknik analiz", "Temel analiz", "Hisse senedi analizi", "Hisse seçimi",
+      "BIST 100", "Algoritmik trade", "Borsa yatırım stratejileri",
+    ],
+  };
+
+  function courseAbout(item) {
+    var topics = COURSE_TOPICS[item.id];
+    if (!topics) return undefined;
+    return topics.map(function (t) {
+      return { "@type": "Thing", name: t };
+    });
+  }
+
   function addCourseSchema(item) {
     var origin = siteOrigin();
     var pageUrl = location.href.split("#")[0];
@@ -168,14 +239,21 @@
       "@type": "Course",
       name: item.baslik,
       description: item.kisaAciklama,
+      inLanguage: "tr-TR",
+      url: pageUrl,
       provider: {
-        "@type": "Organization",
-        name: "BM Capital Akademi",
-        sameAs: origin + "/",
+        "@type": "EducationalOrganization",
+        "@id": origin + "/#organization",
+        name: brandName(),
+        url: origin + "/",
       },
+      instructor: courseInstructors(item, origin),
+      about: courseAbout(item),
+      teaches: courseTeaches(item),
       educationalCredentialAwarded: "Katılım Sertifikası",
       hasCourseInstance: [onlineInstance, onsiteInstance],
     };
+    if (item.gorsel) data.image = origin + "/" + item.gorsel;
     var p = priceNum(item.fiyat);
     if (p) {
       data.offers = {
@@ -227,7 +305,7 @@
       id: "kamil-bilen",
       name: "Dr. Kamil BİLEN",
       title: "Analiz & Yatırım Eğitmeni · SPL Düzey 3 & Türev",
-      photo: "",
+      photo: "assets/img/instructor-kamil-bilen.jpg",
       bio: "Teknik Analiz, Takas Analizi, AKD Analizi ve Algoritmik Trade konularında uygulamalı eğitimler verir. SPL Düzey 3 ve Türev Piyasaları Lisansı sahibidir; sermaye piyasalarında uzun yıllara dayanan kurumsal deneyime sahiptir.",
       socials: [],
     },
@@ -498,7 +576,7 @@
     var gift = item.hediye && item.hediye.length
       ? '<div class="gift-box"><h4>Hediye Paketi</h4>' +
         (item.hediyeGorsel
-          ? '<img src="' + esc(item.hediyeGorsel) + '" alt="Hediye">'
+          ? '<img src="' + esc(item.hediyeGorsel) + '" alt="Hediye paketi" loading="lazy" decoding="async">'
           : "") +
         item.hediye
           .map(function (h) {
@@ -692,7 +770,7 @@
           '<div class="course-modal-foot">' +
           '<div class="course-modal-item">' +
           (poster
-            ? '<img src="' + esc(poster) + '" alt="">'
+            ? '<img src="' + esc(poster) + '" alt="" loading="lazy" decoding="async">'
             : '<span class="thumb-dot"></span>') +
           "<div><strong>Tanıtım videosu</strong><span>Ücretsiz önizleme</span></div>" +
           "</div></div></div></div>"
@@ -743,6 +821,84 @@
     });
   }
 
+  // Eğitmen profili: meta etiketleri + Person yapısal verisi
+  function applyInstructorMeta(ins, courses) {
+    var origin = siteOrigin();
+    var pageUrl = location.href.split("#")[0];
+    var title = ins.name + " — Borsa Eğitmeni | " + brandName();
+    var desc =
+      String(ins.bio || "").replace(/\s+/g, " ").trim() ||
+      ins.name + ", " + brandName() + " bünyesinde borsa eğitimi veren eğitmendir.";
+    if (desc.length > 300) desc = desc.slice(0, 297).replace(/\s+\S*$/, "") + "…";
+    var photo = ins.photo ? origin + "/" + String(ins.photo).replace(/^\//, "") : origin + "/assets/img/og-cover.jpg";
+
+    document.title = title;
+    setName("description", desc);
+    setProp("og:type", "profile");
+    setProp("og:title", title);
+    setProp("og:description", desc);
+    setProp("og:url", pageUrl);
+    setProp("og:image", photo);
+    setName("twitter:card", "summary_large_image");
+    setName("twitter:title", title);
+    setName("twitter:description", desc);
+    setName("twitter:image", photo);
+    setCanonical();
+
+    var person = {
+      "@context": "https://schema.org",
+      "@type": "Person",
+      "@id": origin + "/egitmen-profil.html?id=" + ins.id,
+      name: ins.name,
+      jobTitle: ins.title || "Borsa Eğitmeni",
+      description: desc,
+      url: pageUrl,
+      image: photo,
+      nationality: { "@type": "Country", name: "Türkiye" },
+      worksFor: {
+        "@type": "EducationalOrganization",
+        "@id": origin + "/#organization",
+        name: brandName(),
+        url: origin + "/",
+      },
+      knowsAbout: [
+        "Borsa eğitimi",
+        "Hisse senedi analizi",
+        "Teknik analiz",
+        "Temel analiz",
+        "AKD analizi",
+        "BIST takas analizi",
+        "Kurumsal yatırımcı analizi",
+        "Algoritmik trade",
+        "Borsa İstanbul",
+        "BIST 100",
+      ],
+      knowsLanguage: "tr",
+    };
+
+    var sameAs = (ins.links || [])
+      .map(function (l) { return l.href; })
+      .filter(Boolean);
+    if (sameAs.length) person.sameAs = sameAs;
+
+    if (courses && courses.length) {
+      person.hasOccupation = {
+        "@type": "Occupation",
+        name: "Borsa Eğitmeni",
+        occupationLocation: { "@type": "Country", name: "Türkiye" },
+      };
+      person.subjectOf = courses.map(function (c) {
+        return {
+          "@type": "Course",
+          name: c.baslik || c.title || "Eğitim",
+          url: origin + "/egitim-detay.html?id=" + encodeURIComponent(c.id),
+        };
+      });
+    }
+
+    addLd(person);
+  }
+
   function renderInstructorProfile(el, instructorId) {
     var ins = findInstructorById(instructorId);
     if (!ins) {
@@ -754,9 +910,8 @@
       return;
     }
 
-    document.title = ins.name + " - BM Capital Akademi";
-    setName("description", ins.bio || (ins.name + " eğitmen profili"));
-    setCanonical();
+    var courses = coursesForInstructor(ins.id);
+    applyInstructorMeta(ins, courses);
 
     var photoHtml = ins.photo
       ? '<button type="button" class="ip-photo-btn" id="btnIpPhoto" aria-label="Fotoğrafı büyüt">' +
@@ -783,7 +938,6 @@
       })
       .join("");
 
-    var courses = coursesForInstructor(ins.id);
     var courseHtml = courses.length
       ? courses
           .map(function (c) {
@@ -795,7 +949,7 @@
               href +
               '">' +
               (thumb
-                ? '<img class="ip-course-thumb" src="' + esc(thumb) + '" alt="">'
+                ? '<img class="ip-course-thumb" src="' + esc(thumb) + '" alt="' + esc(c.baslik || c.title || "Eğitim") + '" loading="lazy" decoding="async">'
                 : '<span class="ip-course-thumb ip-course-thumb-empty"><i class="fa-solid fa-graduation-cap"></i></span>') +
               '<div class="ip-course-body"><strong>' +
               esc(c.baslik || c.title || "Eğitim") +
@@ -1085,9 +1239,13 @@
       });
 
       var de = document.querySelector('[data-detail="egitim"]');
-      if (de) renderDetailEgitim(de, findById(param("id")));
       var du = document.querySelector('[data-detail="urun"]');
-      if (du) renderDetailUrun(du, findById(param("id")));
+      if (de || du) {
+        var detailItem = findById(param("id"));
+        if (!detailItem) markDetailNoindex();
+        if (de) renderDetailEgitim(de, detailItem);
+        if (du) renderDetailUrun(du, detailItem);
+      }
 
       var ip = document.querySelector("[data-instructor-profile]");
       if (ip) renderInstructorProfile(ip, param("id") || "kamil-bilen");

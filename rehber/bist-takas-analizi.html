@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BIST Takas Analizi Nasıl Yapılır? Kurum Dağılımı ve Para Akışı - BM Capital Akademi</title>
+  <meta name="description" content="BIST takas analizi, bir hissenin takas sonrası hangi aracı kurumların saklamasında tutulduğunu inceleyen yöntemdir. Takas oranı, yabancı payı, kurum dağılımı ve para giriş çıkış yorumu.">
+  <meta name="keywords" content="BIST takas analizi, takas analizi, takas analizi nasıl yapılır, BIST kurum dağılımı, hisse senedi para giriş çıkış, yabancı takas oranı, takas verisi, saklama analizi">
+  <meta name="author" content="BM Capital Akademi">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta name="theme-color" content="#1f2d3d">
+  <link rel="canonical" href="https://www.bmcapitalakademi.com/rehber/bist-takas-analizi.html">
+  <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg">
+
+  <meta property="og:type" content="article">
+  <meta property="og:locale" content="tr_TR">
+  <meta property="og:site_name" content="BM Capital Akademi">
+  <meta property="og:url" content="https://www.bmcapitalakademi.com/rehber/bist-takas-analizi.html">
+  <meta property="og:title" content="BIST Takas Analizi Nasıl Yapılır?">
+  <meta property="og:description" content="Takas analizi, bir hissenin hangi aracı kurumların saklamasında tutulduğunu inceler. Takas oranı, yabancı payı ve kurum dağılımı yorumu.">
+  <meta property="og:image" content="https://www.bmcapitalakademi.com/assets/img/og-cover.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="BIST Takas Analizi Nasıl Yapılır?">
+  <meta name="twitter:description" content="Takas analizi, bir hissenin hangi aracı kurumların saklamasında tutulduğunu inceler.">
+  <meta name="twitter:image" content="https://www.bmcapitalakademi.com/assets/img/og-cover.jpg">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20260915a">
+
+  <script type="application/ld+json" data-bm-ld="Article">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "BIST Takas Analizi Nasıl Yapılır?",
+    "description": "BIST takas analizi, bir hissenin takas sonrası hangi aracı kurumların saklamasında tutulduğunu inceleyen yöntemdir.",
+    "inLanguage": "tr-TR",
+    "mainEntityOfPage": "https://www.bmcapitalakademi.com/rehber/bist-takas-analizi.html",
+    "image": "https://www.bmcapitalakademi.com/assets/img/og-cover.jpg",
+    "author": {
+      "@type": "Person",
+      "name": "Dr. Kamil Bilen",
+      "url": "https://www.bmcapitalakademi.com/egitmen-profil.html?id=kamil-bilen"
+    },
+    "publisher": {
+      "@type": "EducationalOrganization",
+      "@id": "https://www.bmcapitalakademi.com/#organization",
+      "name": "BM Capital Akademi",
+      "url": "https://www.bmcapitalakademi.com/"
+    },
+    "about": ["BIST takas analizi", "BIST kurum dağılımı", "Yabancı takas oranı", "Para giriş çıkış analizi"]
+  }
+  </script>
+  <script type="application/ld+json" data-bm-ld="FAQPage">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Takas analizi nedir?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Takas analizi, bir hisse senedinin takas ve saklama sonrasında hangi aracı kurumların saklama hesaplarında ne kadar tutulduğunu inceleyen analiz yöntemidir. Hissenin halka açık kısmının hangi kurumlar arasında nasıl dağıldığını ve bu dağılımın zaman içinde nasıl değiştiğini gösterir."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Yabancı takas oranı ne anlama gelir?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yabancı takas oranı, bir hissenin saklamada tutulan payının ne kadarının yabancı yatırımcı hizmeti veren kurumlarda bulunduğunu gösteren orandır. Oranın artması yabancı ilgisinin arttığına, azalması çıkış olduğuna işaret edebilir; ancak portföy transferleri nedeniyle tek başına kesin kanıt sayılmaz."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Takas verisi ne zaman güncellenir?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Borsa İstanbul'da hisse senedi işlemlerinin takası işlem gününü izleyen ikinci iş günü (T+2) tamamlanır. Bu nedenle takas dağılımı verisi işlem gününe göre gecikmeli yayımlanır ve analizde bu gecikme dikkate alınmalıdır."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Takas analizi ile AKD analizi birlikte nasıl kullanılır?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "AKD verisi gün içindeki alım satım akışını, takas verisi ise bu akışın bakiyeye yansıyan kalıcı kısmını gösterir. Bir kurum AKD'de net alıcı görünüyor ve takas bakiyesi de artıyorsa birikim gerçek kabul edilir; bakiye artmıyorsa alımların aynı gün kapatıldığı düşünülür."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Takas analizi hangi vadede işe yarar?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Takas analizi orta ve uzun vadeli takipte en verimlidir. Veri T+2 gecikmeli olduğu için gün içi işlemlerde kullanım değeri düşüktür; haftalık ve aylık bakiye değişimleri ise birikim ve dağıtım süreçlerini iyi gösterir."
+        }
+      }
+    ]
+  }
+  </script>
+  <script>
+    window.BM_PAGE_BREADCRUMB = [
+      { name: "Rehber", path: "/rehber/" },
+      { name: "BIST Takas Analizi", path: "/rehber/bist-takas-analizi.html" }
+    ];
+  </script>
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <section class="page-hero">
+    <div class="container">
+      <div class="tools-kicker">Ücretsiz Rehber</div>
+      <h1>BIST Takas Analizi Nasıl Yapılır?</h1>
+      <p class="tools-lead">Takas dağılımı verisinin ne anlattığını, hangi oranların takip edildiğini ve verinin sınırlarını uygulamaya dönük biçimde açıklıyoruz.</p>
+      <div class="breadcrumb"><a href="../index.html">Ana Sayfa</a> / <a href="./">Rehber</a> / BIST Takas Analizi</div>
+    </div>
+  </section>
+
+  <section class="section bg-surface">
+    <div class="container">
+      <div class="rich">
+        <h2>Kısa tanım</h2>
+        <p><strong>Takas analizi, bir hisse senedinin takas ve saklama sonrasında hangi aracı kurumların saklama hesaplarında
+          ne kadar tutulduğunu inceleyen analiz yöntemidir.</strong> Hissenin halka açık kısmının kurumlar arasında nasıl
+          dağıldığını ve bu dağılımın zaman içinde hangi yönde değiştiğini gösterir.</p>
+
+        <p>Kilit kavram "stok"tur. Takas verisi gün içinde ne kadar işlem yapıldığını değil, günün sonunda kimin elinde ne
+          kadar kaldığını anlatır. Bu yüzden takas analizi, kalıcı birikim ve dağıtım süreçlerini tespit etmek için
+          kullanılır.</p>
+
+        <h2>Takas nasıl işler? T+2 döngüsü</h2>
+        <p>Borsa İstanbul'da pay piyasası işlemlerinin takası, işlem gününü izleyen ikinci iş gününde (T+2) tamamlanır.
+          Yani bugün aldığınız hisse, iki iş günü sonra saklama hesabınıza geçer. Takas ve saklama işlemleri İstanbul Takas
+          ve Saklama Bankası (Takasbank) bünyesinde, kayıtlar ise Merkezi Kayıt Kuruluşu (MKK) nezdinde yürütülür.</p>
+
+        <p>Analiz açısından bunun iki sonucu vardır:</p>
+        <ul>
+          <li><strong>Gecikme:</strong> Bugünün takas dağılımı, iki gün önceki işlemleri yansıtır. Fiyat hareketiyle veriyi eşleştirirken bu kayma dikkate alınmalıdır.</li>
+          <li><strong>Netleşme:</strong> Gün içinde alıp aynı gün satan yatırımcının işlemi takasa yansımaz. Bu, takas verisinin gün içi gürültüden arınmış olmasını sağlar.</li>
+        </ul>
+
+        <h2>Takas tablosunda neye bakılır?</h2>
+
+        <h3>1. Kurum bazlı bakiye ve değişim</h3>
+        <p>Her aracı kurumun saklamasındaki pay adedi ve bunun toplam içindeki yüzdesi listelenir. Tek başına bakiye
+          fotoğrafı sınırlı bilgi verir; kritik olan <strong>değişimdir</strong>. Bir kurumun payının bir hafta içinde
+          %4'ten %9'a çıkması, %9'luk mutlak seviyeden daha anlamlıdır.</p>
+
+        <h3>2. Yoğunlaşma oranı</h3>
+        <p>İlk 5 veya ilk 10 kurumun toplam saklamadaki payı, hissenin ne kadar dağınık ya da toplu tutulduğunu gösterir.
+          Yoğunlaşma artıyorsa paylar belirli ellerde birikiyor; azalıyorsa dağılım genişliyor demektir. Yoğunlaşmanın
+          artması genellikle likiditenin azalmasıyla birlikte gider.</p>
+
+        <h3>3. Yabancı takas oranı</h3>
+        <p>Yabancı yatırımcı hizmeti veren kurumlarda tutulan payın toplam saklamaya oranıdır. Oranın yükselmesi yabancı
+          ilgisinin arttığına, düşmesi çıkışa işaret edebilir. Burada dikkatli olmak gerekir: bir yabancı fonun saklama
+          kurumunu değiştirmesi gerçek bir alım satım olmadan oranı hareket ettirebilir.</p>
+
+        <h3>4. Halka açık kısmın takip edilen yüzdesi</h3>
+        <p>Takas verisi hissenin halka açık (fiili dolaşımdaki) kısmını kapsar. Halka açıklık oranı düşük hisselerde küçük
+          mutlak hareketler yüzdesel olarak çok büyük görünür. Bu nedenle yüzde değişimlerini mutlak pay adediyle birlikte
+          okumak gerekir.</p>
+
+        <h2>Üç adımda uygulamalı okuma</h2>
+
+        <h3>Adım 1: Referans dönem belirleyin</h3>
+        <p>Günlük değişim yerine 1 hafta, 1 ay ve 3 ay karşılaştırması yapın. Aynı kurumun üç dönemde de bakiyesini
+          artırması, tek haftalık artıştan çok daha güvenilir bir birikim göstergesidir.</p>
+
+        <h3>Adım 2: Fiyat ve bakiye ilişkisini kurun</h3>
+        <p>Dört temel kombinasyon vardır ve her biri farklı yorumlanır:</p>
+        <table>
+          <thead>
+            <tr><th>Fiyat</th><th>Belirli kurumlarda bakiye</th><th>Olası yorum</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Yatay / düşüş</td><td>Artıyor</td><td>Sessiz birikim (akümülasyon) olabilir</td></tr>
+            <tr><td>Yükseliş</td><td>Artıyor</td><td>Trendi destekleyen alım; teyit edici</td></tr>
+            <tr><td>Yükseliş</td><td>Azalıyor</td><td>Yükselişte dağıtım (distribution) olabilir</td></tr>
+            <tr><td>Düşüş</td><td>Azalıyor</td><td>Çıkış devam ediyor; teyit edici</td></tr>
+          </tbody>
+        </table>
+        <p>"Olabilir" kelimesi kasıtlıdır. Takas verisi olasılık ağırlığı değiştirir, kesinlik üretmez.</p>
+
+        <h3>Adım 3: AKD verisiyle çapraz doğrulama yapın</h3>
+        <p>Aracı kurum dağılımı (AKD) verisi akışı, takas verisi stoku gösterir. Bir kurum AKD'de sürekli net alıcı görünüyor
+          <em>ve</em> takas bakiyesi de artıyorsa, birikim gerçek kabul edilir. AKD'de net alım var ama takas bakiyesi sabitse,
+          alımların büyük kısmı aynı gün kapatılmış olabilir. İki verinin birlikte kullanımı için
+          <a href="akd-analizi-nedir.html">AKD analizi rehberine</a> bakın.</p>
+
+        <h2>Verinin sınırları: dört uyarı</h2>
+
+        <h4>Portföy transferleri (virman)</h4>
+        <p>Bir yatırımcı hisselerini A kurumundan B kurumuna taşıdığında hiçbir alım satım gerçekleşmez, fakat takas
+          dağılımı değişir. Büyük ve ani bakiye kaymalarında ilk akla gelmesi gereken açıklama budur.</p>
+
+        <h4>Kurum bazlı, yatırımcı bazlı değil</h4>
+        <p>Takas verisi kurum kırılımındadır. Bir kurumdaki bakiye binlerce müşterinin toplamıdır; tek bir büyük
+          yatırımcının pozisyonu olarak okunamaz.</p>
+
+        <h4>Pozisyon bölme</h4>
+        <p>Büyük yatırımcılar pozisyonunu birden fazla kuruma dağıtabilir. Bu, tek kurum üzerinden yapılan yorumları
+          zayıflatır.</p>
+
+        <h4>Ödünç ve teminat işlemleri</h4>
+        <p>Pay ödünç işlemleri ve teminata verilen paylar saklama bakiyelerini etkileyebilir. Bu tür hareketler yatırımcı
+          iştahıyla ilgili olmayabilir.</p>
+
+        <h2>Takas analizi hangi hisselerde daha iyi çalışır?</h2>
+        <p>Veri kalitesi hisseye göre değişir:</p>
+        <ul>
+          <li><strong>Yüksek hacimli, halka açıklığı geniş hisseler:</strong> Yüzde değişimleri istatistiksel olarak daha anlamlıdır.</li>
+          <li><strong>Endeks hisseleri (BIST 30 / BIST 100):</strong> Kurumsal ve yabancı katılım yüksek olduğu için kurum kırılımı daha okunabilir.
+            <a href="bist-100-nedir.html">BIST 100'ün nasıl oluştuğunu okuyun</a>.</li>
+          <li><strong>Düşük hacimli ve halka açıklığı düşük hisseler:</strong> Tek bir işlem tabloyu değiştirebilir; yorum güvenilirliği düşer.</li>
+        </ul>
+
+        <h2>Özet</h2>
+        <ul>
+          <li>Takas analizi stoku ölçer: günün sonunda kimin elinde ne kadar pay kaldığını gösterir.</li>
+          <li>Veri T+2 gecikmelidir; fiyatla eşleştirirken bu kayma hesaba katılmalıdır.</li>
+          <li>Mutlak bakiye değil, dönemsel değişim ve yoğunlaşma yönü önemlidir.</li>
+          <li>Portföy transferleri, ödünç işlemleri ve pozisyon bölme verinin yorumunu bozabilir.</li>
+          <li>AKD verisiyle birlikte kullanıldığında karar kalitesi belirgin şekilde artar.</li>
+        </ul>
+
+        <blockquote>
+          <p>Takas ve AKD verisini canlı BIST örnekleri üzerinde okumayı öğrenmek için:
+            <a href="../egitim-detay.html?id=takas-akd-analizi">Takas ve Aracı Kurum Dağılımı (AKD) Analizi Eğitimi</a>.
+            <a href="../borsa-egitimi/">Tüm illerden online katılım</a> mümkündür.</p>
+        </blockquote>
+
+        <h2>Sıkça sorulan sorular</h2>
+        <div class="accordion">
+          <div class="acc-item">
+            <button class="acc-header" aria-expanded="false"><span class="acc-icon">+</span><span class="acc-title">Takas analizi nedir?</span></button>
+            <div class="acc-panel"><p>Bir hissenin takas sonrası hangi aracı kurumların saklamasında ne kadar tutulduğunu inceleyen analiz yöntemidir. Halka açık kısmın kurumlar arası dağılımını ve bu dağılımın değişimini gösterir.</p></div>
+          </div>
+          <div class="acc-item">
+            <button class="acc-header" aria-expanded="false"><span class="acc-icon">+</span><span class="acc-title">Yabancı takas oranı ne anlama gelir?</span></button>
+            <div class="acc-panel"><p>Saklamadaki payın ne kadarının yabancı yatırımcı hizmeti veren kurumlarda bulunduğunu gösterir. Artışı ilgi, azalışı çıkış işareti olabilir; portföy transferleri nedeniyle kesin kanıt değildir.</p></div>
+          </div>
+          <div class="acc-item">
+            <button class="acc-header" aria-expanded="false"><span class="acc-icon">+</span><span class="acc-title">Takas verisi ne zaman güncellenir?</span></button>
+            <div class="acc-panel"><p>Pay piyasasında takas T+2'de tamamlanır; bu nedenle takas dağılımı işlem gününe göre gecikmeli yayımlanır.</p></div>
+          </div>
+          <div class="acc-item">
+            <button class="acc-header" aria-expanded="false"><span class="acc-icon">+</span><span class="acc-title">Takas analizi ile AKD analizi birlikte nasıl kullanılır?</span></button>
+            <div class="acc-panel"><p>AKD akışı, takas stoku gösterir. AKD'de net alım ve takasta bakiye artışı birlikte görülüyorsa birikim teyit edilmiş sayılır.</p></div>
+          </div>
+          <div class="acc-item">
+            <button class="acc-header" aria-expanded="false"><span class="acc-icon">+</span><span class="acc-title">Takas analizi hangi vadede işe yarar?</span></button>
+            <div class="acc-panel"><p>Orta ve uzun vadeli takipte verimlidir. T+2 gecikmesi nedeniyle gün içi işlemler için kullanım değeri düşüktür.</p></div>
+          </div>
+        </div>
+
+        <h2>İlgili rehberler</h2>
+        <ul>
+          <li><a href="akd-analizi-nedir.html">AKD analizi nedir, nasıl okunur?</a></li>
+          <li><a href="hisse-senedi-analizi-nasil-yapilir.html">Hisse senedi analizi nasıl yapılır?</a></li>
+          <li><a href="bist-100-nedir.html">BIST 100 nedir?</a></li>
+          <li><a href="borsa-yatirim-stratejileri.html">Borsada yatırım stratejileri</a></li>
+        </ul>
+
+        <div class="muted-note" style="margin-top:28px;">
+          Bu içerik bilgilendirme amaçlıdır; yatırım tavsiyesi, aracılık faaliyeti veya yatırım danışmanlığı değildir.
+          Sermaye piyasası işlemleri risk içerir.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section bg-soft">
+    <div class="container">
+      <div class="cta-band">
+        <h2>Takas verisini uygulamalı okuyun</h2>
+        <p>Canlı BIST verisi üzerinde, eğitmenle birlikte. Türkiye'nin tüm illerinden online katılım.</p>
+        <div class="hero-actions" style="justify-content:center;">
+          <a href="../egitim-detay.html?id=takas-akd-analizi" class="btn btn-primary btn-lg">Eğitim Detayı</a>
+          <a href="../iletisim.html" class="btn btn-ghost btn-lg">Bilgi Al</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="site-footer"></div>
+  <div id="site-floaters"></div>
+
+  <script src="../assets/js/feature-flags.js"></script>
+  <script src="../assets/js/data.js?v=20260915a"></script>
+  <script src="../assets/js/catalog.js?v=20260915a"></script>
+  <script src="../api/ga_config.php"></script>
+  <script src="../assets/js/main.js?v=20260915a"></script>
+</body>
+</html>

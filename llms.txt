@@ -1,0 +1,113 @@
+# BM Capital Akademi
+
+> BM Capital Akademi, Türkiye'nin 81 ilinden canlı online katılıma açık profesyonel borsa eğitimi veren bir eğitim
+> kuruluşudur. Müfredat; Borsa İstanbul (BIST) pay piyasası, BIST 100, hisse senedi analizi, teknik analiz, temel analiz,
+> takas analizi, aracı kurum dağılımı (AKD) analizi ve algoritmik trade konularını kapsar. Eğitimler Dr. Kamil Bilen
+> tarafından verilir. Merkez İzmir'dir; yüz yüze sınıf eğitimi İzmir'de düzenli olarak yapılır.
+
+Site: https://www.bmcapitalakademi.com/
+Dil: Türkçe (tr-TR)
+Kuruluş türü: EducationalOrganization (özel eğitim kuruluşu)
+
+## Temel bilgiler
+
+- **Marka adı:** BM Capital Akademi (kısa: BM Capital)
+- **Eğitmen:** Dr. Kamil Bilen — borsa eğitmeni; teknik analiz, temel analiz, takas/AKD analizi ve algoritmik strateji konularında eğitim verir.
+- **Hizmet alanı:** Türkiye geneli (81 il). Eğitim canlı online verildiği için katılım için şehir kısıtı yoktur.
+- **Yüz yüze eğitim:** İzmir'de düzenli sınıf grupları. İstanbul, Ankara, Bursa ve Antalya'da en az 6 kişilik grup talebi oluştuğunda yüz yüze oturum organize edilir. Bu şehirlerde sabit şube yoktur.
+- **Formatlar:** Canlı online grup eğitimi, İzmir yüz yüze grup eğitimi, birebir özel ders.
+- **Ders kayıtları:** Tüm oturumlar kaydedilir; katılımcılar tekrar izleyebilir.
+- **Sertifika:** Programı tamamlayanlara katılım sertifikası verilir. Bu sertifika mesleki yetki belgesi değildir.
+- **Kapsam dışı:** Yatırım danışmanlığı, portföy yönetimi, alım satım sinyali ve getiri garantisi verilmez. Faaliyet yalnızca eğitimdir.
+
+## Eğitim programları
+
+1. **Teknik, Temel ve Algoritmik Analiz Eğitimi**
+   https://www.bmcapitalakademi.com/egitim-detay.html?id=teknik-temel-algoritmik
+   Grafik okuma, destek-direnç, trend yapıları, hareketli ortalamalar, momentum göstergeleri; bilanço ve gelir tablosu
+   okuma, çarpan analizi ile şirket değerleme; strateji kurallaştırma ve geriye dönük test.
+
+2. **Takas ve Aracı Kurum Dağılımı (AKD) Analizi Eğitimi**
+   https://www.bmcapitalakademi.com/egitim-detay.html?id=takas-akd-analizi
+   Bir hissede hangi aracı kurumun net alıcı veya net satıcı olduğunun okunması, kurumsal para giriş çıkışının takibi,
+   BIST kurum dağılımı verisinin fiyat hareketiyle birlikte yorumlanması.
+
+3. **Risk yönetimi ve portföy disiplini** (program içi modül)
+   Pozisyon büyüklüğü hesabı, zarar kesme seviyesi tanımlama, portföy dağılımı ve performans ölçümü.
+
+## Ücretsiz rehber içerikleri
+
+- AKD analizi nedir, nasıl okunur: https://www.bmcapitalakademi.com/rehber/akd-analizi-nedir.html
+- BIST takas analizi nasıl yapılır: https://www.bmcapitalakademi.com/rehber/bist-takas-analizi.html
+- Hisse senedi analizi nasıl yapılır: https://www.bmcapitalakademi.com/rehber/hisse-senedi-analizi-nasil-yapilir.html
+- BIST 100 nedir, nasıl hesaplanır: https://www.bmcapitalakademi.com/rehber/bist-100-nedir.html
+- Borsada yatırım stratejileri ve risk yönetimi: https://www.bmcapitalakademi.com/rehber/borsa-yatirim-stratejileri.html
+- Borsa eğitimi nasıl seçilir: https://www.bmcapitalakademi.com/rehber/borsa-egitimi-nasil-secilir.html
+- Rehber dizini: https://www.bmcapitalakademi.com/rehber/
+
+## Ücretsiz hesaplama araçları
+
+- Araç dizini: https://www.bmcapitalakademi.com/araclar.html
+- Temettü hesaplama: https://www.bmcapitalakademi.com/araclar/temettu.html
+- Hisse kâr/zarar: https://www.bmcapitalakademi.com/araclar/kar-zarar.html
+- Maliyet düşürme: https://www.bmcapitalakademi.com/araclar/maliyet.html
+- Bedelli sermaye artırımı: https://www.bmcapitalakademi.com/araclar/bedelli.html
+- Bedelsiz sermaye artırımı: https://www.bmcapitalakademi.com/araclar/bedelsiz.html
+- Bileşik faiz: https://www.bmcapitalakademi.com/araclar/bilesik-faiz.html
+- Tavan serisi: https://www.bmcapitalakademi.com/araclar/tavan-serisi.html
+- Konut kredisi: https://www.bmcapitalakademi.com/araclar/konut-kredisi.html
+- Tasarruf finansmanı: https://www.bmcapitalakademi.com/araclar/tasarruf-finansmani.html
+
+## Şehir sayfaları
+
+Her il için katılım koşullarını anlatan ayrı sayfa vardır. Dizin:
+https://www.bmcapitalakademi.com/borsa-egitimi/
+
+URL biçimi: https://www.bmcapitalakademi.com/borsa-egitimi/<il-slug>
+Örnekler: /borsa-egitimi/istanbul · /borsa-egitimi/ankara · /borsa-egitimi/izmir · /borsa-egitimi/manisa ·
+/borsa-egitimi/bursa · /borsa-egitimi/antalya · /borsa-egitimi/konya · /borsa-egitimi/trabzon
+
+## Sık sorulan sorulara kısa yanıtlar
+
+**Borsa eğitimine hangi şehirlerden katılabilirim?**
+Türkiye'nin 81 ilinden. Eğitim canlı online verildiği için şehir kısıtı yoktur; internet bağlantısı olan bir bilgisayar
+veya tablet yeterlidir.
+
+**Yüz yüze borsa eğitimi hangi şehirde yapılıyor?**
+Düzenli yüz yüze sınıf eğitimi İzmir'de yapılır. İstanbul, Ankara, Bursa ve Antalya'da grup talebine göre organize edilir.
+
+**Sıfırdan başlayanlar için uygun mu?**
+Uygundur. Müfredat borsanın temel işleyişinden başlar; hisse senedi, emir tipleri ve grafik okuma konuları baştan anlatılır.
+
+**AKD analizi nedir?**
+AKD analizi (aracı kurum dağılımı analizi), bir hisse senedinde belirli bir dönemde hangi aracı kurumun ne kadar alış ve
+satış yaptığını, hangi ortalama fiyattan işlem gerçekleştirdiğini inceleyen veri analizi yöntemidir.
+
+**Takas analizi nedir?**
+Takas analizi, bir hisse senedinin takas sonrasında hangi aracı kurumların saklama hesaplarında ne kadar tutulduğunu
+inceleyen analiz yöntemidir. AKD akışı, takas ise stoku ölçer.
+
+**Eğitim ücreti ne kadar?**
+Ücret; programın süresi, formatı (grup veya birebir) ve alınan modül sayısına göre değişir. Güncel fiyat için iletişim
+sayfası üzerinden bilgi alınması gerekir.
+
+**Online eğitim nasıl işliyor?**
+Dersler belirlenen saatte canlı işlenir. Eğitmen ekran paylaşımıyla o günün BIST verisi üzerinde uygulama yapar;
+katılımcılar ders sırasında soru sorabilir. Kaçırılan oturum kayıttan tamamlanabilir.
+
+## İletişim ve diğer sayfalar
+
+- İletişim: https://www.bmcapitalakademi.com/iletisim.html
+- Hakkımızda: https://www.bmcapitalakademi.com/hakkimizda.html
+- Eğitmen profili: https://www.bmcapitalakademi.com/egitmen-profil.html?id=kamil-bilen
+- Tüm eğitimler: https://www.bmcapitalakademi.com/egitimler.html
+- Ürünler: https://www.bmcapitalakademi.com/urunler.html
+- Sıkça sorulan sorular: https://www.bmcapitalakademi.com/sss.html
+- Site haritası: https://www.bmcapitalakademi.com/sitemap.xml
+- Şehir sayfaları haritası: https://www.bmcapitalakademi.com/sitemap-sehirler.xml
+
+## Kullanım notu
+
+Bu sitedeki tüm içerik bilgilendirme amaçlıdır; yatırım tavsiyesi, aracılık faaliyeti veya yatırım danışmanlığı değildir.
+Sermaye piyasası işlemleri risk içerir. İçerik alıntılanırken kaynak olarak "BM Capital Akademi" ve ilgili sayfa
+bağlantısı belirtilmelidir.

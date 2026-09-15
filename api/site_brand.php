@@ -57,6 +57,10 @@ if (!defined('BRAND_CITY')) {
 if (!defined('BRAND_DOMAIN_READY')) {
     define('BRAND_DOMAIN_READY', false);
 }
+/** Google Analytics 4 ölçüm kimliği (ör. G-XXXXXXXXXX). Boş = kapalı. */
+if (!defined('GA_MEASUREMENT_ID')) {
+    define('GA_MEASUREMENT_ID', '');
+}
 
 /**
  * Public site kök URL (HTTPS tercihli).
@@ -108,7 +112,22 @@ function site_brand_payload(): array {
         'sehir' => BRAND_CITY,
         'publicUrl' => site_public_url(),
         'brandDomainReady' => (bool)BRAND_DOMAIN_READY,
+        'gaMeasurementId' => ga_measurement_id(),
     ];
+}
+
+function ga_measurement_id(): string {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+    $id = defined('GA_MEASUREMENT_ID') ? trim((string)GA_MEASUREMENT_ID) : '';
+    $id = strtoupper($id);
+    if ($id !== '' && !preg_match('/^G-[A-Z0-9]{6,12}$/', $id)) {
+        $id = '';
+    }
+    $cached = $id;
+    return $cached;
 }
 
 function site_course_share_url(string $courseIdOrSlug): string {
