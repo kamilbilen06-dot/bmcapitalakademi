@@ -15,6 +15,7 @@ function seed_settings($pdo) {
         'emailjs_service' => 'service_z1424c5',
         'emailjs_template' => 'template_ktpxiei',
         'emailjs_to' => 'kamilbilen06@gmail.com',
+        'ga_measurement_id' => 'G-ZFKXN5V791',
     ];
     $stmt = $pdo->prepare("INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = v");
     foreach ($defaults as $k => $v) { $stmt->execute([$k, $v]); }

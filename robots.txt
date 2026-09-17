@@ -1,9 +1,8 @@
 User-agent: *
 Allow: /
-Disallow: /yasal/
+Allow: /api/ga_config.php
 Disallow: /admin/
 Disallow: /api/
-Disallow: /ogrenci/
 Disallow: /uploads/
 
 # AI / cevap motorları — içeriğin alıntılanmasına ve indekslenmesine açık

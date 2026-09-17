@@ -59,7 +59,7 @@ if (!defined('BRAND_DOMAIN_READY')) {
 }
 /** Google Analytics 4 ölçüm kimliği (ör. G-XXXXXXXXXX). Boş = kapalı. */
 if (!defined('GA_MEASUREMENT_ID')) {
-    define('GA_MEASUREMENT_ID', '');
+    define('GA_MEASUREMENT_ID', 'G-ZFKXN5V791');
 }
 
 /**
