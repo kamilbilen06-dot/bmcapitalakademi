@@ -30,7 +30,7 @@ function instructors_ensure_schema(PDO $pdo) {
             ['platform' => 'linkedin', 'url' => ''],
             ['platform' => 'x', 'url' => ''],
         ], JSON_UNESCAPED_UNICODE);
-        $bio = 'Teknik Analiz, Takas Analizi, AKD Analizi ve Algoritmik Trade konularında uygulamalı eğitimler verir. SPL Düzey 3 ve Türev Piyasaları Lisansı sahibidir; sermaye piyasalarında uzun yıllara dayanan kurumsal deneyime sahiptir.';
+        $bio = 'Teknik Analiz, Takas Analizi, AKD Analizi ve Algoritmik Trade konularında uygulamalı eğitimler verir. Sermaye piyasalarında uzun yıllara dayanan kurumsal deneyime sahiptir: 2021–2024 A1 Capital, 2004–2006 İnfo Yatırım\'da yatırım uzmanı olarak görev yapmıştır. SPL Düzey 3 ve Türev Piyasaları Lisansı sahibi olup, eğitmenlik alanında uzman ve sertifikalıdır.';
         $pdo->prepare(
             "INSERT INTO instructors (slug, name, title, photo_path, bio, socials, sort_order, is_active)
              VALUES (?,?,?,?,?,?,?,1)"
@@ -65,10 +65,11 @@ function instructors_ensure_schema(PDO $pdo) {
 
 function normalize_kamil_instructor_photo(PDO $pdo): void {
     try {
+        // Yalnızca boşsa varsayılan foto — admin panelden yüklenen yolu ezme
         $photo = 'assets/img/instructor-kamil-bilen.jpg';
         $pdo->prepare(
-            "UPDATE instructors SET photo_path = ? WHERE slug = 'kamil-bilen' AND (photo_path IS NULL OR photo_path = '' OR photo_path <> ?)"
-        )->execute([$photo, $photo]);
+            "UPDATE instructors SET photo_path = ? WHERE slug = 'kamil-bilen' AND (photo_path IS NULL OR photo_path = '')"
+        )->execute([$photo]);
     } catch (Throwable $e) {
         error_log('kamil eğitmen foto güncelleme: ' . $e->getMessage());
     }

@@ -303,10 +303,19 @@
   /** SPK lisansları — slug ile eşleşir (yalnızca doğrulanmış kayıtlar). */
   var INSTRUCTOR_SPK_LICENSES = {
     "kamil-bilen": [
-      { label: "SPL Düzey 3 Lisansı", issuer: "Sermaye Piyasası Kurulu (SPK)" },
+      {
+        label: "SPL Düzey 3 Lisansı",
+        issuer: "Sermaye Piyasası Kurulu (SPK)",
+        certNo: "919753",
+      },
       { label: "Türev Piyasaları Lisansı", issuer: "Sermaye Piyasası Kurulu (SPK)" },
     ],
   };
+
+  var KAMIL_FULL_BIO =
+    "Teknik Analiz, Takas Analizi, AKD Analizi ve Algoritmik Trade konularında uygulamalı eğitimler verir. " +
+    "Sermaye piyasalarında uzun yıllara dayanan kurumsal deneyime sahiptir: 2021–2024 A1 Capital, 2004–2006 İnfo Yatırım'da yatırım uzmanı olarak görev yapmıştır. " +
+    "SPL Düzey 3 ve Türev Piyasaları Lisansı sahibi olup, eğitmenlik alanında uzman ve sertifikalıdır.";
 
   var SPK_EDUCATION_DISCLAIMER =
     "Bu eğitimler yatırım danışmanlığı veya aracılık faaliyeti değildir; eğitim hizmeti kapsamında verilir.";
@@ -317,12 +326,14 @@
 
   function spkLicensesToSchema(creds) {
     return creds.map(function (c) {
-      return {
+      var item = {
         "@type": "EducationalOccupationalCredential",
         name: c.label,
         credentialCategory: "license",
         recognizedBy: { "@type": "Organization", name: c.issuer || "SPK" },
       };
+      if (c.certNo) item.identifier = String(c.certNo);
+      return item;
     });
   }
 
@@ -337,6 +348,7 @@
           esc(c.label) +
           "</strong>" +
           (c.issuer ? '<span class="spk-licenses-issuer">' + esc(c.issuer) + "</span>" : "") +
+          (c.certNo ? '<span class="spk-licenses-no">Belge No: ' + esc(c.certNo) + "</span>" : "") +
           "</li>"
         );
       })
@@ -361,7 +373,7 @@
       name: "Dr. Kamil BİLEN",
       title: "Analiz & Yatırım Eğitmeni · SPL Düzey 3 & Türev",
       photo: "assets/img/instructor-kamil-bilen.jpg",
-      bio: "Teknik Analiz, Takas Analizi, AKD Analizi ve Algoritmik Trade konularında uygulamalı eğitimler verir. SPL Düzey 3 ve Türev Piyasaları Lisansı sahibidir; sermaye piyasalarında uzun yıllara dayanan kurumsal deneyime sahiptir.",
+      bio: KAMIL_FULL_BIO,
       socials: [],
     },
   ];
@@ -421,12 +433,25 @@
     };
   }
 
+  function enrichInstructorProfile(ins) {
+    if (!ins) return ins;
+    FALLBACK_INSTRUCTORS.forEach(function (fb) {
+      if (fb.id !== ins.id) return;
+      if (!String(ins.bio || "").trim() && fb.bio) ins.bio = fb.bio;
+      if (!String(ins.photo || "").trim() && fb.photo) ins.photo = fb.photo;
+    });
+    if (ins.id === "kamil-bilen" && !String(ins.bio || "").trim()) {
+      ins.bio = KAMIL_FULL_BIO;
+    }
+    return ins;
+  }
+
   function getInstructorProfiles() {
     var fromApi = (window.BM_DATA && window.BM_DATA.egitmenProfilleri) || [];
     if (fromApi.length) {
-      return fromApi.map(normalizeInstructor).filter(Boolean);
+      return fromApi.map(normalizeInstructor).filter(Boolean).map(enrichInstructorProfile);
     }
-    return FALLBACK_INSTRUCTORS.map(normalizeInstructor);
+    return FALLBACK_INSTRUCTORS.map(normalizeInstructor).map(enrichInstructorProfile);
   }
 
   function normalizeInstructorKey(name) {
@@ -1041,7 +1066,6 @@
       esc(ins.name) +
       "</h1>" +
       (ins.title ? '<p class="ip-title">' + esc(ins.title) + "</p>" : "") +
-      renderSpkLicensesHtml(ins.id, "spk-licenses ip-spk") +
       '<section class="ip-section">' +
       '<h2>Açıklama</h2>' +
       '<div class="ip-desc is-collapsed" id="ipDescClip"><div class="desc-body">' +
@@ -1050,6 +1074,7 @@
       '<button type="button" class="ip-more-btn" id="btnIpDescMore">' +
       '<i class="fa-solid fa-chevron-down"></i> Daha Fazla</button>' +
       "</section>" +
+      renderSpkLicensesHtml(ins.id, "spk-licenses ip-spk") +
       '<section class="ip-section">' +
       "<h2>Eğitimler</h2>" +
       '<div class="ip-courses">' +

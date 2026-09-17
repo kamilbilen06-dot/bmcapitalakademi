@@ -509,6 +509,13 @@ a.instructor-link { color: var(--gold); }
   margin-top: 2px;
   font-weight: 500;
 }
+.spk-licenses-no {
+  display: block;
+  font-size: 12px;
+  color: #4a5560;
+  margin-top: 2px;
+  font-weight: 600;
+}
 .spk-licenses-note {
   margin: 12px 0 0;
   font-size: 12px;
@@ -1620,6 +1627,24 @@ a.instructor-link { color: var(--gold); }
   background: #fff8eb;
   border-bottom: 1px solid #f0dfc0;
   color: #5c4a2e;
+}
+.site-compliance-footer {
+  background: rgba(255, 255, 255, 0.04);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: none;
+  color: #9aa3ad;
+  margin-top: 8px;
+}
+.site-compliance-footer .site-compliance-inner {
+  padding: 14px 0 6px;
+  font-size: 12px;
+}
+.site-compliance-footer .site-compliance-inner i {
+  color: #8b95a1;
+}
+.site-compliance-footer .site-compliance-inner strong {
+  color: #b8c0c8;
+  font-weight: 600;
 }
 .site-compliance-inner {
   display: flex;

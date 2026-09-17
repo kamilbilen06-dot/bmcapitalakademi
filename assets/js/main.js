@@ -163,7 +163,7 @@
 
   function buildComplianceBanner() {
     return (
-      '<div class="site-compliance" role="note">' +
+      '<div class="site-compliance site-compliance-footer" role="note">' +
       '<div class="container site-compliance-inner">' +
       '<i class="fa-solid fa-circle-info" aria-hidden="true"></i>' +
       "<p><strong>Eğitim hizmeti bildirimi:</strong> Bu site borsa ve sermaye piyasaları eğitimi sunar; " +
@@ -226,6 +226,7 @@
       "</ul></div>" +
       "</div>" +
       buildFooterSeoRow() +
+      buildComplianceBanner() +
       '<div class="footer-bottom">© 2026 ' + (S.marka || "BM Capital") +
       ". Tüm hakları saklıdır. &nbsp;|&nbsp; İletişim: " +
       '<a href="' + (S.telefonHref || "#") + '" style="color:#f39c12;text-decoration:none;">' +
@@ -475,12 +476,6 @@
     waLink = "https://wa.me/" + (S.whatsapp || "");
     if (window.BM_HELPERS) window.BM_HELPERS.waLink = waLink;
     inject("site-header", buildHeader());
-    var headerEl = document.querySelector(".site-header");
-    if (headerEl) {
-      var existing = document.querySelector(".site-compliance");
-      if (existing) existing.remove();
-      headerEl.insertAdjacentHTML("afterend", buildComplianceBanner());
-    }
     inject("site-footer", buildFooter());
     var floaters = document.getElementById("site-floaters");
     if (floaters) floaters.outerHTML = buildFloaters();
@@ -585,6 +580,7 @@
           "@type": "EducationalOccupationalCredential",
           name: "SPL Düzey 3 Lisansı",
           credentialCategory: "license",
+          identifier: "919753",
           recognizedBy: { "@type": "Organization", name: "Sermaye Piyasası Kurulu (SPK)" },
         },
         {
