@@ -1575,6 +1575,31 @@ a.instructor-link { color: var(--gold); }
   color: #8b95a1;
 }
 
+.site-compliance {
+  background: #fff8eb;
+  border-bottom: 1px solid #f0dfc0;
+  color: #5c4a2e;
+}
+.site-compliance-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.site-compliance-inner i {
+  color: #c8860a;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.site-compliance-inner p {
+  margin: 0;
+}
+.site-compliance-inner strong {
+  color: #3d3220;
+}
+
 /* ---------- Floating WhatsApp + social sidebar ---------- */
 .wa-float {
   position: fixed;

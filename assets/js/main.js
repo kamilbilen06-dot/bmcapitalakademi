@@ -161,6 +161,18 @@
     );
   }
 
+  function buildComplianceBanner() {
+    return (
+      '<div class="site-compliance" role="note">' +
+      '<div class="container site-compliance-inner">' +
+      '<i class="fa-solid fa-circle-info" aria-hidden="true"></i>' +
+      "<p><strong>Eğitim hizmeti bildirimi:</strong> Bu site borsa ve sermaye piyasaları eğitimi sunar; " +
+      "yatırım danışmanlığı veya aracılık faaliyeti yapılmaz. SPK mevzuatı uyarınca yatırım danışmanlığı " +
+      "yetkili kuruluşlarca verilir. Sermaye piyasası işlemleri risk içerir; geçmiş performans gelecek getiriyi garanti etmez.</p>" +
+      "</div></div>"
+    );
+  }
+
   function buildFooter() {
     var socialHtml = "";
     if (S.twitter) {
@@ -463,6 +475,12 @@
     waLink = "https://wa.me/" + (S.whatsapp || "");
     if (window.BM_HELPERS) window.BM_HELPERS.waLink = waLink;
     inject("site-header", buildHeader());
+    var headerEl = document.querySelector(".site-header");
+    if (headerEl) {
+      var existing = document.querySelector(".site-compliance");
+      if (existing) existing.remove();
+      headerEl.insertAdjacentHTML("afterend", buildComplianceBanner());
+    }
     inject("site-footer", buildFooter());
     var floaters = document.getElementById("site-floaters");
     if (floaters) floaters.outerHTML = buildFloaters();
