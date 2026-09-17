@@ -580,6 +580,20 @@
       jobTitle: "Borsa Eğitmeni",
       url: origin + "/egitmen-profil.html?id=kamil-bilen",
       knowsAbout: KNOWS_ABOUT.slice(0, 10),
+      hasCredential: [
+        {
+          "@type": "EducationalOccupationalCredential",
+          name: "SPL Düzey 3 Lisansı",
+          credentialCategory: "license",
+          recognizedBy: { "@type": "Organization", name: "Sermaye Piyasası Kurulu (SPK)" },
+        },
+        {
+          "@type": "EducationalOccupationalCredential",
+          name: "Türev Piyasaları Lisansı",
+          credentialCategory: "license",
+          recognizedBy: { "@type": "Organization", name: "Sermaye Piyasası Kurulu (SPK)" },
+        },
+      ],
     };
   }
 

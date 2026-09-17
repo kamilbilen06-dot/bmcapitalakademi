@@ -300,6 +300,61 @@
     });
   }
 
+  /** SPK lisansları — slug ile eşleşir (yalnızca doğrulanmış kayıtlar). */
+  var INSTRUCTOR_SPK_LICENSES = {
+    "kamil-bilen": [
+      { label: "SPL Düzey 3 Lisansı", issuer: "Sermaye Piyasası Kurulu (SPK)" },
+      { label: "Türev Piyasaları Lisansı", issuer: "Sermaye Piyasası Kurulu (SPK)" },
+    ],
+  };
+
+  var SPK_EDUCATION_DISCLAIMER =
+    "Bu eğitimler yatırım danışmanlığı veya aracılık faaliyeti değildir; eğitim hizmeti kapsamında verilir.";
+
+  function getInstructorSpkLicenses(instructorId) {
+    return INSTRUCTOR_SPK_LICENSES[String(instructorId || "").trim()] || [];
+  }
+
+  function spkLicensesToSchema(creds) {
+    return creds.map(function (c) {
+      return {
+        "@type": "EducationalOccupationalCredential",
+        name: c.label,
+        credentialCategory: "license",
+        recognizedBy: { "@type": "Organization", name: c.issuer || "SPK" },
+      };
+    });
+  }
+
+  function renderSpkLicensesHtml(instructorId, cssClass) {
+    var creds = getInstructorSpkLicenses(instructorId);
+    if (!creds.length) return "";
+    var cls = cssClass || "spk-licenses";
+    var items = creds
+      .map(function (c) {
+        return (
+          "<li><strong>" +
+          esc(c.label) +
+          "</strong>" +
+          (c.issuer ? '<span class="spk-licenses-issuer">' + esc(c.issuer) + "</span>" : "") +
+          "</li>"
+        );
+      })
+      .join("");
+    return (
+      '<div class="' +
+      cls +
+      '">' +
+      "<h3>SPK lisansları</h3>" +
+      '<ul class="spk-licenses-list">' +
+      items +
+      "</ul>" +
+      '<p class="spk-licenses-note">' +
+      esc(SPK_EDUCATION_DISCLAIMER) +
+      "</p></div>"
+    );
+  }
+
   var FALLBACK_INSTRUCTORS = [
     {
       id: "kamil-bilen",
@@ -881,6 +936,9 @@
       .filter(Boolean);
     if (sameAs.length) person.sameAs = sameAs;
 
+    var spkCreds = spkLicensesToSchema(getInstructorSpkLicenses(ins.id));
+    if (spkCreds.length) person.hasCredential = spkCreds;
+
     if (courses && courses.length) {
       person.hasOccupation = {
         "@type": "Occupation",
@@ -983,6 +1041,7 @@
       esc(ins.name) +
       "</h1>" +
       (ins.title ? '<p class="ip-title">' + esc(ins.title) + "</p>" : "") +
+      renderSpkLicensesHtml(ins.id, "spk-licenses ip-spk") +
       '<section class="ip-section">' +
       '<h2>Açıklama</h2>' +
       '<div class="ip-desc is-collapsed" id="ipDescClip"><div class="desc-body">' +
